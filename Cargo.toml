@@ -1,0 +1,13 @@
+[package]
+name = "ud3"
+version = "0.0.0"
+readme = "README.md"
+repository = "https://github.com/tormol/ud3"
+license = "Apache-2.0 / MIT"
+authors = ["Torbjørn Birch Moltu <t.b.moltu@lyse.net>"]
+keywords = ["uds", "unix domain", "socket", "abstract"]
+categories = ["os::unix-apis"]
+edition = "2018"
+
+[dependencies]
+libc = "0.2" # FIXME minimum

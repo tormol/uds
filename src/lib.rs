@@ -9,6 +9,7 @@
 extern crate libc;
 
 mod addr;
+mod credentials;
 mod traits;
 
 pub use addr::{UnixSocketAddr, UnixSocketAddrRef};

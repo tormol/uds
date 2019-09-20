@@ -5,6 +5,7 @@ use std::io;
 use libc::{socket, AF_UNIX, SOCK_STREAM, SOCK_CLOEXEC, close};
 
 use crate::addr::*;
+use crate::ancillary::*;
 
 pub trait UnixStreamExt: AsRawFd + FromRawFd + Sized {
     fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
@@ -16,6 +17,8 @@ pub trait UnixStreamExt: AsRawFd + FromRawFd + Sized {
 
     fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error>;
     fn connect_from_to(from: &UnixSocketAddr,  to: &UnixSocketAddr) -> Result<Self, io::Error>;
+
+    fn send_fds(&self,  bytes: &[u8],  fds: &[RawFd]) -> Result<usize, io::Error>;
 }
 
 impl UnixStreamExt for UnixStream {
@@ -45,6 +48,10 @@ impl UnixStreamExt for UnixStream {
             }
         }
     }
+
+    fn send_fds(&self,  bytes: &[u8],  fds: &[RawFd]) -> Result<usize, io::Error> {
+        send_ancillary(self.as_raw_fd(), None, 0, &[IoSlice::new(bytes)], fds, None)
+    }
 }
 
 
@@ -58,6 +65,9 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
     }
     fn connect_to_unix_addr(&self,  addr: &UnixSocketAddr) -> Result<(), io::Error>;
     fn bind_to_unix_addr(&self,  addr: &UnixSocketAddr) -> Result<(), io::Error>;
+
+    fn send_fds_to(&self,  datagram: &[u8],  fds: &[RawFd],  addr: &UnixSocketAddr)
+    -> Result<usize, io::Error>;
 }
 
 impl UnixDatagramExt for UnixDatagram {
@@ -66,5 +76,10 @@ impl UnixDatagramExt for UnixDatagram {
     }
     fn bind_to_unix_addr(&self,  addr: &UnixSocketAddr) -> Result<(), io::Error> {
         bind_to(self.as_raw_fd(), addr)
+    }
+
+    fn send_fds_to(&self,  datagram: &[u8],  fds: &[RawFd],  addr: &UnixSocketAddr)
+    -> Result<usize, io::Error> {
+        send_ancillary(self.as_raw_fd(), Some(addr), 0, &[IoSlice::new(datagram)], fds, None)
     }
 }

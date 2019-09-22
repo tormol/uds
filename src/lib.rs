@@ -7,6 +7,8 @@
  */
 
 extern crate libc;
+#[cfg(feature="mio-uds")]
+extern crate mio_uds;
 
 mod addr;
 mod credentials;

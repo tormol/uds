@@ -10,4 +10,6 @@ categories = ["os::unix-apis"]
 edition = "2018"
 
 [dependencies]
-libc = "0.2" # FIXME minimum
+libc = "0.2.59" # .59 added FIONCLEX for Linux
+# implements the extension traits for mio-uds's types
+mio-uds = {version="0.6", optional=true} # no patch release builds with -Z minimal-versions

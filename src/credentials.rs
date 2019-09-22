@@ -1,3 +1,4 @@
+#[cfg(any(target_os="linux", target_os="android"))]
 use std::os::unix::io::RawFd;
 use std::io;
 use std::mem;

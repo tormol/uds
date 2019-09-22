@@ -11,8 +11,13 @@ use libc::{c_int, sockaddr, socklen_t, AF_UNIX};
 use libc::{bind, connect, getsockname, getpeername};
 use libc::{socket, accept, close, listen, ioctl, FIONBIO};
 
-//#[cfg(target_vendor="apple")]
-use libc::{accept4, SOCK_CLOEXEC, SOCK_NONBLOCK, EINVAL, ENOSYS};
+#[cfg(not(target_vendor="apple"))]
+use libc::{SOCK_CLOEXEC, SOCK_NONBLOCK, EINVAL};
+#[cfg(not(any(target_vendor="apple", target_os="netbsd")))]
+// FIXME netbsd has it, but libc doesn't expose it
+use libc::{accept4, ENOSYS};
+#[cfg(target_vendor="apple")]
+use libc::{setsockopt, SOL_SOCKET, SO_NOSIGPIPE, c_void};
 
 use crate::addr::*;
 
@@ -123,8 +128,10 @@ impl Socket {
     fn set_nosigpipe(&self,  nosigpipe: bool) -> Result<(), io::Error> {
         #![allow(unused_variables)]
         #[cfg(target_vendor="apple")] {
-            let nosigpipe = &mut (nosigpipe as c_int);
-            cvt!(unsafe { setsockopt(self.0, SOL_SOCKET, SO_NOSIGPIPE, nosigpipe) }).map(|_| () )
+            let nosigpipe = &(nosigpipe as c_int) as *const c_int as *const c_void;
+            let int_size = mem::size_of::<c_int>() as socklen_t;
+            cvt!(unsafe {setsockopt(self.0, SOL_SOCKET, SO_NOSIGPIPE, nosigpipe, int_size)})
+                .map(|_| () )
         }
         #[cfg(not(target_vendor="apple"))]
         Ok(())
@@ -168,7 +175,11 @@ impl Socket {
             // ENOSYS is handled for compatibility with Linux < 2.6.28,
             // because Rust std still supports Linux 2.6.18.
             // (used by RHEL 5 which doesn't reach EOL until November 2020).
-            {
+            #[cfg(any(
+                target_os="linux", target_os="android",
+                target_os="freebsd", target_os="dragonfly",
+                target_os="openbsd" // FIXME netbsd also has this, but libc doesn't expose it
+            ))] {
                 let flags = SOCK_CLOEXEC | if nonblocking {SOCK_NONBLOCK} else {0};
                 match cvt_r!(accept4(fd, addr_ptr, len_ptr, flags)) {
                     Ok(fd) => return Ok(Socket(fd)),

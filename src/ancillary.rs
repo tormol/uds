@@ -1,10 +1,14 @@
 use std::os::unix::io::RawFd;
-use std::io::{self, ErrorKind, IoSlice};
+use std::io::{self, ErrorKind, IoSlice, IoSliceMut};
 use std::alloc::{self, Layout};
 use std::convert::TryInto;
 use std::{mem, ptr};
 
-use libc::{c_int, c_void, msghdr, iovec, sockaddr_un, sendmsg, MSG_NOSIGNAL};
+use libc::{c_int, c_void, msghdr, iovec, sockaddr_un, sendmsg};
+#[cfg(not(target_vendor="apple"))]
+use libc::MSG_NOSIGNAL;
+#[cfg(target_vendor="apple")]
+const MSG_NOSIGNAL: c_int = 0; // SO_NOSIGPIPE is set instead
 use libc::{cmsghdr, CMSG_LEN, CMSG_DATA, CMSG_FIRSTHDR};
 use libc::{SOL_SOCKET, SCM_RIGHTS};
 #[cfg(any(target_os="linux", target_os="android"))]

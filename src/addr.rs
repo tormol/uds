@@ -78,8 +78,8 @@ pub struct UnixSocketAddr {
 ///
 /// ```
 /// # use ud3::{UnixSocketAddr, UnixSocketAddrRef};
-/// let addr = UnixSocketAddr::from_path("/var/run/socket.sock")?;
-/// if let UnixSocketAddrRef::Path(path) = addr {
+/// let addr = UnixSocketAddr::from_path("/var/run/socket.sock").unwrap();
+/// if let UnixSocketAddrRef::Path(path) = addr.as_ref() {
 ///     let _ = std::fs::remove_file(path);
 /// }
 /// ```
@@ -91,7 +91,7 @@ pub enum UnixSocketAddrRef<'a> {
 }
 impl<'a> From<&'a UnixSocketAddr> for UnixSocketAddrRef<'a> {
     fn from(addr: &'a UnixSocketAddr) -> UnixSocketAddrRef<'a> {
-        let name_len = (addr.len - path_offset()) as isize;
+        let name_len = addr.len as isize - path_offset() as isize;
         if name_len <= 0 {
             UnixSocketAddrRef::Unnamed
         } else if addr.addr.sun_path[0] == b'\0' as c_char {
@@ -210,8 +210,9 @@ impl UnixSocketAddr {
     /// # use std::os::unix::net::UnixDatagram;
     /// let addr = UnixSocketAddr::new_unspecified();
     /// assert!(addr.is_unnamed());
-    /// let socket = UnixDatagram::bind_unix_addr(addr).unwrap();
-    /// assert!(socket.local_unix_addr().is_abstract());
+    /// let socket = UnixDatagram::unbound().unwrap();
+    /// socket.bind_to_unix_addr(&addr).unwrap();
+    /// assert!(socket.local_unix_addr().unwrap().is_abstract());
     /// ```
     pub fn new_unspecified() -> Self {
         let mut addr = Self::new_unnamed();

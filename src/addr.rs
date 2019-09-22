@@ -4,12 +4,10 @@ use std::path::Path;
 use std::ffi::{OsStr, CStr};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::net;
-use std::os::unix::io::RawFd;
 use std::{mem, slice};
 use std::io::{self, ErrorKind};
 
-use libc::{socklen_t, sockaddr_un, sa_family_t, c_char, AF_UNIX};
-use libc::{sockaddr, c_int, bind, connect, getsockname, getpeername};
+use libc::{sockaddr, sa_family_t, AF_UNIX, socklen_t, sockaddr_un, c_char};
 
 /// Offset of `.sun_path` in `sockaddr_un`.
 ///
@@ -513,49 +511,4 @@ impl PartialEq<UnixSocketAddr> for [u8]  {
     fn eq(&self,  addr: &UnixSocketAddr) -> bool {
         addr == self
     }
-}
-
-
-
-type SetSide = unsafe extern "C" fn(RawFd, *const sockaddr, socklen_t) -> c_int;
-unsafe fn set_unix_addr(socket: RawFd,  set_side: SetSide,  addr: &UnixSocketAddr)
--> Result<(), io::Error> {
-    let (addr, len) = addr.as_raw_general();
-    // check for EINTR just in case. If the file system is slow or somethhing.
-    loop {
-        if set_side(socket, addr, len) != -1 {
-            break Ok(());
-        }
-        let err = io::Error::last_os_error();
-        if err.kind() != ErrorKind::Interrupted {
-            break Err(err);
-        }
-    }
-}
-/// Safe wrapper around `bind()`, that retries on EINTR.
-pub fn bind_to(socket: RawFd,  addr: &UnixSocketAddr) -> Result<(), io::Error> {
-    unsafe { set_unix_addr(socket, bind, addr) }
-}
-/// Safe wrapper around `connect()`, that retries on EINTR.
-pub fn connect_to(socket: RawFd,  addr: &UnixSocketAddr) -> Result<(), io::Error> {
-    unsafe { set_unix_addr(socket, connect, addr) }
-}
-
-type GetSide = unsafe extern "C" fn(RawFd, *mut sockaddr, *mut socklen_t) -> c_int;
-unsafe fn get_unix_addr(socket: RawFd,  get_side: GetSide)
--> Result<UnixSocketAddr, io::Error> {
-    UnixSocketAddr::new_from_ffi(|addr_ptr, addr_len| {
-        match get_side(socket, addr_ptr, addr_len) {
-            -1 => Err(io::Error::last_os_error()),
-            _ => Ok(()),
-        }
-    }).map(|((), addr)| addr )
-}
-/// Safe wrapper around `getsockname()`.
-pub fn local_addr(socket: RawFd) -> Result<UnixSocketAddr, io::Error> {
-    unsafe { get_unix_addr(socket, getsockname) }
-}
-/// Safe wrapper around `getpeername()`.
-pub fn peer_addr(socket: RawFd) -> Result<UnixSocketAddr, io::Error> {
-    unsafe { get_unix_addr(socket, getpeername) }
 }

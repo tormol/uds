@@ -10,6 +10,7 @@ extern crate libc;
 
 mod addr;
 mod credentials;
+mod helpers;
 mod ancillary;
 mod traits;
 

@@ -1,10 +1,11 @@
-use std::os::unix::io::{AsRawFd, FromRawFd};
-use std::os::unix::net::{UnixStream, UnixDatagram};
-use std::io;
+use std::os::unix::io::{RawFd, AsRawFd, FromRawFd, IntoRawFd};
+use std::os::unix::net::{UnixStream, UnixListener, UnixDatagram};
+use std::io::{self, IoSlice, IoSliceMut};
 
-use libc::{socket, AF_UNIX, SOCK_STREAM, SOCK_CLOEXEC, close};
+use libc::SOCK_STREAM;
 
-use crate::addr::*;
+use crate::addr::UnixSocketAddr;
+use crate::helpers::*;
 use crate::ancillary::*;
 
 pub trait UnixStreamExt: AsRawFd + FromRawFd + Sized {
@@ -23,34 +24,54 @@ pub trait UnixStreamExt: AsRawFd + FromRawFd + Sized {
 
 impl UnixStreamExt for UnixStream {
     fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
-        let sock = unsafe { socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0) };
-        if sock == -1 {
-            return Err(io::Error::last_os_error());
-        }
-        match connect_to(sock, addr) {
-            Ok(()) => Ok(unsafe { UnixStream::from_raw_fd(sock) }),
-            Err(err) => {
-                unsafe { close(sock) };
-                Err(err)
-            }
-        }
+        let socket = Socket::new(SOCK_STREAM, false)?;
+        connect_to(socket.as_raw_fd(), addr)?;
+        Ok(unsafe { UnixStream::from_raw_fd(socket.into_raw_fd()) })
     }
     fn connect_from_to(from: &UnixSocketAddr,  to: &UnixSocketAddr) -> Result<Self, io::Error> {
-        let sock = unsafe { socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0) };
-        if sock == -1 {
-            return Err(io::Error::last_os_error());
-        }
-        match bind_to(sock, from).and_then(|()| connect_to(sock, to) ) {
-            Ok(()) => Ok(unsafe { UnixStream::from_raw_fd(sock) }),
-            Err(err) => {
-                unsafe { close(sock) };
-                Err(err)
-            }
-        }
+        let socket = Socket::new(SOCK_STREAM, false)?;
+        bind_to(socket.as_raw_fd(), from)?;
+        connect_to(socket.as_raw_fd(), to)?;
+        Ok(unsafe { UnixStream::from_raw_fd(socket.into_raw_fd()) })
     }
 
     fn send_fds(&self,  bytes: &[u8],  fds: &[RawFd]) -> Result<usize, io::Error> {
         send_ancillary(self.as_raw_fd(), None, 0, &[IoSlice::new(bytes)], fds, None)
+    }
+}
+
+
+
+/// Extension trait for using [`UnixSocketAddr`](struct.UnixSocketAddr.html) with `UnixListener` types.
+pub trait UnixListenerExt: AsRawFd + FromRawFd + Sized {
+    type Conn: FromRawFd;
+
+    fn listen_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error>;
+
+    /// Get the address this socket is listening on.
+    fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
+        local_addr(self.as_raw_fd())
+    }
+
+    /// Accept a connection and return the client's address as
+    /// an `ud3::UnixSocketAddr`.
+    fn accept_unix_addr(&self) -> Result<(Self::Conn, UnixSocketAddr), io::Error>;
+}
+
+impl UnixListenerExt for UnixListener {
+    type Conn = UnixStream;
+
+    fn listen_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> {
+        let socket = Socket::new(SOCK_STREAM, false)?;
+        bind_to(socket.as_raw_fd(), on)?;
+        socket.start_listening()?;
+        Ok(unsafe { UnixListener::from_raw_fd(socket.into_raw_fd()) })
+    }
+
+    fn accept_unix_addr(&self) -> Result<(Self::Conn, UnixSocketAddr), io::Error> {
+        let (socket, addr) = Socket::accept_from(self.as_raw_fd(), false)?;
+        let conn = unsafe { Self::Conn::from_raw_fd(socket.into_raw_fd()) };
+        Ok((conn, addr))
     }
 }
 

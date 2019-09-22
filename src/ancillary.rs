@@ -16,7 +16,7 @@ use crate::credentials::SendCredentials;
 #[cfg(all(target_os="linux", target_env="gnu"))]
 type ControlLen = usize;
 #[cfg(not(all(target_os="linux", target_env="gnu")))]
-type LontrolLen = libc::socklen_t;
+type ControlLen = libc::socklen_t;
 
 /// Safe wrapper around `sendmsg()`.
 pub fn send_ancillary(

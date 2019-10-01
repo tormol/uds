@@ -8,6 +8,7 @@ authors = ["Torbjørn Birch Moltu <t.b.moltu@lyse.net>"]
 keywords = ["uds", "unix domain", "socket", "abstract"]
 categories = ["os::unix-apis"]
 edition = "2018"
+exclude = ["tests", "src/bin"]
 
 [dependencies]
 libc = "0.2.59" # .59 added FIONCLEX for Linux

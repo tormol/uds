@@ -387,7 +387,7 @@ impl UnixSocketAddr {
     where F: FnOnce(&mut sockaddr, &mut socklen_t) -> Result<R, io::Error> {
         let mut addr = Self::new_unspecified();
         addr.len = mem::size_of_val(&addr.addr) as socklen_t;
-        let (addr_ptr, addr_len_ptr) = addr.as_raw_mut_ref();
+        let (addr_ptr, addr_len_ptr) = addr.as_raw_mut_general();
         match call(addr_ptr, addr_len_ptr) {
             Ok(_) if addr.addr.sun_family != AF_UNIX as sa_family_t => Err(io::Error::new(
                 ErrorKind::InvalidData,
@@ -465,7 +465,7 @@ impl UnixSocketAddr {
     ///
     /// Assigning a value > `sizeof(struct sockaddr_un)` to the `socklen_t`
     /// reference might lead to out-of-bounds reads later.
-    pub unsafe fn as_raw_mut_ref(&mut self) -> (&mut sockaddr, &mut socklen_t) {
+    pub unsafe fn as_raw_mut_general(&mut self) -> (&mut sockaddr, &mut socklen_t) {
         (&mut*(&mut self.addr as *mut sockaddr_un as *mut sockaddr), &mut self.len)
     }
 

@@ -88,7 +88,7 @@ pub fn peer_credentials(conn: RawFd) -> Result<QueriedCredentials, io::Error> {
 ///   by the OS automatically when the socket option is set.
 /// * OpenBSD doesn't appear to support receiving credentials.
 #[derive(Clone,Copy, PartialEq,Eq,Hash, Debug)]
-pub struct RecvCredentials {
+pub struct ReceivedCredentials {
     #[cfg(any(target_os="linux", target_os="android", target_os="dragonfly"))]
     pid: u32,
     #[cfg(any(target_os="linux", target_os="android"))]
@@ -124,7 +124,7 @@ pub struct RecvCredentials {
 }
 
 #[allow(unused)] // TODO
-impl RecvCredentials {
+impl ReceivedCredentials {
     /// The pid of the peer.
     ///
     /// This information is only available on Linux, Android and Dragonfly BSD.

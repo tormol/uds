@@ -23,28 +23,6 @@ use crate::addr::*;
 
 const LISTEN_BACKLOG: c_int = 10; // what std uses, I think
 
-/// Get errno as io::Error on -1.
-macro_rules! cvt {($syscall:expr) => {
-    match $syscall {
-        -1 => Err(io::Error::last_os_error()),
-        ok => Ok(ok),
-    }
-}}
-
-/// Get errno as io::Error on -1 and retry on EINTR.
-macro_rules! cvt_r {($syscall:expr) => {
-    loop {
-        let result = $syscall;
-        if result != -1 {
-            break Ok(result);
-        }
-        let err = io::Error::last_os_error();
-        if err.kind() != ErrorKind::Interrupted {
-            break Err(err);
-        }
-    }
-}}
-
 
 type SetSide = unsafe extern "C" fn(RawFd, *const sockaddr, socklen_t) -> c_int;
 unsafe fn set_unix_addr(socket: RawFd,  set_side: SetSide,  addr: &UnixSocketAddr)

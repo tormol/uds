@@ -17,4 +17,4 @@ mod ancillary;
 mod traits;
 
 pub use addr::{UnixSocketAddr, UnixSocketAddrRef};
-pub use traits::{UnixStreamExt, UnixDatagramExt};
+pub use traits::{UnixListenerExt, UnixStreamExt, UnixDatagramExt};

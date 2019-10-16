@@ -75,6 +75,10 @@ pub fn peer_credentials(conn: RawFd) -> Result<QueriedCredentials, io::Error> {
 
 
 
+#[cfg(any(target_os="linux", target_os="android"))]
+pub type RawReceivedCredentials = libc::ucred;
+
+
 /// Process credentials received through `recv_ancillary()`.
 ///
 /// What information is returned varies from OS to OS:
@@ -105,7 +109,7 @@ pub struct ReceivedCredentials {
         target_os="freebsd", target_os="netbsd", target_os="dragonfly",
         target_os="illumos", target_os="solaris", target_os="macos",
     ))]
-    euid: u32,
+    effective_uid: u32,
     #[cfg(any(
         target_os="freebsd", target_os="netbsd", target_os="dragonfly",
         target_os="illumos", target_os="solaris", target_os="macos",
@@ -115,7 +119,7 @@ pub struct ReceivedCredentials {
         target_os="freebsd", target_os="netbsd",
         target_os="illumos", target_os="solaris", target_os="macos",
     ))]
-    egid: u32,
+    effective_gid: u32,
     #[cfg(any(
         target_os="freebsd", target_os="netbsd", target_os="dragonfly",
         target_os="illumos", target_os="solaris", target_os="macos",
@@ -125,6 +129,15 @@ pub struct ReceivedCredentials {
 
 #[allow(unused)] // TODO
 impl ReceivedCredentials {
+    #[cfg(any(target_os="linux", target_os="android"))]
+    pub(crate) fn from_raw(creds: libc::ucred) -> Self {
+        ReceivedCredentials {
+            pid: creds.pid as u32,
+            uid: creds.uid as u32,
+            gid: creds.gid as u32,
+        }
+    }
+
     /// The pid of the peer.
     ///
     /// This information is only available on Linux, Android and Dragonfly BSD.

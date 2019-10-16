@@ -42,7 +42,7 @@ impl UnixStreamExt for UnixStream {
         send_ancillary(self.as_raw_fd(), None, 0, &[IoSlice::new(bytes)], fds, None)
     }
     fn recv_fds(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd]) -> Result<(usize, usize), io::Error> {
-        recv_ancillary(self.as_raw_fd(), None, &mut 0, &mut[IoSliceMut::new(buf)], fd_buf, None)
+        recv_fds(self.as_raw_fd(), None, &mut[IoSliceMut::new(buf)], fd_buf)
     }
 }
 
@@ -141,41 +141,24 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
     }
 
     fn send_fds_to(&self,  datagram: &[u8],  fds: &[RawFd],  addr: &UnixSocketAddr)
-    -> Result<usize, io::Error>;
-    fn recv_fds_from(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd])
-    -> Result<(usize, usize, UnixSocketAddr), io::Error>;
-}
-
-impl UnixDatagramExt for UnixDatagram {
-    fn send_fds_to(&self,  datagram: &[u8],  fds: &[RawFd],  addr: &UnixSocketAddr)
     -> Result<usize, io::Error> {
         send_ancillary(self.as_raw_fd(), Some(addr), 0, &[IoSlice::new(datagram)], fds, None)
     }
+    fn send_fds(&self,  datagram: &[u8],  fds: &[RawFd]) -> Result<usize, io::Error> {
+        send_ancillary(self.as_raw_fd(), None, 0, &[IoSlice::new(datagram)], fds, None)
+    }
     fn recv_fds_from(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd])
     -> Result<(usize, usize, UnixSocketAddr), io::Error> {
         let mut addr = UnixSocketAddr::default();
-        recv_ancillary(
-            self.as_raw_fd(), Some(&mut addr), &mut 0,
-            &mut[IoSliceMut::new(buf)], fd_buf, None
-        ).map(|(bytes, fds)| (bytes, fds, addr) )
+        recv_fds(self.as_raw_fd(), Some(&mut addr), &mut[IoSliceMut::new(buf)], fd_buf)
+            .map(|(bytes, fds)| (bytes, fds, addr) )
+    }
+    fn recv_fds(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd]) -> Result<(usize, usize), io::Error> {
+        recv_fds(self.as_raw_fd(), None, &mut[IoSliceMut::new(buf)], fd_buf)
     }
 }
 
+impl UnixDatagramExt for UnixDatagram {}
+
 #[cfg(feature="mio-uds")]
-impl UnixDatagramExt for mio_uds::UnixDatagram {
-    fn send_fds_to(&self,  datagram: &[u8],  fds: &[RawFd],  addr: &UnixSocketAddr)
-    -> Result<usize, io::Error> {
-        send_ancillary(
-            self.as_raw_fd(), Some(addr), 0,
-            &[IoSlice::new(datagram)], fds, None
-        )
-    }
-    fn recv_fds_from(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd])
-    -> Result<(usize, usize, UnixSocketAddr), io::Error> {
-        let mut addr = UnixSocketAddr::default();
-        recv_ancillary(
-            self.as_raw_fd(), Some(&mut addr), &mut 0,
-            &mut[IoSliceMut::new(buf)], fd_buf, None
-        ).map(|(bytes, fds)| (bytes, fds, addr) )
-    }
-}
+impl UnixDatagramExt for mio_uds::UnixDatagram {}

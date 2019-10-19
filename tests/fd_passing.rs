@@ -239,40 +239,75 @@ fn datagram_separate_payloads() {
 }
 
 #[test]
-fn stream_combine_payloads() {
-    let (mut a, mut b) = UnixStream::pair().expect("create stream socket pair");
+fn stream_ancillary_payloads_not_merged() {
+    let (mut a, b) = UnixStream::pair().expect("create stream socket pair");
 
-    // // send some then nothing
-    // a.send_fds(b"1", &[a.as_raw_fd()]).expect("send one fd");
-    // a.write(b"0").expect("write more bytes but no fds");
-    // let mut fd_buf = [0; 6];
-    // let (bytes, fds) = b.recv_fds(&mut[0u8; 20], &mut fd_buf).expect("receive fds");
-    // assert_eq!(fds, 1);
-    // assert_ne!(fd_buf[0], -1);
-    // let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
-    // assert_eq!(bytes, 2);
+    // send some then nothing
+    a.send_fds(b"1", &[a.as_raw_fd()]).expect("send one fd");
+    a.write(b"0").expect("write more bytes but no fds");
+    let mut fd_buf = [-1; 6];
+    let (bytes, fds) = b.recv_fds(&mut[0u8; 20], &mut fd_buf).expect("receive fds");
+    assert_eq!(bytes, 1);
+    assert_eq!(fds, 1);
+    assert_ne!(fd_buf[0], -1);
+    let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+    let mut fd_buf = [-1; 6];
+    let (bytes, fds) = b.recv_fds(&mut[0u8; 20], &mut fd_buf)
+        .expect("receive with ancillary capacity");
+    assert_eq!(bytes, 1);
+    assert_eq!(fds, 0);
+    assert_eq!(fd_buf[0], -1);
 
     // send twice
     a.send_fds(b"2", &[a.as_raw_fd(), a.as_raw_fd()]).expect("send two fds");
     a.send_fds(b"3", &[b.as_raw_fd(), b.as_raw_fd(), b.as_raw_fd()])
         .expect("write three more fds");
-    let mut fd_buf = [0; 6];
+    let mut fd_buf = [-1; 6];
     let (bytes, fds) = b.recv_fds(&mut[0u8; 3], &mut fd_buf).expect("receive fds");
-    assert_eq!(bytes, 2);
-    assert_eq!(fds, 5);
-    assert!(fd_buf[..5].iter().all(|&fd| fd != -1 ));
-    assert_eq!(fd_buf[5], -1);
+    assert_eq!(bytes, 1);
+    assert_eq!(fds, 2);
+    assert_eq!(fd_buf[2], -1);
+    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
+    let mut fd_buf = [-1; 6];
+    let (bytes, fds) = b.recv_fds(&mut[0u8; 3], &mut fd_buf).expect("receive fds");
+    assert_eq!(bytes, 1);
+    assert_eq!(fds, 3);
+    assert_eq!(fd_buf[3], -1);
+    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
+    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[2]) };
+}
 
-    // test order of received fds
-    let mut received = [
-        unsafe { UnixStream::from_raw_fd(fd_buf[0]) },
-        unsafe { UnixStream::from_raw_fd(fd_buf[1]) },
-        unsafe { UnixStream::from_raw_fd(fd_buf[2]) },
-        unsafe { UnixStream::from_raw_fd(fd_buf[3]) },
-        unsafe { UnixStream::from_raw_fd(fd_buf[4]) },
-    ];
-    received[1].write(b"I'm a").expect("write via transferred fd");
-    b.read(&mut[0u8; 10]).expect("read");
-    received[2].write(b"I'm b").expect("write via transferred fd");
-    a.read(&mut[0u8; 10]).expect("read");
+#[test] /// a just-to-be-absolutely-sure test
+fn stream_fd_order() {
+    let (mut a, mut b) = UnixStream::pair().expect("create stream socket pair");
+    a.send_fds(b"2", &[a.as_raw_fd(), b.as_raw_fd()]).expect("send two fds");
+    let mut fd_buf = [0; 2];
+    let (bytes, fds) = b.recv_fds(&mut[0u8; 3], &mut fd_buf).expect("receive fds");
+    assert_eq!(bytes, 1);
+    assert_eq!(fds, 2);
+    let mut received_a = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+    let mut received_b = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
+
+    let _ = a.set_nonblocking(true);
+    let _ = b.set_nonblocking(true);
+    received_a.write(b"I'm a").expect("write via transferred fd");
+    b.read(&mut[0u8; 10]).expect("read bytes sent from received fd[0] (`a`)");
+    received_b.write(b"I'm b").expect("write via transferred fd");
+    a.read(&mut[0u8; 10]).expect("read bytes sent from received fd[1] (`b`)");
+}
+
+#[test]
+fn closed_before_received() {
+    let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
+    a.send_fds(&[], &[a.as_raw_fd()]).expect("send fd");
+    let _ = a; // drop a
+    let mut fd_buf = [-1];
+    let (_, fds) = b.recv_fds(&mut[], &mut fd_buf).expect("receive fd that is already closed");
+    assert_eq!(fds, 1);
+    assert_ne!(fd_buf[0], -1);
+    let a = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+    a.send(b"still alive").expect("send from fd closed before received");
+    b.recv(&mut[0u8; 16]).expect("receive what was sent from sent fd");
 }

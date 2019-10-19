@@ -9,6 +9,8 @@
 extern crate libc;
 #[cfg(feature="mio-uds")]
 extern crate mio_uds;
+#[cfg(feature="mio")]
+extern crate mio;
 
 /// Get errno as io::Error on -1.
 macro_rules! cvt {($syscall:expr) => {
@@ -37,6 +39,13 @@ mod credentials;
 mod helpers;
 mod ancillary;
 mod traits;
+mod seqpacket;
 
 pub use addr::{UnixSocketAddr, UnixSocketAddrRef};
 pub use traits::{UnixListenerExt, UnixStreamExt, UnixDatagramExt};
+pub use seqpacket::{UnixSeqpacketListener, UnixSeqpacketConn};
+
+pub mod nonblocking {
+    pub use crate::seqpacket::NonblockingUnixSeqpacketListener as UnixSeqpacketListener;
+    pub use crate::seqpacket::NonblockingUnixSeqpacketConn as UnixSeqpacketConn;
+}

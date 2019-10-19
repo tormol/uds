@@ -9,10 +9,11 @@ use std::mem;
 
 use libc::{c_int, sockaddr, socklen_t, AF_UNIX};
 use libc::{bind, connect, getsockname, getpeername};
-use libc::{socket, accept, close, listen, ioctl, FIONBIO};
+use libc::{socket, accept, close, listen, socketpair, ioctl, FIONBIO};
+use libc::{fcntl, F_DUPFD_CLOEXEC, EINVAL, dup};
 
 #[cfg(not(target_vendor="apple"))]
-use libc::{SOCK_CLOEXEC, SOCK_NONBLOCK, EINVAL};
+use libc::{SOCK_CLOEXEC, SOCK_NONBLOCK};
 #[cfg(not(any(target_vendor="apple", target_os="netbsd")))]
 // FIXME netbsd has it, but libc doesn't expose it
 use libc::{accept4, ENOSYS};
@@ -21,7 +22,10 @@ use libc::{setsockopt, SOL_SOCKET, SO_NOSIGPIPE, c_void};
 
 use crate::addr::*;
 
+
+
 const LISTEN_BACKLOG: c_int = 10; // what std uses, I think
+
 
 
 type SetSide = unsafe extern "C" fn(RawFd, *const sockaddr, socklen_t) -> c_int;
@@ -106,12 +110,12 @@ impl Socket {
     fn set_nosigpipe(&self,  nosigpipe: bool) -> Result<(), io::Error> {
         #![allow(unused_variables)]
         #[cfg(target_vendor="apple")] {
-            let nosigpipe = &(nosigpipe as c_int) as *const c_int as *const c_void;
-            let int_size = mem::size_of::<c_int>() as socklen_t;
-            cvt!(unsafe {setsockopt(self.0, SOL_SOCKET, SO_NOSIGPIPE, nosigpipe, int_size)})
-                .map(|_| () )
+            unsafe {
+                let nosigpipe = &(nosigpipe as c_int) as *const c_int as *const c_void;
+                let int_size = mem::size_of::<c_int>() as socklen_t;
+                cvt!(setsockopt(self.0, SOL_SOCKET, SO_NOSIGPIPE, nosigpipe, int_size))?;
+            }
         }
-        #[cfg(not(target_vendor="apple"))]
         Ok(())
     }
 
@@ -161,7 +165,7 @@ impl Socket {
                 let flags = SOCK_CLOEXEC | if nonblocking {SOCK_NONBLOCK} else {0};
                 match cvt_r!(accept4(fd, addr_ptr, len_ptr, flags)) {
                     Ok(fd) => return Ok(Socket(fd)),
-                    Err(ref e) if e.raw_os_error() == Some(ENOSYS) => {},
+                    Err(ref e) if e.raw_os_error() == Some(ENOSYS) => {/*try normal accept()*/},
                     Err(e) => return Err(e),
                 }
             }
@@ -180,5 +184,58 @@ impl Socket {
 
     pub fn start_listening(&self) -> Result<(), io::Error> {
         cvt!(unsafe { listen(self.0, LISTEN_BACKLOG) }).map(|_| () )
+    }
+
+    pub fn try_clone_from(fd: RawFd) -> Result<Self, io::Error> {
+        // nonblocking-ness is shared, so doesn't need to potentially be set.
+        // FIXME is SO_NOSIGPIPE shared?
+        // If so setting it again doesn't hurt in most cases,
+        // but might be unwanted if somebody has for some reason cleared it.
+
+        // use fcntl(F_DUPFD_CLOEXEC) to set close-on-exec atomically
+        // if possible, but fall through to dup()-and-ioctl(FIOCLEX)
+        // for compatibility with Linux < 2.6.24
+        match cvt!(unsafe { fcntl(fd, F_DUPFD_CLOEXEC, 0) }) {
+            Ok(cloned) => {
+                let socket = Socket(cloned);
+                socket.set_nosigpipe(true)?;
+                return Ok(socket);
+            },
+            Err(ref e) if e.raw_os_error() == Some(EINVAL) => {/*try dup() instead*/}
+            Err(e) => return Err(e),
+        }
+
+        let cloned = cvt!(unsafe { dup(fd) })?;
+        let socket = Socket(cloned);
+        socket.set_cloexec(true)?;
+        socket.set_nosigpipe(true)?;
+        Ok(socket)
+    }
+
+    pub fn pair(socket_type: c_int,  nonblocking: bool) -> Result<(Self, Self), io::Error> {
+        let mut fd_buf = [-1; 2];
+        // Set close-on-exec atomically wit SOCK_CLOEXEC if possible.
+        // Falls through for compatibility with Linux < 2.6.27
+        #[cfg(not(target_vendor="apple"))] {
+            let type_flags = socket_type | SOCK_CLOEXEC | if nonblocking {SOCK_NONBLOCK} else {0};
+            match cvt!(unsafe { socketpair(AF_UNIX, type_flags, 0, fd_buf[..].as_mut_ptr()) }) {
+                Ok(_) => return Ok((Socket(fd_buf[0]), Socket(fd_buf[1]))),
+                Err(ref e) if e.raw_os_error() == Some(EINVAL) => {/*try without*/}
+                Err(e) => return Err(e),
+            }
+        }
+
+        cvt!(unsafe { socketpair(AF_UNIX, socket_type, 0, fd_buf[..].as_mut_ptr()) })?;
+        let a = Socket(fd_buf[0]);
+        let b = Socket(fd_buf[1]);
+        a.set_cloexec(true)?;
+        b.set_cloexec(true)?;
+        a.set_nosigpipe(true)?;
+        b.set_nosigpipe(true)?;
+        if nonblocking {
+            a.set_nonblocking(true)?;
+            b.set_nonblocking(true)?;
+        }
+        Ok((a, b))
     }
 }

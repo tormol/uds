@@ -124,25 +124,10 @@ impl UnixSeqpacketConn {
     }
 
     /// Send a packet to the peer.
-    ///
-    /// This call sets the end-of-record marker, separating the bytes of
-    /// `packet` from any later bytes.
-    /// Any preceeding bytes sent with [`send_partial()`}(#method.send_partial)
-    /// will be considered part of this packet, despite the peer possibly
-    /// already having received them.
     pub fn send(&self,  packet: &[u8]) -> Result<usize, io::Error> {
         let ptr = packet.as_ptr() as *const c_void;
         let flags = MSG_NOSIGNAL | MSG_EOR;
         let sent = cvt_r!(unsafe { send(self.fd, ptr, packet.len(), flags) })?;
-        Ok(sent as usize)
-    }
-    /// Send bytes to the peer without setting the end-of-record marker.
-    ///
-    /// Consider using `send_vectored()` instead if all data is available
-    /// as it should be faster.
-    pub fn send_partial(&self,  bytes: &[u8]) -> Result<usize, io::Error> {
-        let (ptr, len) = (bytes.as_ptr() as *const c_void, bytes.len());
-        let sent = cvt_r!(unsafe { send(self.fd, ptr, len, MSG_NOSIGNAL) })?;
         Ok(sent as usize)
     }
     /// Receive a packet or parts of one from the peer.
@@ -150,20 +135,16 @@ impl UnixSeqpacketConn {
     /// The returned `bool` indicates whether the received bytes completed a
     /// packet.
     pub fn recv(&self,  buffer: &mut[u8]) -> Result<(usize, bool), io::Error> {
-        let mut flags = 0;
         let mut buffers = [IoSliceMut::new(buffer)];
-        let (bytes, _) = recv_ancillary(self.fd, None, &mut flags, &mut buffers, &mut[])?;
-        Ok((bytes, flags & MSG_EOR != 0))
+        let (bytes, ancillary) = recv_ancillary(self.fd, None, 0, &mut buffers, &mut[])?;
+        Ok((bytes, ancillary.message_truncated()))
     }
-    /// Send (part of) a packet assembled from multiple byte slices.
-    ///
-    /// The `bool` parameter sets the end-of-record marker.
-    pub fn send_vectored(&self,  slices: &[IoSlice],  completes: bool)
+    /// Send a packet assembled from multiple byte slices.
+    pub fn send_vectored(&self,  slices: &[IoSlice])
     -> Result<usize, io::Error> {
         // Can't use writev() because we need to pass flags,
         // and the flags accepted by pwritev2() aren't the one we need to pass.
-        let flags = MSG_NOSIGNAL | if completes {MSG_EOR} else {0};
-        send_ancillary(self.as_raw_fd(), None, flags, slices, &[], None)
+        send_ancillary(self.as_raw_fd(), None, MSG_EOR, slices, &[], None)
     }
     /// Read (part of) a packet into multiple buffers.
     ///
@@ -171,9 +152,8 @@ impl UnixSeqpacketConn {
     /// packet.
     pub fn recv_vectored(&self,  buffers: &mut[IoSliceMut])
     -> Result<(usize, bool), io::Error> {
-        let mut flags = 0;
-        recv_ancillary(self.fd, None, &mut flags, buffers, &mut[])
-            .map(|(bytes, _)| (bytes, flags & MSG_EOR != 0) )
+        recv_ancillary(self.fd, None, 0, buffers, &mut[])
+            .map(|(bytes, ancillary)| (bytes, ancillary.message_truncated()) )
     }
 
     /// Create a new file descriptor also pointing to this side of this connection.

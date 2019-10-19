@@ -25,6 +25,7 @@ pub trait UnixStreamExt: AsRawFd + FromRawFd + Sized {
     }
     fn recv_fds(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd]) -> Result<(usize, usize), io::Error> {
         recv_fds(self.as_raw_fd(), None, &mut[IoSliceMut::new(buf)], fd_buf)
+            .map(|(bytes, _, fds)| (bytes, fds) )
     }
 
     //fn peer_credentials(&self) -> QueriedCredentials;
@@ -143,10 +144,11 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
     -> Result<(usize, usize, UnixSocketAddr), io::Error> {
         let mut addr = UnixSocketAddr::default();
         recv_fds(self.as_raw_fd(), Some(&mut addr), &mut[IoSliceMut::new(buf)], fd_buf)
-            .map(|(bytes, fds)| (bytes, fds, addr) )
+            .map(|(bytes, _, fds)| (bytes, fds, addr) )
     }
     fn recv_fds(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd]) -> Result<(usize, usize), io::Error> {
         recv_fds(self.as_raw_fd(), None, &mut[IoSliceMut::new(buf)], fd_buf)
+            .map(|(bytes, _, fds)| (bytes, fds) )
     }
 }
 

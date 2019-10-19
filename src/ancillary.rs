@@ -348,19 +348,24 @@ impl<'a> Drop for Ancillary<'a> {
     }
 }
 impl<'a> Ancillary<'a> {
-    /// Returns whether ancillary messages were dropped. due to a too short ancillary buffer.
+    /// Returns `true` if the non-ancillary part of the datagram or packet was truncated.
+    ///
+    /// If the provided byte buffer(s) are shorter than the datagram or packet
+    /// that was sent, the bytes that couldn't be stored are discarded.
+    ///
+    /// This function is not meaningful for streams.
+    pub fn message_truncated(&self) -> bool {
+        self.msg.msg_flags & MSG_TRUNC != 0
+    }
+    /// Returns `true` if ancillary messages were dropped due to a too short ancillary buffer.
     pub fn ancillary_truncated(&self) -> bool {
         self.msg.msg_flags & MSG_CTRUNC != 0
-    }
-    /// Returns whether the byte buffer(s) were too short to store the entire datagram.
-    pub fn datagram_truncated(&self) -> bool {
-        self.msg.msg_flags & MSG_TRUNC != 0
     }
 }
 
 /// A safe (but incomplete) wrapper around `recvmsg()`.
 pub fn recv_ancillary<'ancillary_buf>(
-    socket: RawFd,  from: Option<&mut UnixSocketAddr>,  flags: &mut c_int,
+    socket: RawFd,  from: Option<&mut UnixSocketAddr>,  mut flags: c_int,
     bufs: &mut[IoSliceMut],  ancillary_buf: &'ancillary_buf mut[u8],
 ) -> Result<(usize, Ancillary<'ancillary_buf>), io::Error> {
     unsafe {
@@ -402,12 +407,11 @@ pub fn recv_ancillary<'ancillary_buf>(
             msg.msg_control = ancillary_buf.as_mut_ptr() as *mut c_void;
             msg.msg_controllen = ancillary_buf.len() as ControlLen;
         }
-        #[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")))]
-        let pass_flags = *flags | MSG_NOSIGNAL | MSG_CMSG_CLOEXEC;
-        #[cfg(any(target_vendor="apple", target_os="illumos", target_os="solaris"))]
-        let pass_flags = *flags | MSG_NOSIGNAL;
-        let received = cvt_r!(recvmsg(socket, &mut msg, pass_flags))? as usize;
-        *flags = msg.msg_flags;
+        flags |= MSG_NOSIGNAL;
+        #[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")))] {
+            flags |= MSG_CMSG_CLOEXEC;
+        }
+        let received = cvt_r!(recvmsg(socket, &mut msg, flags))? as usize;
         let ancillary_iterator = Ancillary {
             msg,
             _ancillary_buf: PhantomData,
@@ -421,11 +425,11 @@ pub fn recv_ancillary<'ancillary_buf>(
 pub fn recv_fds(
         fd: RawFd,  from: Option<&mut UnixSocketAddr>,
         bufs: &mut[IoSliceMut],  fd_buf: &mut[RawFd]
-) -> Result<(usize, usize), io::Error> {
+) -> Result<(usize, bool, usize), io::Error> {
     let mut ancillary_buf = AncillaryBuf::with_fd_capacity(fd_buf.len());
-    let (num_bytes, ancillary) = recv_ancillary(fd, from, &mut 0, bufs, &mut*ancillary_buf)?;
+    let (num_bytes, mut ancillary) = recv_ancillary(fd, from, 0, bufs, &mut*ancillary_buf)?;
     let mut num_fds = 0;
-    for message in ancillary {
+    for message in &mut ancillary {
         if let AncillaryItem::Fds(fds) = message {
             // Due to alignment of cmsg_len in glibc the minimum payload
             // capacity is on Linux (and probably Android) 8 bytes,
@@ -439,5 +443,5 @@ pub fn recv_fds(
             }
         }
     }
-    Ok((num_bytes, num_fds))
+    Ok((num_bytes, ancillary.message_truncated(), num_fds))
 }

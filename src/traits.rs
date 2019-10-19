@@ -20,8 +20,14 @@ pub trait UnixStreamExt: AsRawFd + FromRawFd + Sized {
     fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
     -> Result<Self, io::Error>;
 
-    fn send_fds(&self,  bytes: &[u8],  fds: &[RawFd]) -> Result<usize, io::Error>;
-    fn recv_fds(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd]) -> Result<(usize, usize), io::Error>;
+    fn send_fds(&self,  bytes: &[u8],  fds: &[RawFd]) -> Result<usize, io::Error> {
+        send_ancillary(self.as_raw_fd(), None, 0, &[IoSlice::new(bytes)], fds, None)
+    }
+    fn recv_fds(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd]) -> Result<(usize, usize), io::Error> {
+        recv_fds(self.as_raw_fd(), None, &mut[IoSliceMut::new(buf)], fd_buf)
+    }
+
+    //fn peer_credentials(&self) -> QueriedCredentials;
 }
 
 impl UnixStreamExt for UnixStream {
@@ -36,13 +42,6 @@ impl UnixStreamExt for UnixStream {
         bind_to(socket.as_raw_fd(), from)?;
         connect_to(socket.as_raw_fd(), to)?;
         Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
-    }
-
-    fn send_fds(&self,  bytes: &[u8],  fds: &[RawFd]) -> Result<usize, io::Error> {
-        send_ancillary(self.as_raw_fd(), None, 0, &[IoSlice::new(bytes)], fds, None)
-    }
-    fn recv_fds(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd]) -> Result<(usize, usize), io::Error> {
-        recv_fds(self.as_raw_fd(), None, &mut[IoSliceMut::new(buf)], fd_buf)
     }
 }
 
@@ -59,13 +58,6 @@ impl UnixStreamExt for mio_uds::UnixStream {
         bind_to(socket.as_raw_fd(), from)?;
         connect_to(socket.as_raw_fd(), to)?;
         Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
-    }
-
-    fn send_fds(&self,  bytes: &[u8],  fds: &[RawFd]) -> Result<usize, io::Error> {
-        send_ancillary(self.as_raw_fd(), None, 0, &[IoSlice::new(bytes)], fds, None)
-    }
-    fn recv_fds(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd]) -> Result<(usize, usize), io::Error> {
-        recv_ancillary(self.as_raw_fd(), None, &mut 0, &mut[IoSliceMut::new(buf)], fd_buf, None)
     }
 }
 

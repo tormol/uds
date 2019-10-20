@@ -26,6 +26,18 @@ use crate::addr::*;
 
 const LISTEN_BACKLOG: c_int = 10; // what std uses, I think
 
+#[cfg(not(target_vendor="apple"))]
+pub use libc::MSG_NOSIGNAL;
+#[cfg(target_vendor="apple")]
+pub const MSG_NOSIGNAL: c_int = 0; // SO_NOSIGPIPE is set instead
+
+/// Enable / disable CLOEXEC, for when SOCK_CLOEXEC can't be used.
+pub fn set_cloexec(fd: RawFd,  close_on_exec: bool) -> Result<(), io::Error> {
+    let op = if close_on_exec {libc::FIOCLEX} else {libc::FIONCLEX};
+    cvt!(unsafe { ioctl(fd, op) })?;
+    Ok(())
+}
+
 
 
 type SetSide = unsafe extern "C" fn(RawFd, *const sockaddr, socklen_t) -> c_int;
@@ -99,13 +111,6 @@ impl AsRawFd for Socket {
 }
 
 impl Socket {
-    /// Enable / disable CLOEXEC, for when SOCK_CLOEXEC can't be used.
-    fn set_cloexec(&self,  close_on_exec: bool) -> Result<(), io::Error> {
-        // FIXME I don't think these ioctls are available everywhere
-        let op = if close_on_exec {libc::FIOCLEX} else {libc::FIONCLEX};
-        cvt!(unsafe { ioctl(self.0, op) }).map(|_| () )
-    }
-
     /// Enable / disable Apple-only SO_NOSIGPIPE
     fn set_nosigpipe(&self,  nosigpipe: bool) -> Result<(), io::Error> {
         #![allow(unused_variables)]
@@ -142,7 +147,7 @@ impl Socket {
         // portable but race-prone
         let fd = cvt!(unsafe { socket(AF_UNIX, socket_type, 0) })?;
         let socket = Socket(fd);
-        socket.set_cloexec(true)?;
+        set_cloexec(socket.0, true)?;
         socket.set_nosigpipe(true)?;
         if nonblocking {
             socket.set_nonblocking(true)?;
@@ -173,7 +178,7 @@ impl Socket {
             // Portable but not as efficient:
             let fd = cvt_r!(accept(fd, addr_ptr, len_ptr))?;
             let socket = Socket(fd);
-            socket.set_cloexec(true)?;
+            set_cloexec(socket.0, true)?;
             socket.set_nosigpipe(true)?;
             if nonblocking {
                 socket.set_nonblocking(true)?;
@@ -207,7 +212,7 @@ impl Socket {
 
         let cloned = cvt!(unsafe { dup(fd) })?;
         let socket = Socket(cloned);
-        socket.set_cloexec(true)?;
+        set_cloexec(socket.0, true)?;
         socket.set_nosigpipe(true)?;
         Ok(socket)
     }
@@ -228,8 +233,8 @@ impl Socket {
         cvt!(unsafe { socketpair(AF_UNIX, socket_type, 0, fd_buf[..].as_mut_ptr()) })?;
         let a = Socket(fd_buf[0]);
         let b = Socket(fd_buf[1]);
-        a.set_cloexec(true)?;
-        b.set_cloexec(true)?;
+        set_cloexec(a.0, true)?;
+        set_cloexec(b.0, true)?;
         a.set_nosigpipe(true)?;
         b.set_nosigpipe(true)?;
         if nonblocking {

@@ -3,7 +3,7 @@ use std::mem;
 use std::os::unix::io::{RawFd, FromRawFd, AsRawFd, IntoRawFd};
 use std::path::Path;
 
-use libc::{SOCK_SEQPACKET, MSG_EOR, MSG_NOSIGNAL, c_void, close, send};
+use libc::{SOCK_SEQPACKET, MSG_EOR, c_void, close, send};
 
 #[cfg(feature="mio")]
 use mio::{event::Evented, unix::EventedFd, Ready, Poll, PollOpt, Token};

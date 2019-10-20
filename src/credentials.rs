@@ -157,7 +157,7 @@ impl ReceivedCredentials {
             target_os="freebsd", target_os="netbsd", target_os="dragonfly",
             target_os="illumos", target_os="solaris", target_os="macos",
         ))] {
-            self.euid
+            self.effective_uid
         }
         #[cfg(not(any(
             target_os="linux", target_os="android",
@@ -193,7 +193,7 @@ impl ReceivedCredentials {
             target_os="freebsd", target_os="netbsd", target_os="dragonfly",
             target_os="illumos", target_os="solaris", target_os="macos",
         ))] {
-            self.egid
+            self.effective_gid
         }
         #[cfg(not(any(
             target_os="linux", target_os="android",

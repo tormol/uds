@@ -10,17 +10,15 @@ use std::marker::PhantomData;
 use libc::{c_int, c_uint, c_void};
 use libc::{socklen_t, msghdr, iovec, sockaddr_un, cmsghdr};
 use libc::{sendmsg, recvmsg, close};
-use libc::{MSG_CMSG_CLOEXEC, MSG_TRUNC, MSG_CTRUNC};
+use libc::{MSG_TRUNC, MSG_CTRUNC};
 use libc::{CMSG_SPACE, CMSG_LEN, CMSG_DATA, CMSG_FIRSTHDR, CMSG_NXTHDR};
 use libc::{SOL_SOCKET, SCM_RIGHTS};
 #[cfg(any(target_os="linux", target_os="android"))]
 use libc::SCM_CREDENTIALS;
-
 #[cfg(not(target_vendor="apple"))]
-use libc::MSG_NOSIGNAL;
-#[cfg(target_vendor="apple")]
-const MSG_NOSIGNAL: c_int = 0; // SO_NOSIGPIPE is set instead
+use libc::MSG_CMSG_CLOEXEC;
 
+use crate::helpers::*;
 use crate::UnixSocketAddr;
 use crate::credentials::{SendCredentials, ReceivedCredentials};
 #[cfg(any(target_os="linux", target_os="android"))]
@@ -70,7 +68,7 @@ pub fn send_ancillary(
                 // I use a lower limit in case the macros don't handle overflow.
                 return Err(io::Error::new(ErrorKind::InvalidInput, "too many file descriptors"));
             }
-            needed_capacity += CMSG_LEN(mem::size_of_val(&fds) as u32);
+            needed_capacity += CMSG_LEN(mem::size_of_val::<[RawFd]>(fds) as u32);
         }
         // stack buffer which should be big enough for most scenarios
         struct AncillaryFixedBuf(/*for alignment*/[cmsghdr; 0], [u8; 256]);
@@ -288,6 +286,17 @@ impl<'a> Iterator for Ancillary<'a> {
                     // pointer is aligned due to the cmsg header
                     let first_fd = CMSG_DATA(self.next_message) as *const RawFd;
                     let fds = slice::from_raw_parts(first_fd, num_fds);
+                    #[cfg(target_vendor="apple")] {
+                        // set cloexec
+                        // FIXME this should be done in a separate iteration
+                        // when the fds are received, and not after user code
+                        // has had a chance to run.
+                        for &fd in fds {
+                            // might fail if fd has not been kept alive by the
+                            // sender, so ignore errors.
+                            let _ = set_cloexec(fd, true);
+                        }
+                    }
                     AncillaryItem::Fds(fds)
                 }
                 #[cfg(any(target_os="linux", target_os="android"))]
@@ -364,8 +373,10 @@ pub fn recv_ancillary<'ancillary_buf>(
             msg.msg_control = ancillary_buf.as_mut_ptr() as *mut c_void;
             msg.msg_controllen = ancillary_buf.len() as ControlLen;
         }
-
+        #[cfg(not(target_vendor="apple"))]
         let pass_flags = *flags | MSG_NOSIGNAL | MSG_CMSG_CLOEXEC;
+        #[cfg(target_vendor="apple")]
+        let pass_flags = *flags | MSG_NOSIGNAL;
         let received = cvt_r!(recvmsg(socket, &mut msg, pass_flags))? as usize;
         *flags = msg.msg_flags;
         let ancillary_iterator = Ancillary {

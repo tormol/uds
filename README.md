@@ -1,4 +1,4 @@
-# ud3 - A unix domain socket Rust library
+# uds3 - A unix domain socket Rust library
 
 ## Minimum Rust version
 

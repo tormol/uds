@@ -1,4 +1,4 @@
-extern crate ud3;
+extern crate uds3;
 
 use std::ffi::OsStr;
 use std::fs::remove_file;
@@ -6,7 +6,7 @@ use std::os::unix::io::{RawFd, AsRawFd};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::{Command, Stdio};
 
-use ud3::{UnixSocketAddr, UnixListenerExt, UnixStreamExt};
+use uds3::{UnixSocketAddr, UnixListenerExt, UnixStreamExt};
 
 fn is_cloexec(fd: RawFd) -> bool {
     let mut exe = std::env::current_exe().expect("get directory of tests binary");

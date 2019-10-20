@@ -76,7 +76,7 @@ pub trait UnixListenerExt: AsRawFd + FromRawFd + Sized {
     }
 
     /// Accept a connection and return the client's address as
-    /// an `ud3::UnixSocketAddr`.
+    /// an `uds3::UnixSocketAddr`.
     fn accept_unix_addr(&self) -> Result<(Self::Conn, UnixSocketAddr), io::Error>;
 }
 

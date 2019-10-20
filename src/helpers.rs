@@ -12,10 +12,10 @@ use libc::{bind, connect, getsockname, getpeername};
 use libc::{socket, accept, close, listen, socketpair, ioctl, FIONBIO};
 use libc::{fcntl, F_DUPFD_CLOEXEC, EINVAL, dup};
 
-#[cfg(not(target_vendor="apple"))]
+#[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")))]
 use libc::{SOCK_CLOEXEC, SOCK_NONBLOCK};
-#[cfg(not(any(target_vendor="apple", target_os="netbsd")))]
-// FIXME netbsd has it, but libc doesn't expose it
+#[cfg(not(any(target_vendor="apple", target_os="netbsd", target_os="illumos", target_os="solaris")))]
+// FIXME netbsd and illumos has it, but libc doesn't expose it
 use libc::{accept4, ENOSYS};
 #[cfg(target_vendor="apple")]
 use libc::{setsockopt, SOL_SOCKET, SO_NOSIGPIPE, c_void};
@@ -135,7 +135,8 @@ impl Socket {
         // with Linux < 2.6.27 becaue Rust std still supports 2.6.18.
         // (EINVAL is what std checks for, and EPROTONOTSUPPORT is for
         // known-but-not-supported protcol or protocol families), 
-        #[cfg(not(target_vendor="apple"))] {
+        // FIXME illumos also have the flags but libc doesn't expose them
+        #[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")))] {
             let type_flags = socket_type | SOCK_CLOEXEC | if nonblocking {SOCK_NONBLOCK} else {0};
             match cvt!(unsafe { socket(AF_UNIX, type_flags, 0) }) {
                 Ok(fd) => return Ok(Socket(fd)),
@@ -164,8 +165,8 @@ impl Socket {
             // (used by RHEL 5 which doesn't reach EOL until November 2020).
             #[cfg(any(
                 target_os="linux", target_os="android",
-                target_os="freebsd", target_os="dragonfly",
-                target_os="openbsd" // FIXME netbsd also has this, but libc doesn't expose it
+                target_os="freebsd", target_os="dragonfly", target_os="openbsd"
+                // FIXME netbsd and illumos also has this, but libc doesn't expose it
             ))] {
                 let flags = SOCK_CLOEXEC | if nonblocking {SOCK_NONBLOCK} else {0};
                 match cvt_r!(accept4(fd, addr_ptr, len_ptr, flags)) {
@@ -221,7 +222,8 @@ impl Socket {
         let mut fd_buf = [-1; 2];
         // Set close-on-exec atomically wit SOCK_CLOEXEC if possible.
         // Falls through for compatibility with Linux < 2.6.27
-        #[cfg(not(target_vendor="apple"))] {
+        // FIXME illumos also have the flags but libc doesn't expose them
+        #[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")))] {
             let type_flags = socket_type | SOCK_CLOEXEC | if nonblocking {SOCK_NONBLOCK} else {0};
             match cvt!(unsafe { socketpair(AF_UNIX, type_flags, 0, fd_buf[..].as_mut_ptr()) }) {
                 Ok(_) => return Ok((Socket(fd_buf[0]), Socket(fd_buf[1]))),

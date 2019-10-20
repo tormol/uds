@@ -10,12 +10,15 @@ use std::marker::PhantomData;
 use libc::{c_int, c_uint, c_void};
 use libc::{socklen_t, msghdr, iovec, sockaddr_un, cmsghdr};
 use libc::{sendmsg, recvmsg, close};
+//#[cfg(not(any(target_os="illumos", target_os="solaris")))]
 use libc::{MSG_TRUNC, MSG_CTRUNC};
+#[cfg(not(any(target_os="illumos", target_os="solaris")))]
 use libc::{CMSG_SPACE, CMSG_LEN, CMSG_DATA, CMSG_FIRSTHDR, CMSG_NXTHDR};
+//#[cfg(not(any(target_os="illumos", target_os="solaris")))]
 use libc::{SOL_SOCKET, SCM_RIGHTS};
 #[cfg(any(target_os="linux", target_os="android"))]
 use libc::SCM_CREDENTIALS;
-#[cfg(not(target_vendor="apple"))]
+#[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")))]
 use libc::MSG_CMSG_CLOEXEC;
 
 use crate::helpers::*;
@@ -68,7 +71,15 @@ pub fn send_ancillary(
                 // I use a lower limit in case the macros don't handle overflow.
                 return Err(io::Error::new(ErrorKind::InvalidInput, "too many file descriptors"));
             }
-            needed_capacity += CMSG_LEN(mem::size_of_val::<[RawFd]>(fds) as u32);
+            #[cfg(not(any(target_os="illumos", target_os="solaris")))] {
+                needed_capacity += CMSG_LEN(mem::size_of_val::<[RawFd]>(fds) as u32);
+            }
+            #[cfg(any(target_os="illumos", target_os="solaris"))] {
+                return Err(io::Error::new(
+                    ErrorKind::Other,
+                    "ancillary data support is not implemented yet on Illumos or Solaris, sorry"
+                ))
+            }
         }
         // stack buffer which should be big enough for most scenarios
         struct AncillaryFixedBuf(/*for alignment*/[cmsghdr; 0], [u8; 256]);
@@ -86,23 +97,25 @@ pub fn send_ancillary(
                 msg.msg_control = alloc::alloc(layout) as *mut c_void;
             }
 
-            let mut header = &mut*CMSG_FIRSTHDR(&mut msg);
-            #[cfg(any(target_os="linux", target_os="android"))] {
-                if let Some(creds) = creds {
-                    header.cmsg_level = SOL_SOCKET;
-                    header.cmsg_type = SCM_CREDENTIALS;
-                    header.cmsg_len = CMSG_LEN(mem::size_of_val(&creds) as u32) as ControlLen;
-                    *(CMSG_DATA(header) as *mut _) = creds;
-                    header = &mut*CMSG_NXTHDR(&mut msg, header);
+            #[cfg(not(any(target_os="illumos", target_os="solaris")))] {
+                let mut header = &mut*CMSG_FIRSTHDR(&mut msg);
+                #[cfg(any(target_os="linux", target_os="android"))] {
+                    if let Some(creds) = creds {
+                        header.cmsg_level = SOL_SOCKET;
+                        header.cmsg_type = SCM_CREDENTIALS;
+                        header.cmsg_len = CMSG_LEN(mem::size_of_val(&creds) as u32) as ControlLen;
+                        *(CMSG_DATA(header) as *mut _) = creds;
+                        header = &mut*CMSG_NXTHDR(&mut msg, header);
+                    }
                 }
-            }
 
-            if fds.len() > 0 {
-                header.cmsg_level = SOL_SOCKET;
-                header.cmsg_type = SCM_RIGHTS;
-                header.cmsg_len = CMSG_LEN(mem::size_of_val(fds) as u32) as ControlLen;
-                let dst = &mut*(CMSG_DATA(header) as *mut RawFd);
-                ptr::copy_nonoverlapping(fds.as_ptr(), dst, fds.len());
+                if fds.len() > 0 {
+                    header.cmsg_level = SOL_SOCKET;
+                    header.cmsg_type = SCM_RIGHTS;
+                    header.cmsg_len = CMSG_LEN(mem::size_of_val(fds) as u32) as ControlLen;
+                    let dst = &mut*(CMSG_DATA(header) as *mut RawFd);
+                    ptr::copy_nonoverlapping(fds.as_ptr(), dst, fds.len());
+                }
             }
         }
 
@@ -164,6 +177,7 @@ impl AncillaryBuf {
         }
     }
     pub fn with_fd_capacity(num_fds: usize) -> Self {
+        #[cfg(not(any(target_os="illumos", target_os="solaris")))]
         unsafe {
             // To prevent truncation or overflow (in CMSG macros or elsewhere)
             // cmsghdr having bigger alignment than RawFd isn't a problem,
@@ -187,6 +201,9 @@ impl AncillaryBuf {
             } else {
                 panic!("too many file descriptors for ancillary buffer length")
             }
+        }
+        #[cfg(any(target_os="illumos", target_os="solaris"))] {
+            Self::with_capacity(num_fds) // any non-zero value is not supported
         }
     }
 }
@@ -269,10 +286,12 @@ pub struct Ancillary<'a> {
 
     _ancillary_buf: PhantomData<&'a[u8]>,
     /// The next message, initialized with CMSG_FIRSTHDR()
+    #[cfg(not(any(target_os="illumos", target_os="solaris")))]
     next_message: *mut cmsghdr,
 }
 impl<'a> Iterator for Ancillary<'a> {
     type Item = AncillaryItem<'a>;
+    #[cfg(not(any(target_os="illumos", target_os="solaris")))]
     fn next(&mut self) -> Option<AncillaryItem<'a>> {
         unsafe {
             if self.next_message.is_null() {
@@ -310,6 +329,10 @@ impl<'a> Iterator for Ancillary<'a> {
             self.next_message = CMSG_NXTHDR(&mut self.msg, self.next_message);
             Some(item)
         }
+    }
+    #[cfg(any(target_os="illumos", target_os="solaris"))]
+    fn next(&mut self) -> Option<Self::Item> {
+        None
     }
 }
 impl<'a> Drop for Ancillary<'a> {
@@ -362,6 +385,12 @@ pub fn recv_ancillary<'ancillary_buf>(
         }
 
         if ancillary_buf.len() > 0 {
+            #[cfg(any(target_os="illumos", target_os="solaris"))] {
+                return Err(io::Error::new(
+                    ErrorKind::Other,
+                    "ancillary message support is not implemented yet on Illumos or Solaris, sorry"
+                ))
+            }
             if ancillary_buf.as_ptr() as usize % mem::align_of::<cmsghdr>() != 0 {
                 let msg = "ancillary buffer is not properly aligned";
                 return Err(io::Error::new(ErrorKind::InvalidInput, msg));
@@ -373,15 +402,16 @@ pub fn recv_ancillary<'ancillary_buf>(
             msg.msg_control = ancillary_buf.as_mut_ptr() as *mut c_void;
             msg.msg_controllen = ancillary_buf.len() as ControlLen;
         }
-        #[cfg(not(target_vendor="apple"))]
+        #[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")))]
         let pass_flags = *flags | MSG_NOSIGNAL | MSG_CMSG_CLOEXEC;
-        #[cfg(target_vendor="apple")]
+        #[cfg(any(target_vendor="apple", target_os="illumos", target_os="solaris"))]
         let pass_flags = *flags | MSG_NOSIGNAL;
         let received = cvt_r!(recvmsg(socket, &mut msg, pass_flags))? as usize;
         *flags = msg.msg_flags;
         let ancillary_iterator = Ancillary {
             msg,
             _ancillary_buf: PhantomData,
+            #[cfg(not(any(target_os="illumos", target_os="solaris")))]
             next_message: CMSG_FIRSTHDR(&msg),
         };
         Ok((received, ancillary_iterator))

@@ -185,25 +185,7 @@ impl ReceivedCredentials {
             unreachable!("struct cannot be created on unsupported OSes")
         }
     }
-    pub fn effective_or_sent_gid(&self) -> u32 {
-        #[cfg(any(target_os="linux", target_os="android"))] {
-            self.gid
-        }
-        #[cfg(any(
-            target_os="freebsd", target_os="netbsd", target_os="dragonfly",
-            target_os="illumos", target_os="solaris", target_os="macos",
-        ))] {
-            self.effective_gid
-        }
-        #[cfg(not(any(
-            target_os="linux", target_os="android",
-            target_os="freebsd", target_os="netbsd", target_os="dragonfly",
-            target_os="illumos", target_os="solaris", target_os="macos",
-        )))] {
-            unreachable!("struct cannot be created on unsupported OSes")
-        }
-    }
-    pub fn real_or_sent_gid(&self) -> Option<u32> {
+    pub fn effective_or_sent_gid(&self) -> Option<u32> {
         #[cfg(any(target_os="linux", target_os="android"))] {
             Some(self.gid)
         }
@@ -211,7 +193,7 @@ impl ReceivedCredentials {
             target_os="freebsd", target_os="netbsd",
             target_os="illumos", target_os="solaris", target_os="macos",
         ))] {
-            Some(self.real_gid)
+            Some(self.effective_gid)
         }
         #[cfg(not(any(
             target_os="linux", target_os="android",
@@ -219,6 +201,24 @@ impl ReceivedCredentials {
             target_os="illumos", target_os="solaris", target_os="macos",
         )))] {
             None
+        }
+    }
+    pub fn real_or_sent_gid(&self) -> u32 {
+        #[cfg(any(target_os="linux", target_os="android"))] {
+            self.gid
+        }
+        #[cfg(any(
+            target_os="freebsd", target_os="netbsd", target_os="dragonfly",
+            target_os="illumos", target_os="solaris", target_os="macos",
+        ))] {
+            self.real_gid
+        }
+        #[cfg(not(any(
+            target_os="linux", target_os="android",
+            target_os="freebsd", target_os="netbsd", target_os="dragonfly",
+            target_os="illumos", target_os="solaris", target_os="macos",
+        )))] {
+            unreachable!("struct cannot be created on unsupported OSes")
         }
     }
     /// Get the peer's group memberships.

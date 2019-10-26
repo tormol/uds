@@ -1,4 +1,5 @@
 #!/bin/sh
+MSRV="1.36.0"
 
 export RUST_BACKTRACE=1
 
@@ -26,4 +27,8 @@ cargo test --target "$test_release_target" --release --all-features -- --quiet |
 echo
 
 echo "checking without optional features"
-exec cargo check --no-default-features
+cargo check --no-default-features || exit $?
+echo
+
+echo "checking with minimum supported Rust version $MSRV"
+cargo "+$MSRV" check --all-features || exit $?

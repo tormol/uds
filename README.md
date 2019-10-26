@@ -2,7 +2,7 @@
 
 ## Minimum Rust version
 
-The minimum supported Rust version is 1.33.
+The minimum supported Rust version is 1.36 (because of `std::io::IoSlice`).
 
 ## License
 

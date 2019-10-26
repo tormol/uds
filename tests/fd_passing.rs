@@ -1,10 +1,10 @@
-extern crate uds3;
+extern crate uds;
 
 use std::io::{ErrorKind, Read, Write};
 use std::os::unix::io::{AsRawFd, FromRawFd};
 use std::os::unix::net::{UnixDatagram, UnixStream};
 
-use uds3::{UnixDatagramExt, UnixStreamExt};
+use uds::{UnixDatagramExt, UnixStreamExt};
 
 #[test]
 fn datagram_send_no_fds() {

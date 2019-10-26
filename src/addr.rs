@@ -37,7 +37,7 @@ fn as_u8(slice: &[c_char]) -> &[u8] {
 /// Creating an abstract address:
 ///
 /// ```
-/// use uds3::UnixSocketAddr;
+/// use uds::UnixSocketAddr;
 ///
 /// let addr = UnixSocketAddr::new("@abstract").expect("too long");
 /// assert!(addr.is_abstract());
@@ -77,7 +77,7 @@ pub struct UnixSocketAddr {
 /// Cleaning pathname sockets after ourselves:
 ///
 /// ```
-/// # use uds3::{UnixSocketAddr, UnixSocketAddrRef};
+/// # use uds::{UnixSocketAddr, UnixSocketAddrRef};
 /// let addr = UnixSocketAddr::from_path("/var/run/socket.sock").unwrap();
 /// if let UnixSocketAddrRef::Path(path) = addr.as_ref() {
 ///     let _ = std::fs::remove_file(path);
@@ -160,7 +160,7 @@ impl UnixSocketAddr {
     /// Abstract address:
     /// 
     /// ```
-    /// # use uds3::UnixSocketAddr;
+    /// # use uds::UnixSocketAddr;
     /// assert!(UnixSocketAddr::new("@abstract").unwrap().is_abstract());
     /// assert!(UnixSocketAddr::new("\0abstract").unwrap().is_abstract());
     /// ```
@@ -168,14 +168,14 @@ impl UnixSocketAddr {
     /// Escaped path address:
     /// 
     /// ```
-    /// # use uds3::UnixSocketAddr;
+    /// # use uds::UnixSocketAddr;
     /// assert!(UnixSocketAddr::new("./@path").unwrap().is_relative_path());
     /// ```
     ///
     /// Unnamed address:
     /// 
     /// ```
-    /// # use uds3::UnixSocketAddr;
+    /// # use uds::UnixSocketAddr;
     /// assert_eq!(UnixSocketAddr::new("").unwrap(), UnixSocketAddr::new_unnamed());
     /// ```
     pub fn new<A: AsRef<[u8]>+?Sized>(addr: &A) -> Result<Self, io::Error> {
@@ -206,7 +206,7 @@ impl UnixSocketAddr {
     ///
     #[cfg_attr(any(target_os="linux", target_os="android"), doc="```")]
     #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
-    /// # use uds3::{UnixSocketAddr, UnixDatagramExt};
+    /// # use uds::{UnixSocketAddr, UnixDatagramExt};
     /// # use std::os::unix::net::UnixDatagram;
     /// let addr = UnixSocketAddr::new_unspecified();
     /// assert!(addr.is_unnamed());

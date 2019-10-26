@@ -1,4 +1,4 @@
-extern crate uds3;
+extern crate uds;
 
 use std::os::unix::net::{SocketAddr, UnixStream, UnixListener, UnixDatagram};
 use std::io::{self, ErrorKind};

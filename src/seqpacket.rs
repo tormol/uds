@@ -94,7 +94,7 @@ impl UnixSeqpacketConn {
     ///
     /// Both sides have the unnamed address.
     /// ```
-    /// # use uds3::UnixSeqpacketConn;
+    /// # use uds::UnixSeqpacketConn;
     /// let (a, b) = UnixSeqpacketConn::pair().unwrap();
     /// assert!(a.local_unix_addr().unwrap().is_unnamed());
     /// assert!(b.local_unix_addr().unwrap().is_unnamed());
@@ -102,7 +102,7 @@ impl UnixSeqpacketConn {
     ///
     /// Send & receive a packet:
     /// ```
-    /// # use uds3::UnixSeqpacketConn;
+    /// # use uds::UnixSeqpacketConn;
     /// let (a, b) = UnixSeqpacketConn::pair().unwrap();
     /// a.send(b"hello").unwrap();
     /// assert!(b.recv(&mut[0; 20]).unwrap().1);
@@ -233,7 +233,7 @@ impl UnixSeqpacketListener {
 /// This type can be used with mio if the `mio` feature is enabled:
 /// 
 /// ```toml
-/// uds3 = { version = "x.y", features=["mio"] }
+/// uds = { version = "x.y", features=["mio"] }
 /// ```
 #[derive(Debug)]
 #[repr(transparent)]
@@ -265,7 +265,7 @@ impl NonblockingUnixSeqpacketConn {
 /// This type can be used with mio if the `mio` feature is enabled:
 /// 
 /// ```toml
-/// uds3 = { version = "x.y", features=["mio"] }
+/// uds = { version = "x.y", features=["mio"] }
 /// ```
 #[derive(Debug)]
 #[repr(transparent)]

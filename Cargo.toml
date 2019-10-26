@@ -1,12 +1,12 @@
 [package]
-name = "uds3"
+name = "uds"
 version = "0.0.0"
 description = """
 unix domain socket crate that supports all three types of addresses and socket types,
 with mio support.
 """
 readme = "README.md"
-repository = "https://github.com/tormol/uds3"
+repository = "https://github.com/tormol/uds"
 license = "Apache-2.0 / MIT"
 authors = ["Torbjørn Birch Moltu <t.b.moltu@lyse.net>"]
 keywords = ["uds", "unix domain", "socket", "seqpacket", "SOCK_SEQPACKET", "abstract", "fd-passing"]

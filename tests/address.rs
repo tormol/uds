@@ -1,7 +1,9 @@
 extern crate uds;
 
-use std::os::unix::net::{SocketAddr, UnixStream, UnixListener, UnixDatagram};
-use std::io::{self, ErrorKind};
+use std::os::unix::net::{UnixListener, UnixStream};
+use std::io::ErrorKind;
+
+use uds::{UnixSocketAddr, UnixListenerExt, UnixStreamExt};
 
 #[test]
 fn std_checks_family() {
@@ -15,5 +17,15 @@ fn std_checks_family() {
     assert_eq!(wrong.local_addr().unwrap_err().kind(), ErrorKind::InvalidInput);
     let _conn = TcpStream::connect(("127.0.0.1", port)).unwrap();
     assert_eq!(wrong.accept().unwrap_err().kind(), ErrorKind::InvalidInput);
-    // TODO test peer_addr()
+}
+
+#[test]
+fn unnamed_not_unspecified() {
+    UnixListener::bind_unix_addr(&UnixSocketAddr::new_unnamed())
+        .expect_err("bind to and listen on unnamed address");
+
+    UnixStream::connect_from_to_unix_addr(
+        &UnixSocketAddr::new_unnamed(),
+        &UnixSocketAddr::new("file").unwrap()
+    ).expect_err("connect from unnamed addr");
 }

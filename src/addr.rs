@@ -189,7 +189,7 @@ impl UnixSocketAddr {
         parse(addr.as_ref())
     }
 
-    /// Creates a unnamed socket address.
+    /// Creates an unnamed socket address.
     pub fn new_unnamed() -> Self {
         let mut addr: sockaddr_un = unsafe { mem::zeroed() };
         addr.sun_family = AF_UNIX as sa_family_t;

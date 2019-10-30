@@ -161,6 +161,41 @@ impl UnixSeqpacketConn {
         let cloned = Socket::try_clone_from(self.fd)?;
         Ok(UnixSeqpacketConn { fd: cloned.into_raw_fd() })
     }
+
+    /// Enable or disable nonblocking mode.
+    ///
+    /// Consider using the nonblocking variant of this type instead.
+    /// This method mainly exists for feature parity with std's `UnixStream`.
+    ///
+    /// # Examples
+    ///
+    /// Trying to receive when there are no packets waiting:
+    ///
+    /// ```
+    /// # use std::io::ErrorKind;
+    /// # use uds::UnixSeqpacketConn;
+    /// let (a, b) = UnixSeqpacketConn::pair().expect("create seqpacket pair");
+    /// a.set_nonblocking(true).unwrap();
+    /// assert_eq!(a.recv(&mut[]).unwrap_err().kind(), ErrorKind::WouldBlock);
+    /// ```
+    ///
+    /// Trying to send when the OS buffer for the connection is full:
+    ///
+    /// ```
+    /// # use std::io::ErrorKind;
+    /// # use uds::UnixSeqpacketConn;
+    /// let (a, b) = UnixSeqpacketConn::pair().expect("create seqpacket pair");
+    /// a.set_nonblocking(true).unwrap();
+    /// loop {
+    ///     if let Err(error) = a.send(&[b'#'; 1000]) {
+    ///         assert_eq!(error.kind(), ErrorKind::WouldBlock);
+    ///         break;
+    ///     }
+    /// }
+    /// ```
+    pub fn set_nonblocking(&self,  nonblocking: bool) -> Result<(), io::Error> {
+        set_nonblocking(self.fd, nonblocking)
+    }
 }
 
 
@@ -183,19 +218,43 @@ impl UnixSeqpacketListener {
         socket.start_listening()?;
         Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
     }
+
     pub fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
         local_addr(self.fd)
     }
+
     pub fn accept_unix_addr(&self)
     -> Result<(UnixSeqpacketConn, UnixSocketAddr), io::Error> {
         let (socket, addr) = Socket::accept_from(self.as_raw_fd(), false)?;
         let conn = UnixSeqpacketConn { fd: socket.into_raw_fd() };
         Ok((conn, addr))
     }
+
     /// Create a new file descriptor listening for the same connections.
     pub fn try_clone(&self) -> Result<Self, io::Error> {
         let cloned = Socket::try_clone_from(self.fd)?;
         Ok(UnixSeqpacketListener { fd: cloned.into_raw_fd() })
+    }
+    /// Enable or disable nonblocking-ness of [`accept_unix_addr()`](#method.accept_unix addr).
+    ///
+    /// The returned connnections will still be in blocking mode regardsless.
+    ///
+    /// Consider using the nonblocking variant of this type instead;
+    /// this method mostly exists for feature parity with std's `UnixListener`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::io::ErrorKind;
+    /// # use uds::{UnixSocketAddr, UnixSeqpacketListener};
+    /// #
+    /// # let addr = UnixSocketAddr::new_unspecified();
+    /// let listener = UnixSeqpacketListener::bind_unix_addr(&addr).unwrap();
+    /// listener.set_nonblocking(true).unwrap();
+    /// assert_eq!(listener.accept_unix_addr().unwrap_err().kind(), ErrorKind::WouldBlock);
+    /// ```
+    pub fn set_nonblocking(&self,  nonblocking: bool) -> Result<(), io::Error> {
+        set_nonblocking(self.fd, nonblocking)
     }
 }
 
@@ -277,6 +336,7 @@ impl NonblockingUnixSeqpacketListener {
         let conn = NonblockingUnixSeqpacketConn { fd: socket.into_raw_fd() };
         Ok((conn, addr))
     }
+
     /// Create a new file descriptor listening for the same connections.
     pub fn try_clone(&self) -> Result<Self, io::Error> {
         let cloned = Socket::try_clone_from(self.fd)?;

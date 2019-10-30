@@ -26,15 +26,24 @@ use crate::addr::*;
 
 const LISTEN_BACKLOG: c_int = 10; // what std uses, I think
 
+
+
 #[cfg(not(target_vendor="apple"))]
 pub use libc::MSG_NOSIGNAL;
 #[cfg(target_vendor="apple")]
 pub const MSG_NOSIGNAL: c_int = 0; // SO_NOSIGPIPE is set instead
 
+
+
 /// Enable / disable CLOEXEC, for when SOCK_CLOEXEC can't be used.
 pub fn set_cloexec(fd: RawFd,  close_on_exec: bool) -> Result<(), io::Error> {
     let op = if close_on_exec {libc::FIOCLEX} else {libc::FIONCLEX};
     cvt!(unsafe { ioctl(fd, op) })?;
+    Ok(())
+}
+/// Enable / disable FIONBIO. Used if SOCK_NONBLOCK can't be used.
+pub fn set_nonblocking(fd: RawFd,  nonblocking: bool) -> Result<(), io::Error> {
+    cvt!(unsafe { ioctl(fd, FIONBIO, &mut (nonblocking as c_int)) })?;
     Ok(())
 }
 
@@ -124,11 +133,6 @@ impl Socket {
         Ok(())
     }
 
-    /// Enable / disable FIONBIO. Used if SOCK_NONBLOCK can't be used.
-    fn set_nonblocking(&self,  nonblocking: bool) -> Result<(), io::Error> {
-        cvt!(unsafe { ioctl(self.0, FIONBIO, &mut (nonblocking as c_int)) }).map(|_| () )
-    }
-
     pub fn new(socket_type: c_int,  nonblocking: bool) -> Result<Self, io::Error> {
         // Set close-on-exec atomically wit SOCK_CLOEXEC if possible.
         // Falls through to the portable but race-prone way for compatibility
@@ -151,7 +155,7 @@ impl Socket {
         set_cloexec(socket.0, true)?;
         socket.set_nosigpipe(true)?;
         if nonblocking {
-            socket.set_nonblocking(true)?;
+            set_nonblocking(socket.0, true)?;
         }
         Ok(socket)
     }
@@ -182,7 +186,7 @@ impl Socket {
             set_cloexec(socket.0, true)?;
             socket.set_nosigpipe(true)?;
             if nonblocking {
-                socket.set_nonblocking(true)?;
+                set_nonblocking(socket.0, true)?;
             }
             Ok(socket)
         }) }
@@ -240,8 +244,8 @@ impl Socket {
         a.set_nosigpipe(true)?;
         b.set_nosigpipe(true)?;
         if nonblocking {
-            a.set_nonblocking(true)?;
-            b.set_nonblocking(true)?;
+            set_nonblocking(a.0, true)?;
+            set_nonblocking(b.0, true)?;
         }
         Ok((a, b))
     }

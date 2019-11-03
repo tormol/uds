@@ -76,7 +76,7 @@ pub struct UnixSocketAddr {
 ///
 /// Cleaning pathname sockets after ourselves:
 ///
-/// ```
+/// ```no_run
 /// # use uds::{UnixSocketAddr, UnixSocketAddrRef};
 /// let addr = UnixSocketAddr::from_path("/var/run/socket.sock").unwrap();
 /// if let UnixSocketAddrRef::Path(path) = addr.as_ref() {
@@ -98,7 +98,11 @@ impl<'a> From<&'a UnixSocketAddr> for UnixSocketAddrRef<'a> {
             let slice = &addr.addr.sun_path[1..name_len as usize];
             UnixSocketAddrRef::Abstract(as_u8(slice))
         } else {
-            let slice = &addr.addr.sun_path[..name_len as usize];
+            let mut slice = &addr.addr.sun_path[..name_len as usize];
+            // remove trailing NUL if present
+            if slice.last() == Some(&0) {
+                slice = &slice[..name_len as usize-1];
+            }
             UnixSocketAddrRef::Path(Path::new(OsStr::from_bytes(as_u8(slice))))
         }
     }
@@ -176,31 +180,26 @@ impl UnixSocketAddr {
     /// 
     /// ```
     /// # use uds::UnixSocketAddr;
-    /// assert_eq!(UnixSocketAddr::new("").unwrap(), UnixSocketAddr::new_unnamed());
+    /// assert!(UnixSocketAddr::new("").unwrap().is_unnamed());
     /// ```
     pub fn new<A: AsRef<[u8]>+?Sized>(addr: &A) -> Result<Self, io::Error> {
         fn parse(addr: &[u8]) -> Result<UnixSocketAddr, io::Error> {
             match addr.first() {
                 Some(&b'@') | Some(&b'\0') => UnixSocketAddr::from_abstract(&addr[1..]),
                 Some(_) => UnixSocketAddr::from_path(Path::new(OsStr::from_bytes(addr))),
-                None => Ok(UnixSocketAddr::new_unnamed()),
+                None => Ok(UnixSocketAddr::unspecified()),
             }
         }
         parse(addr.as_ref())
     }
 
-    /// Creates an unnamed socket address.
-    pub fn new_unnamed() -> Self {
-        let mut addr: sockaddr_un = unsafe { mem::zeroed() };
-        addr.sun_family = AF_UNIX as sa_family_t;
-        UnixSocketAddr {
-            len: 0,
-            addr,
-        }
-    }
-
-    /// Creates an address that when passed to `bind()` on Linux binds the
-    /// socket to a random abstract address, but is otherwise unnamed.
+    /// Creates an unnamed address, which on Linux can be used for auto-bind.
+    ///
+    /// Binding a socket to the unnamed address is different from not binding
+    /// at all:
+    ///
+    /// On Linux that binds the socket to an abstract address determined by the
+    /// OS.
     ///
     /// # Examples
     ///
@@ -208,16 +207,19 @@ impl UnixSocketAddr {
     #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
     /// # use uds::{UnixSocketAddr, UnixDatagramExt};
     /// # use std::os::unix::net::UnixDatagram;
-    /// let addr = UnixSocketAddr::new_unspecified();
+    /// let addr = UnixSocketAddr::unspecified();
     /// assert!(addr.is_unnamed());
     /// let socket = UnixDatagram::unbound().unwrap();
     /// socket.bind_to_unix_addr(&addr).unwrap();
     /// assert!(socket.local_unix_addr().unwrap().is_abstract());
     /// ```
-    pub fn new_unspecified() -> Self {
-        let mut addr = Self::new_unnamed();
-        addr.len = path_offset();
-        return addr;
+    pub fn unspecified() -> Self {
+        let mut addr: sockaddr_un = unsafe { mem::zeroed() };
+        addr.sun_family = AF_UNIX as sa_family_t;
+        UnixSocketAddr {
+            len: mem::size_of::<sa_family_t>() as socklen_t,
+            addr,
+        }
     }
 
     /// The maximum size of pathname addesses supported by `UnixSocketAddr`.
@@ -225,7 +227,7 @@ impl UnixSocketAddr {
     /// Returns the size of the underlying `sun_path` field,
     /// minus 1 if the OS is known to require a trailing NUL (`'\0'`) byte.
     pub fn max_path_len() -> usize {
-        mem::size_of_val(&Self::new_unnamed().addr.sun_path)
+        mem::size_of_val(&Self::unspecified().addr.sun_path)
     }
 
     /// Create a pathname unix socket address.
@@ -236,7 +238,7 @@ impl UnixSocketAddr {
     /// underlying `sockaddr_un` type, or contains NUL (`'\0'`) bytes.
     pub fn from_path<P: AsRef<Path>+?Sized>(path: &P) -> Result<Self, io::Error> {
         fn from_path_inner(path: &[u8]) -> Result<UnixSocketAddr, io::Error> {
-            let mut addr = UnixSocketAddr::new_unnamed();
+            let mut addr = UnixSocketAddr::unspecified();
             let capacity = mem::size_of_val(&addr.addr.sun_path);
             if path.is_empty() {
                 Err(io::Error::new(ErrorKind::NotFound, "path is empty"))
@@ -264,7 +266,7 @@ impl UnixSocketAddr {
     /// Returns the size of the underlying `sun_path` field minus 1 for the
     /// leading `'\0'` byte.
     pub fn max_abstract_len() -> usize {
-        mem::size_of_val(&Self::new_unnamed().addr.sun_path) - 1
+        mem::size_of_val(&Self::unspecified().addr.sun_path) - 1
     }
 
     /// Whether the operating system is known to support abstract socket
@@ -291,7 +293,7 @@ impl UnixSocketAddr {
     /// get the limit.
     pub fn from_abstract<N: AsRef<[u8]>+?Sized>(name: &N) -> Result<Self, io::Error> {
         fn from_abstract_inner(name: &[u8]) -> Result<UnixSocketAddr, io::Error> {
-            let mut addr = UnixSocketAddr::new_unnamed();
+            let mut addr = UnixSocketAddr::unspecified();
             if name.len() > UnixSocketAddr::max_abstract_len() {
                 Err(io::Error::new(ErrorKind::InvalidInput, "abstract name is too long"))
             } else {
@@ -314,7 +316,7 @@ impl UnixSocketAddr {
         if let Some(path) = addr.as_pathname() {
             Some(Self::from_path(path).expect("pathname addr cannot be converted"))
         } else if addr.is_unnamed() {
-            Some(Self::new_unnamed())
+            Some(Self::unspecified())
         } else {
             None
         }
@@ -330,7 +332,7 @@ impl UnixSocketAddr {
     /// for `sockaddr_un.sun_path`.
     pub fn from_c_str(path: &CStr) -> Result<Self, io::Error> {
         let path = path.to_bytes();
-        let mut addr = Self::new_unnamed();
+        let mut addr = Self::unspecified();
         if path.is_empty() {
             Ok(addr)
         } else if path.len() > mem::size_of_val(&addr.addr.sun_path) {
@@ -374,27 +376,54 @@ impl UnixSocketAddr {
 
     /// Prepare a `struct sockaddr*` and `socklen_t*` for passing to ffi
     /// (such as `getsockname()`, `getpeername()`, `accept()`),
-    /// and sanitize the produced address afterwards.
+    /// and sanitize and normalize the produced address afterwards.
     /// 
-    /// For now the only sanitization performed is checking that the
-    /// address is `AF_UNIX`.
+    /// Sanitizations:
     ///
-    /// # Safety
+    /// * checking that the address family is `AF_UNIX`.
+    /// * checking that the address wasn't truncated (the `socklen_t` is too big).
     ///
-    /// Assigning a value > `sizeof(struct sockaddr_un)` to the `socklen_t`
-    /// reference might lead to out-of-bounds reads later.
-    pub unsafe fn new_from_ffi<R, F>(call: F) -> Result<(R, Self), io::Error>
+    /// Normalization:
+    ///
+    /// * Path addresses have a trailing NUL byte appended if not already there
+    ///   and there is space.
+    pub fn new_from_ffi<R, F>(call: F) -> Result<(R, Self), io::Error>
     where F: FnOnce(&mut sockaddr, &mut socklen_t) -> Result<R, io::Error> {
-        let mut addr = Self::new_unspecified();
-        addr.len = mem::size_of_val(&addr.addr) as socklen_t;
-        let (addr_ptr, addr_len_ptr) = addr.as_raw_mut_general();
-        match call(addr_ptr, addr_len_ptr) {
-            Ok(_) if addr.addr.sun_family != AF_UNIX as sa_family_t => Err(io::Error::new(
-                ErrorKind::InvalidData,
-                "file descriptor did not correspond to a Unix socket" // identical to std's
-            )),
-            Ok(ret)  => Ok((ret, addr)),
-            Err(err) => Err(err),
+        let mut addr = Self::unspecified();
+        let capacity = mem::size_of_val(&addr.addr) as socklen_t;
+        addr.len = capacity;
+        unsafe {
+            let (addr_ptr, addr_len_ptr) = addr.as_raw_mut_general();
+            let ret = call(addr_ptr, addr_len_ptr)?;
+            if addr.addr.sun_family != AF_UNIX as sa_family_t {
+                return Err(io::Error::new(
+                    ErrorKind::InvalidData,
+                    "file descriptor did not correspond to a Unix socket" // identical to std's
+                ));
+            }
+            if addr.is_abstract() {
+                if addr.len > capacity {
+                    return Err(io::Error::new(
+                        ErrorKind::InvalidData,
+                        "abstract name was too long"
+                    ));
+                }
+            } else if addr.is_path() {
+                if addr.len > capacity+1 {
+                    return Err(io::Error::new(ErrorKind::InvalidData, "path was too long"));
+                    // accept lengths one too big; assume the truncated byte was NUL
+                } else {
+                    // normalize addr.len to include terminating NUL byte if possible
+                    // and not be greater than capacity
+                    if addr.len >= capacity {
+                        addr.len = capacity;
+                    } else if addr.addr.sun_path[(addr.len-1-path_offset()) as usize] != 0 {
+                        addr.len += 1;
+                        addr.addr.sun_path[(addr.len-1-path_offset()) as usize] = 0;
+                    }
+                }
+            }
+            Ok((ret, addr))
         }
     }
 
@@ -406,9 +435,9 @@ impl UnixSocketAddr {
     /// * `len` must not be greater than the size of the memory `addr` points to.
     /// * `addr` must point to valid memory if `len` is greater than zero, or be NULL.
     pub unsafe fn from_raw(addr: *const sockaddr,  len: socklen_t) -> Result<Self, io::Error> {
-        let mut copy = Self::new_unnamed();
+        let mut copy = Self::unspecified();
         if addr.is_null() && len == 0 {
-            Ok(Self::new_unnamed())
+            Ok(Self::unspecified())
         } else if addr.is_null() {
             Err(io::Error::new(ErrorKind::InvalidInput, "addr is NULL"))
         } else if len < path_offset() {
@@ -482,7 +511,7 @@ impl UnixSocketAddr {
 
 impl Default for UnixSocketAddr {
     fn default() -> Self {
-        Self::new_unnamed()
+        Self::unspecified()
     }
 }
 

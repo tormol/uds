@@ -1,10 +1,13 @@
 extern crate uds;
+extern crate libc;
 
-use std::os::unix::net::{UnixListener, UnixStream};
-use std::io::ErrorKind::*;
+use std::os::unix::net::{UnixListener, UnixStream, UnixDatagram};
+use std::os::unix::io::AsRawFd;
+use std::io::{self, ErrorKind::*};
 use std::fs::remove_file;
 
-use uds::{UnixSocketAddr, UnixSocketAddrRef, UnixListenerExt, UnixStreamExt};
+use uds::{UnixSocketAddr, UnixSocketAddrRef};
+use uds::{UnixListenerExt, UnixStreamExt};
 
 #[test]
 fn std_checks_family() {
@@ -142,4 +145,78 @@ fn too_long_path() {
         InvalidInput
     );
     // TODO test passing oversized address to libc::bind()
+}
+
+
+#[test]
+fn os_doeest_support_longer_addrs() {
+    #[repr(C)]
+    struct LongAddr {
+        sockaddr: libc::sockaddr_un,
+        extra: [u8; 100],
+    }
+    impl std::ops::Deref for LongAddr {
+        type Target = [u8];
+        fn deref(&self) -> &[u8] {
+            unsafe {
+                let included = std::mem::size_of_val(&self.sockaddr.sun_path);
+                let extra = std::mem::size_of_val(&self.extra);
+                let path_ptr = &self.sockaddr.sun_path[0] as *const _ as *const u8;
+                assert_eq!(std::mem::size_of_val(&self.sockaddr)+extra, std::mem::size_of::<Self>());
+                assert_eq!(
+                    path_ptr as usize - self as *const Self as usize,
+                    std::mem::size_of::<Self>() - included - extra
+                );
+                std::slice::from_raw_parts(path_ptr, included+extra)
+            }
+        }
+    }
+    fn new_longaddr(fill: u8,  extra_len: usize) -> (LongAddr, libc::socklen_t) {
+        let mut addr = unsafe { std::mem::zeroed::<LongAddr>() };
+        addr.sockaddr.sun_family = libc::AF_UNIX as libc::sa_family_t;
+        unsafe {
+            let included = std::mem::size_of_val(&addr.sockaddr.sun_path);
+            let len = included - 1 + extra_len;
+            let extra = std::mem::size_of_val(&addr.extra);
+            let combined = included + extra;
+            if extra >= combined {
+                panic!("{} bytes is too long for LongAddr", len);
+            }
+            let path_ptr = &mut addr.sockaddr.sun_path[0] as *mut _ as *mut u8;
+            let path_offset = path_ptr as usize - &addr as *const LongAddr as usize;
+            assert_eq!(
+                path_offset,
+                std::mem::size_of::<LongAddr>() - combined,
+                "extended address is contigious"
+            );
+            let extended_path = std::slice::from_raw_parts_mut(path_ptr, combined);
+            for i in 0..len {
+                extended_path[i] = fill;
+            }
+            let addrlen = (path_offset + len + 1) as libc::socklen_t;
+            (addr, addrlen)
+        }
+    }
+
+    let socket_a = UnixDatagram::unbound().unwrap();
+    let (path_addr, addrlen) = new_longaddr(b'P', 1);
+    unsafe {
+        let ret = libc::bind(
+            socket_a.as_raw_fd(),
+            &path_addr.sockaddr as *const _ as *const libc::sockaddr,
+            addrlen
+        );
+        if ret != -1 {
+            libc::close(ret);
+            panic!("{} does support addresses longer than sockaddr_un", cfg!(target_os));
+        }
+        let error = io::Error::last_os_error();
+        if error.raw_os_error() != Some(libc::EINVAL) {
+            panic!(
+                "{} rejects too long addresses with {} instead of EINVAL",
+                cfg!(target_os),
+                error
+            );
+        }
+    }
 }

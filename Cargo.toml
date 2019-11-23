@@ -2,23 +2,23 @@
 name = "uds"
 version = "0.0.0"
 description = """
-unix domain socket crate that supports all three types of addresses and socket types,
-with mio support.
+A unix domain socket crate that supports abstract addresses, fd-passing and seqpacket sockets.
+Only tested on Linux.
 """
 readme = "README.md"
 repository = "https://github.com/tormol/uds"
 license = "Apache-2.0 / MIT"
 authors = ["Torbjørn Birch Moltu <t.b.moltu@lyse.net>"]
-keywords = ["uds", "unix domain", "socket", "seqpacket", "SOCK_SEQPACKET", "abstract", "fd-passing"]
+keywords = ["unix-domain", "socket", "SOCK_SEQPACKET", "abstract-address", "fd-passing"]
 categories = ["os::unix-apis", "asynchronous"]
 edition = "2018"
 exclude = ["tests", "src/bin"]
 
 [dependencies]
 libc = "0.2.59" # .59 added FIONCLEX for Linux
-# implements the extension traits for mio-uds's types
+# enabling this feature implements the extension traits for mio-uds types
 mio-uds = {version="0.6", optional=true} # no patch release builds with -Z minimal-versions
-# implements Evented for non-blocking seqpacket types
+# enabling this feature implements Evented for this crate's non-blocking seqpacket types
 mio = {version="0.6.14", optional=true} # .14 avoids dragging in libc 0.1 under -Z minimal-versions
 
 [package.metadata.docs.rs]

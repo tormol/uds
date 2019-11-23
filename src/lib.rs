@@ -6,6 +6,11 @@
  * copied, modified, or distributed except according to those terms.
  */
 
+//! A unix domain sockets crate that supports abstract addresses, fd-passing and SOCK_SEQPACKET sockets.
+//!
+//! File-descriptor passing and abstract socket support for stream and datagram sockets is provided
+//! via extension traits for existing types in `std::os::unix::net` and (opt-in) `mio_uds`.
+
 extern crate libc;
 #[cfg(feature="mio-uds")]
 extern crate mio_uds;

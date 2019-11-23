@@ -1,0 +1,111 @@
+task:
+  name: FreeBSD 11.2 amd64 stable
+  freebsd_instance:
+    image: freebsd-11-2-release-amd64
+    cpu: 1
+    memory: 1 # GB
+  env:
+    RUST_BACKTRACE: 1
+  setup_script:
+    - pkg install -y curl
+    - curl https://sh.rustup.rs -sSf --output rustup.sh
+    - sh rustup.sh -y
+  cargo_cache:
+    folder: $HOME/.cargo/registry
+    fingerprint_script: cat Cargo.lock 2> /dev/null || true
+  build_script:
+    - . $HOME/.cargo/env
+    - cargo build
+    - cargo build --features mio
+  test_script:
+    - . $HOME/.cargo/env
+    - kldload mqueuefs
+    - cargo test --features mio
+    - cargo test --features mio -- --ignored --test-threads 1
+    - cargo run --example limits
+  before_cache_script:
+    - rm -rf $HOME/.cargo/registry/index
+
+task:
+  name: Linux amd64 1.36
+  container:
+    image: rust:1.36
+    cpu: 1
+    memory: 1
+  cargo_cache:
+    folder: $HOME/.cargo/registry
+    fingerprint_script: cat Cargo.lock 2> /dev/null || true
+  build_script:
+    - cargo check
+    - cargo check --features mio
+    - cargo check --features mio-uds
+    - cargo build --all-features
+  test_script:
+    - cargo test --all-features
+  before_cache_script:
+    - rm -rf $HOME/.cargo/registry/index
+
+task:
+  name: Linux amd64 nightly minimal-versions
+  container:
+    image: rustlang/rust:nightly
+    cpu: 1
+    memory: 1
+  allow_failures: false
+  cargo_cache:
+    folder: $HOME/.cargo/registry
+    fingerprint_script: cat Cargo.lock 2> /dev/null || true
+  build_script:
+    - cargo check -Z minimal-versions
+    - cargo build -Z minimal-versions --features mio # no version of mio-uds compiles
+  test_script:
+    - cargo test -Z minimal-versions --features mio
+  before_cache_script:
+    - rm -rf $HOME/.cargo/registry/index
+
+task:
+  name: Linux i686 stable
+  container:
+    image: rust:latest
+    cpu: 1
+    memory: 1
+  allow_failures: false
+  setup_script:
+    - apt-get update
+    - apt-get install -yqq gcc gcc-6-multilib linux-libc-dev
+    - rustup target add i686-unknown-linux-gnu
+    - rustup target add i686-unknown-linux-musl
+  cargo_cache:
+    folder: $HOME/.cargo/registry
+    fingerprint_script: cat Cargo.lock 2> /dev/null || true
+  build_script:
+    - cargo build --target i686-unknown-linux-gnu --all-features
+    - cargo build --target i686-unknown-linux-musl --all-features
+  test_script:
+    - cargo test --target i686-unknown-linux-gnu --all-features
+    - cargo test --target i686-unknown-linux-musl --all-features
+  before_cache_script:
+    - rm -rf $HOME/.cargo/registry/index
+
+task:
+  name: Cross-check stable
+  container:
+    image: rust:latest
+    cpu: 2
+    memory: 1
+  allow_failures: false
+  setup_script:
+    - rustup target add x86_64-unknown-netbsd
+    - rustup target add x86_64-sun-solaris
+    - rustup target add x86_64-unknown-linux-gnux32
+    - rustup target add aarch64-unknown-linux-gnu
+  cargo_cache:
+    folder: $HOME/.cargo/registry
+    fingerprint_script: cat Cargo.lock 2> /dev/null || true
+  build_script:
+    - cargo check --target x86_64-unknown-netbsd --all-features --tests
+    - cargo check --target x86_64-sun-solaris --tests
+    - cargo check --target x86_64-unknown-linux-gnux32 --all-features --tests
+    - cargo check --target aarch64-unknown-linux-gnu --all-features --tests
+  before_cache_script:
+    - rm -rf $HOME/.cargo/registry/index

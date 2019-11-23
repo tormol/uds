@@ -1,0 +1,14 @@
+language: rust
+rust: stable
+arch:
+  - amd64
+  - arm64
+  - ppc64le
+  - s390x
+os:
+  - linux
+  - osx
+  - windows
+script:
+  - cargo build --all-features
+  - cargo test --all-features

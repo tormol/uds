@@ -21,6 +21,16 @@
 // Too many features unavailable on solarish to bother cfg()ing individually.
 #![cfg_attr(any(target_os="illumos", target_os="solaris"), allow(unused))]
 
+#![allow(
+    clippy::cast_lossless, // improves portability when values are limited by the OS anyway
+    clippy::len_zero, // the `!` in `if !foo.is_empty()` can be easy to miss
+    clippy::needless_return, // consistency with early returns, and to not look incomplete
+    clippy::redundant_closure, // avoiding auto-functions of tuple structs and enum variants
+    clippy::needless_lifetimes, // explicity when useful
+    clippy::ref_in_deref, // derefencing one field from a raw pointer
+    // more lints are disabled inside ancillary.rs
+)]
+
 extern crate libc;
 #[cfg(feature="mio-uds")]
 extern crate mio_uds;

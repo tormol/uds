@@ -28,6 +28,10 @@ rm Cargo.lock
 cargo "+$MSRV" check $CAFLAGS --all-features
 echo
 
+echo "linting"
+cargo clippy --all-features || exit $?
+echo
+
 check_targets="x86_64-unknown-freebsd x86_64-unknown-netbsd \
                x86_64-apple-darwin x86_64-sun-solaris \
                aarch64-unknown-linux-gnu arm-unknown-linux-gnueabi \

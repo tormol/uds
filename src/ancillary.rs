@@ -1,3 +1,9 @@
+#![allow(
+    clippy::unnecessary_mut_passed, // CMSG_ macros only exist for *const
+    clippy::match_overlapping_arm, // cumbersome to avoid when using inclusive ranges
+    dead_code // TODO
+)]
+
 use std::ops::{Deref, DerefMut};
 use std::borrow::{Borrow, BorrowMut};
 use std::os::unix::io::RawFd;
@@ -119,7 +125,7 @@ pub fn send_ancillary(
                         header.cmsg_level = SOL_SOCKET;
                         header.cmsg_type = SCM_CREDENTIALS;
                         header.cmsg_len = CMSG_LEN(mem::size_of_val(&creds) as u32) as ControlLen;
-                        *(CMSG_DATA(header) as *mut _) = creds;
+                        *(CMSG_DATA(header) as *mut c_void as *mut _) = creds;
                         header = &mut*CMSG_NXTHDR(&mut msg, header);
                     }
                 }
@@ -128,7 +134,12 @@ pub fn send_ancillary(
                     header.cmsg_level = SOL_SOCKET;
                     header.cmsg_type = SCM_RIGHTS;
                     header.cmsg_len = CMSG_LEN(mem::size_of_val(fds) as u32) as ControlLen;
-                    let dst = &mut*(CMSG_DATA(header) as *mut RawFd);
+                    let dst = CMSG_DATA(header) as *mut c_void;
+                    debug_assert!(
+                        dst as usize & (mem::align_of::<RawFd>()-1) == 0,
+                        "CMSG_DATA() is aligned"
+                    );
+                    let dst = &mut*(dst as *mut RawFd);
                     ptr::copy_nonoverlapping(fds.as_ptr(), dst, fds.len());
                 }
             }
@@ -319,7 +330,12 @@ impl<'a> Iterator for Ancillary<'a> {
                 (SOL_SOCKET, SCM_RIGHTS) => {
                     let num_fds = payload_bytes / mem::size_of::<RawFd>();
                     // pointer is aligned due to the cmsg header
-                    let first_fd = CMSG_DATA(self.next_message) as *const RawFd;
+                    let first_fd = CMSG_DATA(self.next_message) as *const c_void;
+                    debug_assert!(
+                        first_fd as usize & (mem::align_of::<RawFd>()-1) == 0,
+                        "CMSG_DATA() is aligned"
+                    );
+                    let first_fd = first_fd as *const RawFd;
                     let fds = slice::from_raw_parts(first_fd, num_fds);
                     #[cfg(any(target_vendor="apple", target_os="freebsd"))] {
                         // set cloexec
@@ -339,7 +355,12 @@ impl<'a> Iterator for Ancillary<'a> {
                 #[cfg(any(target_os="linux", target_os="android"))]
                 (SOL_SOCKET, SCM_CREDENTIALS) => {
                     // FIXME check payload size?
-                    let creds_ptr = CMSG_DATA(self.next_message) as *const RawReceivedCredentials;
+                    let creds_ptr = CMSG_DATA(self.next_message) as *const c_void;
+                    debug_assert!(
+                        creds_ptr as usize & (mem::align_of::<RawReceivedCredentials>()-1) == 0,
+                        "CMSG_DATA() is aligned"
+                    );
+                    let creds_ptr = creds_ptr as *const RawReceivedCredentials;
                     AncillaryItem::Credentials(ReceivedCredentials::from_raw(*creds_ptr))
                 }
                 _ => AncillaryItem::Unsupported,

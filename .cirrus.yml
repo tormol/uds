@@ -128,6 +128,7 @@ task:
     memory: 1536MB # sometimes OOMs with 1GB
   allow_failures: false
   setup_script:
+    - rustup component add clippy
     - rustup target add x86_64-unknown-netbsd
     - rustup target add x86_64-sun-solaris
     - rustup target add x86_64-unknown-linux-gnux32
@@ -146,6 +147,8 @@ task:
   info_script:
     - rustc --version
   check_script:
+    - cargo clippy
+    - cargo clippy --all-features
     - cargo check --target x86_64-unknown-netbsd --all-features --tests
     - cargo check --target x86_64-sun-solaris --tests
     - cargo check --target x86_64-unknown-linux-gnux32 --all-features --tests

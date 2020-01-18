@@ -38,7 +38,7 @@ fn unspecified() {
         _ => unreachable!()
     }
     let conn = UnixStream::connect_from_to_unix_addr(
-        &UnixSocketAddr::unspecified(),
+        &UnixSocketAddr::new_unspecified(),
         &listener_addr
     ).expect(&format!("connect from unspecified (abstract) addr to autobound addr {:?}", listener_addr));
     assert!(conn.local_unix_addr().unwrap().is_abstract());

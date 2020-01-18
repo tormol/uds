@@ -367,7 +367,7 @@ impl UnixSeqpacketListener {
     /// # use std::io::ErrorKind;
     /// # use uds::{UnixSocketAddr, UnixSeqpacketListener};
     /// #
-    /// # let addr = UnixSocketAddr::unspecified();
+    /// # let addr = UnixSocketAddr::new_unspecified();
     /// let listener = UnixSeqpacketListener::bind_unix_addr(&addr).unwrap();
     /// listener.set_nonblocking(true).unwrap();
     /// assert_eq!(listener.accept_unix_addr().unwrap_err().kind(), ErrorKind::WouldBlock);

@@ -15,14 +15,13 @@ task:
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
   build_script:
     - . $HOME/.cargo/env
-    - cargo build
-    - cargo build --features mio
+    - cargo check
+    - cargo check --features mio
+    - cargo check --features mio-uds
+    - cargo build --all-features
   test_script:
     - . $HOME/.cargo/env
-    - kldload mqueuefs
-    - cargo test --features mio
-    - cargo test --features mio -- --ignored --test-threads 1
-    - cargo run --example limits
+    - cargo test --all-features
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -72,7 +71,7 @@ task:
   allow_failures: false
   setup_script:
     - apt-get update
-    - apt-get install -yqq gcc gcc-6-multilib linux-libc-dev
+    - apt-get install -yqq gcc gcc-multilib linux-libc-dev
     - rustup target add i686-unknown-linux-gnu
     - rustup target add i686-unknown-linux-musl
   cargo_cache:

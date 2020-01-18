@@ -1,14 +1,30 @@
 language: rust
 rust: stable
-arch:
-  - amd64
-  - arm64
-  - ppc64le
-  - s390x
-os:
-  - linux
-  - osx
-  - windows
+env: RUST_BACKTRACE=1
+
 script:
-  - cargo build --all-features
+  - cargo check && \
+  - cargo check --features mio && \
+  - cargo check --features mio-uds && \
   - cargo test --all-features
+
+jobs:
+  include:
+  - name: "macOS stable"
+    os: osx
+    arch: amd64
+  - name: "Linux amd64 stable"
+    os: linux
+    arch: amd64
+  - name: "Linux aarch64 stable"
+    os: linux
+    arch: arm64
+  - name: "Linux ppc64le stable"
+    os: linux
+    arch: ppc64le
+  - name: "Linux s390x stable"
+    os: linux
+    arch: s390x
+  # - name: "Windows stable"
+  #   os: windows
+  #   arch: amd64

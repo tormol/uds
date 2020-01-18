@@ -9,6 +9,9 @@ check_targets="x86_64-unknown-freebsd x86_64-unknown-netbsd \
 # not available: dragonfly, openbsd and illumos
 for target in $check_targets; do
     echo "checking $target"
+    cargo check --target "$target" || exit $?
+    cargo check --target "$target" --features mio || exit $?
+    cargo check --target "$target" --features mio-uds || exit $?
     cargo check --target "$target" --all-features || exit $?
     echo
 done

@@ -35,3 +35,5 @@ echo
 
 echo "checking with minimum supported Rust version $MSRV"
 cargo "+$MSRV" check --all-features || exit $?
+
+exec cargo run --bin limitations

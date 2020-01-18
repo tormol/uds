@@ -3,6 +3,7 @@ rust: stable
 env: RUST_BACKTRACE=1
 
 script:
+  - cargo run --bin limitations
   - cargo check && \
   - cargo check --features mio && \
   - cargo check --features mio-uds && \

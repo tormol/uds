@@ -23,10 +23,11 @@ fn std_checks_family() {
     assert_eq!(wrong.accept().unwrap_err().kind(), InvalidInput);
 }
 
+#[cfg(any(target_os="linux", target_os="android"))]
 #[test]
-fn unspecified() {
-    let listener = UnixListener::bind_unix_addr(&UnixSocketAddr::unspecified())
-        .expect("listen to uspecified (abstract) address");
+fn unspecified_creates_abstract() {
+    let listener = UnixListener::bind_unix_addr(&UnixSocketAddr::new_unspecified())
+        .expect("bind to unspecified (abstract) address");
     let listener_addr = listener.local_unix_addr().expect("get auto-bound address");
     assert!(listener_addr.is_abstract());
     match listener_addr.as_ref() {
@@ -44,25 +45,60 @@ fn unspecified() {
     assert!(conn.local_unix_addr().unwrap().is_abstract());
 }
 
+#[cfg(not(any(target_os="linux", target_os="android")))]
 #[test]
-fn empty_abstract() {
-    let addr = UnixSocketAddr::from_abstract("").unwrap();
-    assert!(addr.is_abstract());
-    assert_eq!(addr.as_ref(), UnixSocketAddrRef::Abstract(b""));
+fn cannot_bind_to_unspecified() {
+    let bind_err = UnixListener::bind_unix_addr(&UnixSocketAddr::new_unspecified())
+        .expect_err("bind to unspecified address when abstract addresses are not supported");
+    assert_eq!(bind_err.kind(), InvalidInput);
 }
 
+#[test]
+fn empty_abstract() {
+    if cfg!(any(target_os="linux", target_os="android")) {
+        let empty_addr = UnixSocketAddr::from_abstract("")
+            .expect("create empty abstract address");
+        assert!(empty_addr.is_abstract());
+        assert_eq!(empty_addr.as_ref(), UnixSocketAddrRef::Abstract(b""));
+        let listener = UnixListener::bind_unix_addr(&empty_addr)
+            .expect("bind to empty abstract address");
+        let retrieved_local_addr = listener.local_unix_addr()
+            .expect("get local empty abstract addr");
+        assert_eq!(retrieved_local_addr, empty_addr);
+    } else {
+        let empty_err = UnixSocketAddr::from_abstract("")
+           .expect_err("create empty abstract address");
+        assert_eq!(empty_err.kind(), AddrNotAvailable);
+    }
+}
+
+#[cfg(any(target_os="linux", target_os="android"))]
 #[test]
 fn max_abstract_name() {
     let max = UnixSocketAddr::max_abstract_len();
     let max_addr = UnixSocketAddr::from_abstract(&vec![0; max])
         .expect("create abstract address with max length");
     assert_eq!(max_addr.as_ref(), UnixSocketAddrRef::Abstract(&vec![0; max]));
+
     let listener = UnixListener::bind_unix_addr(&max_addr)
         .expect("create socket with max abstract name length");
-    assert_eq!(listener.local_unix_addr().expect("get local max length abstract addr"), max_addr);
+    let retrieved_local_addr = listener.local_unix_addr()
+        .expect("get local max length abstract addr");
+    assert_eq!(retrieved_local_addr, max_addr);
+
     let conn = UnixStream::connect_to_unix_addr(&max_addr)
         .expect("connect to max length abstract addr");
-    assert_eq!(conn.peer_unix_addr().expect("get local max length abstract addr"), max_addr);
+    let retrieved_peer_addr = conn.peer_unix_addr()
+        .expect("get local max length abstract addr");
+    assert_eq!(retrieved_peer_addr, max_addr);
+}
+
+#[cfg(not(any(target_os="linux", target_os="android")))]
+#[test]
+fn abstract_not_supported() {
+    let err = UnixSocketAddr::from_abstract("whaaa")
+        .expect_err("create \"normal\" abstract address");
+    assert_eq!(err.kind(), AddrNotAvailable);
 }
 
 #[test]
@@ -96,7 +132,7 @@ fn max_regular_path_addr() {
 }
 
 #[test]
-fn max_path_addr() {
+fn max_path_addr() {// std fails this!
     let max_len = UnixSocketAddr::max_path_len();
     let max_path = std::iter::repeat('L').take(max_len).collect::<String>();
     let max_addr = UnixSocketAddr::from_path(&max_path)
@@ -108,28 +144,25 @@ fn max_path_addr() {
 
     let listener = UnixListener::bind_unix_addr(&max_addr)
         .expect("create socket with max length path addr");
-    let addr_from_os = listener.local_unix_addr().expect("get local max length path addr");
-    assert_eq!(max_addr.as_ref(), UnixSocketAddrRef::Path(max_path.as_ref()));
+    let addr_from_os = listener.local_unix_addr()
+        .expect("get local max length path addr");
     assert_eq!(addr_from_os, max_addr);
+    assert_eq!(addr_from_os.as_ref(), UnixSocketAddrRef::Path(max_path.as_ref()));
     assert_eq!(&addr_from_os, max_path.as_bytes());
-
-    let std_addr = listener.local_addr().expect("std get local max length path");
-    assert_eq!(std_addr.as_pathname(), Some(max_path.as_ref()));
-    // connecting to max length addr isn't supported though!
 
     remove_file(&max_path).expect("delete socket file");
 }
 
 #[test]
 fn too_long_abstract_name() {
-    let too_long = UnixSocketAddr::max_abstract_len()+1;
-    assert_eq!(
-        UnixSocketAddr::from_abstract(&vec![b'L'; too_long])
-            .expect_err("create too long abstract address")
-            .kind(),
-        InvalidInput
-    );
-    // TODO test passing oversized address to libc::bind()
+    let too_long = &vec![b'L'; UnixSocketAddr::max_abstract_len()+1];
+    let err = UnixSocketAddr::from_abstract(&too_long)
+        .expect_err("create too long abstract address");
+    if cfg!(any(target_os="linux", target_os="android")) {
+        assert_eq!(err.kind(), InvalidInput); // too long
+    } else {
+        assert_eq!(err.kind(), AddrNotAvailable); // not supported
+    }
 }
 
 #[test]
@@ -144,7 +177,6 @@ fn too_long_path() {
         UnixListener::bind(&path).expect_err("bind std socket too too long path").kind(),
         InvalidInput
     );
-    // TODO test passing oversized address to libc::bind()
 }
 
 
@@ -208,13 +240,13 @@ fn os_doeest_support_longer_addrs() {
         );
         if ret != -1 {
             libc::close(ret);
-            panic!("{} does support addresses longer than sockaddr_un", cfg!(target_os));
+            panic!("{} does support addresses longer than sockaddr_un", std::env::consts::OS);
         }
         let error = io::Error::last_os_error();
         if error.raw_os_error() != Some(libc::EINVAL) {
             panic!(
                 "{} rejects too long addresses with {} instead of EINVAL",
-                cfg!(target_os),
+                std::env::consts::OS,
                 error
             );
         }

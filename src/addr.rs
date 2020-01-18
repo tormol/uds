@@ -29,8 +29,9 @@ fn as_u8(slice: &[c_char]) -> &[u8] {
 ///
 /// # Differences from `std`'s `unix::net::SocketAddr`
 ///
-/// This type fully supports abstract socket addresses,
-/// and can be created by user code and not returned by `accept()` and similar.
+/// This type fully supports Linux's abstract socket addresses,
+/// and can be created by user code instead of just returned by `accept()`
+/// and similar.
 ///
 /// # Examples
 ///
@@ -39,7 +40,7 @@ fn as_u8(slice: &[c_char]) -> &[u8] {
 /// ```
 /// use uds::UnixSocketAddr;
 ///
-/// let addr = UnixSocketAddr::new("@abstract").expect("too long");
+/// let addr = UnixSocketAddr::new("@abstract").unwrap();
 /// assert!(addr.is_abstract());
 /// assert_eq!(addr.to_string(), "@abstract");
 /// ```
@@ -65,16 +66,16 @@ pub struct UnixSocketAddr {
 
 /// An enum representation of an unix socket address.
 ///
-/// Usefult for pattern matching an [`UnixSocketAddr`](struct.UnixSocketAddr.html)
+/// Useful for pattern matching an [`UnixSocketAddr`](struct.UnixSocketAddr.html)
 /// via [`UnixSocketAddr.as_ref()`](struct.UnixSocketAddr.html#method.as_ref).
 ///
-/// It cannot be used in to bind or connect a socket directly because it
+/// It cannot be used to bind or connect a socket directly as it
 /// doesn't contain a `sockaddr_un`, but a `UnixSocketAddr` can be created
 /// from it.
 ///
 /// # Examples
 ///
-/// Cleaning pathname sockets after ourselves:
+/// Cleaning up pathname socket files after ourselves:
 ///
 /// ```no_run
 /// # use uds::{UnixSocketAddr, UnixSocketAddrRef};
@@ -85,8 +86,13 @@ pub struct UnixSocketAddr {
 /// ```
 #[derive(Clone,Copy, PartialEq,Eq,Hash, Debug)]
 pub enum UnixSocketAddrRef<'a> {
+    /// Unnamed / anonymous address.
     Unnamed,
+    /// Regular file path based address.
+    ///
+    /// Can be both relative and absolute.
     Path(&'a Path),
+    /// Address in the abstract namespace.
     Abstract(&'a [u8]),
 }
 impl<'a> From<&'a UnixSocketAddr> for UnixSocketAddrRef<'a> {
@@ -149,15 +155,18 @@ impl UnixSocketAddr {
     /// user-supplied string.
     ///
     /// A leading `'@'` or `'\0'` signifies an abstract address,
-    /// an empty slice is takes as the unnamed address, and anything else is a
+    /// an empty slice is taken as the unnamed address, and anything else is a
     /// path address.  
-    /// If a relative path address starts with `'@'`, escape it by prepending
+    /// If a relative path address starts with `@`, escape it by prepending
     /// `"./"`.
+    /// To avoid surprises, abstract addresses will be detected regargsless of
+    /// wheither the OS supports them, and result in an error if it doesn't.
     ///
     /// # Errors
     ///
     /// * A path or abstract address is too long.
     /// * A path address contains `'\0'`.
+    /// * An abstract name was supplied on an OS that doesn't support them.
     ///
     /// # Examples
     ///
@@ -165,8 +174,13 @@ impl UnixSocketAddr {
     /// 
     /// ```
     /// # use uds::UnixSocketAddr;
-    /// assert!(UnixSocketAddr::new("@abstract").unwrap().is_abstract());
-    /// assert!(UnixSocketAddr::new("\0abstract").unwrap().is_abstract());
+    /// if UnixSocketAddr::has_abstract_addresses() {
+    ///     assert!(UnixSocketAddr::new("@abstract").unwrap().is_abstract());
+    ///     assert!(UnixSocketAddr::new("\0abstract").unwrap().is_abstract());
+    /// } else {
+    ///     assert!(UnixSocketAddr::new("@abstract").is_err());
+    ///     assert!(UnixSocketAddr::new("\0abstract").is_err());
+    /// }
     /// ```
     ///
     /// Escaped path address:
@@ -198,8 +212,8 @@ impl UnixSocketAddr {
     /// Binding a socket to the unnamed address is different from not binding
     /// at all:
     ///
-    /// On Linux that binds the socket to an abstract address determined by the
-    /// OS.
+    /// On Linux doing so binds the socket to a random abstract address
+    /// determined by the OS.
     ///
     /// # Examples
     ///
@@ -265,36 +279,49 @@ impl UnixSocketAddr {
     ///
     /// Returns the size of the underlying `sun_path` field minus 1 for the
     /// leading `'\0'` byte.
+    ///
+    /// This value is also returned on operating systems that doesn't support
+    /// abstract addresses.
     pub fn max_abstract_len() -> usize {
         mem::size_of_val(&Self::new_unspecified().addr.sun_path) - 1
     }
 
-    /// Whether the operating system is known to support abstract socket
-    /// addresses.
-    pub const fn can_use_abstract_addresses() -> bool {
-        cfg!(any(target_os="linux", target_os="android", target_os="freebsd"))
+    /// Whether the operating system is known to support abstract unix domain
+    /// socket addresses.
+    ///
+    /// Is `true` for Linux & Android, and `false` for all other OSes.
+    pub const fn has_abstract_addresses() -> bool {
+        cfg!(any(target_os="linux", target_os="android"))
     }
 
-    /// Create an abstract unix socket address.
+    /// Create an abstract unix domain socket address.
     ///
-    /// Abstract addresses is a non-standard feature which is only available on
-    /// Linux and FreeBSD.  
-    /// This function is always present, and abstract `UnixSocketAddr`s can be
-    /// created even if the operating system doesn't support them.
-    /// Actually using the address will hopefully fail when `bind()`ing or
-    /// `connect()`ing it.
+    /// Abstract addresses use a namespace separate from the file system,
+    /// that doesn't have directories (ie. is flat) or permissions.
+    /// The advandage of it is that the address disappear when the socket bound
+    /// to it is closed, which frees one from dealing with removing it when
+    /// shutting down cleanly.
     ///
-    /// Abstract names can contain NUL bytes.
+    /// They are a Linux-only feature though, and this function will fail
+    /// if abstract addresses are not supported.
     ///
     /// # Errors
     ///
     /// This function will return an error if the name is too long.
     /// Call [`max_abstract_len()`](#method.max_abstract_len)
     /// get the limit.
+    ///
+    /// It will also fail on operating systems that don't support abstract
+    /// addresses. (ie. anything other than Linux and Android)
     pub fn from_abstract<N: AsRef<[u8]>+?Sized>(name: &N) -> Result<Self, io::Error> {
         fn from_abstract_inner(name: &[u8]) -> Result<UnixSocketAddr, io::Error> {
             let mut addr = UnixSocketAddr::new_unspecified();
-            if name.len() > UnixSocketAddr::max_abstract_len() {
+            if !UnixSocketAddr::has_abstract_addresses() {
+                Err(io::Error::new(ErrorKind::AddrNotAvailable, format!(
+                            "abstract unix domain socket addresses are not available on {}",
+                            std::env::consts::OS
+                )))
+            } else if name.len() > UnixSocketAddr::max_abstract_len() {
                 Err(io::Error::new(ErrorKind::InvalidInput, "abstract name is too long"))
             } else {
                 for (dst, src) in addr.addr.sun_path[1..].iter_mut().zip(name) {
@@ -309,8 +336,9 @@ impl UnixSocketAddr {
 
     /// Try to convert a `std::os::unix::net::SocketAddr` into an `UnixSocketAddr`.
     ///
-    /// This can fail (produce `None`) if the `std ``SocketAddr` represents an
-    /// abstract address, because it doesn't provide any method for viewing it.
+    /// This can fail (produce `None`) on Linux and Android
+    /// if the `std` `SocketAddr` represents an abstract address,
+    /// as it provides no method for viewing abstract addresses.
     /// (other than parsing its `Debug` output, anyway.)
     pub fn from_std(addr: net::SocketAddr) -> Option<Self> {
         if let Some(path) = addr.as_pathname() {
@@ -351,10 +379,20 @@ impl UnixSocketAddr {
     }
 
     pub fn is_unnamed(&self) -> bool {
-        self.len <= path_offset()
+        if Self::has_abstract_addresses() {
+            self.len <= path_offset()
+        } else {
+            // MacOS can apparently return non-empty addresses but with
+            // all-zeroes path for unnamed addresses.
+            self.len <= path_offset()  ||  self.addr.sun_path[0] as u8 == b'\0'
+        }
     }
     pub fn is_abstract(&self) -> bool {
-        self.len > path_offset()  &&  self.addr.sun_path[0] as u8 == b'\0'
+        if Self::has_abstract_addresses() {
+            self.len > path_offset()  &&  self.addr.sun_path[0] as u8 == b'\0'
+        } else {
+            false
+        }
     }
     pub fn is_absolute_path(&self) -> bool {
         self.len > path_offset()  &&  self.addr.sun_path[0] as u8 == b'/'
@@ -374,19 +412,18 @@ impl UnixSocketAddr {
         UnixSocketAddrRef::from(self)
     }
 
-    /// Prepare a `struct sockaddr*` and `socklen_t*` for passing to ffi
-    /// (such as `getsockname()`, `getpeername()`, `accept()`),
-    /// and sanitize and normalize the produced address afterwards.
+    /// Prepare a `struct sockaddr*` and `socklen_t*` for passing to FFI
+    /// (such as `getsockname()`, `getpeername()`, or `accept()`),
+    /// and validate and normalize the produced address afterwards.
     /// 
-    /// Sanitizations:
+    /// Validation:
     ///
-    /// * checking that the address family is `AF_UNIX`.
-    /// * checking that the address wasn't truncated (the `socklen_t` is too big).
+    /// * Check that the address family is `AF_UNIX`.
+    /// * Check that the address wasn't truncated (the `socklen_t` is too big).
     ///
     /// Normalization:
     ///
-    /// * Path addresses have a trailing NUL byte appended if not already there
-    ///   and there is space.
+    /// * Ensure path addresses have a trailing NUL byte if there is space.
     pub fn new_from_ffi<R, F>(call: F) -> Result<(R, Self), io::Error>
     where F: FnOnce(&mut sockaddr, &mut socklen_t) -> Result<R, io::Error> {
         let mut addr = Self::new_unspecified();
@@ -461,8 +498,8 @@ impl UnixSocketAddr {
     /// # Safety
     ///
     /// * `len` must be `<= size_of::<sockaddr_un>()`.
-    /// * `addr.sun_family` should be `AF_UNIX` or strange things could happen.
-    /// * `addr.sun_len` if it exists should be zero.
+    /// * `addr.sun_family` should be `AF_UNIX` or strange things might happen.
+    /// * `addr.sun_len`, if it exists, should be zero (but is probably ignored).
     pub unsafe fn from_raw_unchecked(addr: sockaddr_un,  len: socklen_t) -> Self {
         Self{addr, len}
     }

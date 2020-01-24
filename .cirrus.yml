@@ -21,7 +21,7 @@ task:
     - cargo build --all-features
   test_script:
     - . $HOME/.cargo/env
-    - cargo run --bin limitations
+    - cargo run --bin characteristics
     - cargo test --all-features
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
@@ -41,7 +41,7 @@ task:
     - cargo check --features mio-uds
     - cargo build --all-features
   test_script:
-    - cargo run --bin limitations
+    - cargo run --bin characteristics
     - cargo test --all-features
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index

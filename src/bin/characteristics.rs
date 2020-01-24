@@ -1,13 +1,20 @@
-//! Check whether the operating system and/or the types in std supports certain things.
+//! Check whether the operating system and/or the types in std supports
+//! certain things or how they behave.
+//! (tests that explore platform behavior are moved here after failing on some
+//!  operating system.)
 
 use std::fs::remove_file;
-use std::os::unix::net::{UnixDatagram, UnixListener};
+use std::os::unix::net::{UnixDatagram, UnixListener, UnixStream};
 use std::os::unix::io::{AsRawFd, FromRawFd};
-use std::io::{self, ErrorKind::*};
+use std::path::Path;
+use std::io::{self, ErrorKind::*, Write};
 use std::net::{TcpListener, TcpStream};
 use std::mem::{self, ManuallyDrop};
 
 extern crate libc;
+
+extern crate uds;
+use uds::{UnixListenerExt, UnixStreamExt, UnixSocketAddr};
 
 fn max_path_len() -> usize {
     unsafe { mem::size_of_val(&mem::zeroed::<libc::sockaddr_un>().sun_path) }
@@ -25,21 +32,32 @@ fn max_path_addr(fill: u8) -> (libc::sockaddr_un, libc::socklen_t) {
     }
 }
 
-// fn std_get_local_max_path_addr() {
-//     let max_len = UnixSocketAddr::max_path_len();
-//     let max_path = std::iter::repeat('s').take(max_len).collect::<String>();
-//     let max_addr = UnixSocketAddr::from_path(&max_path)
-//         .expect("create path address with max length");
+fn std_get_local_max_path_addr() {
+    print!("std_get_local_max_path_addr ");
+    let max_len = UnixSocketAddr::max_path_len();
+    let max_path = std::iter::repeat('s').take(max_len).collect::<String>();
+    let max_addr = UnixSocketAddr::from_path(&max_path)
+        .expect("create path address with max length");
 
-//     let _ = remove_file(&max_path);
+    let _ = remove_file(&max_path);
 
-//     let listener = UnixListener::bind_unix_addr(&max_addr)
-//         .expect("create socket with max length path addr");
-//     let std_addr = listener.local_addr().expect("std get local max length path");
-//     assert_eq!(std_addr.as_pathname(), Some(max_path.as_ref()));
+    let listener = UnixListener::bind_unix_addr(&max_addr)
+        .expect("create socket with max length path addr");
+    let std_addr = listener.local_addr().expect("std get local max length path");
+    match std_addr.as_pathname() {
+        Some(std_path) if std_path == Path::new(&max_path) => println!("yes"),
+        Some(std_path) => {
+            let std_path = std_path.to_str().expect("convert Path that should be ASCII to str");
+            println!(
+                "no (returned path differs: {} vs {} ({} bytes vs {}))",
+                std_path, max_path, std_path.len(), max_path.len()
+            );
+        },
+        None => println!("no (as_pathname() returned None)"),
+    }
 
-//     remove_file(&max_path).expect("delete socket file");
-// }
+    remove_file(&max_path).expect("delete socket file");
+}
 
 fn std_bind_max_len_path() {
     print!("std_bind_max_len ");
@@ -176,10 +194,59 @@ fn std_checks_family() {
     println!("yes"); // FIXME if it ever doesn't
 }
 
+fn stream_ancillary_payloads_not_merged() {
+    print!("stream_ancillary_payloads_not_merged ");
+    let (mut a, b) = UnixStream::pair().expect("create stream socket pair");
+    b.set_nonblocking(true).expect("make receiving socket nonblocking");
+
+    // send some then nothing
+    a.send_fds(b"1", &[a.as_raw_fd()]).expect("send one fd");
+    a.write(b"0").expect("write more bytes but no fds");
+    let mut fd_buf = [-1; 6];
+    match b.recv_fds(&mut[0u8; 20], &mut fd_buf) {
+        Ok((1, 1)) if fd_buf[0] != -1  &&  fd_buf[1] == -1 => print!("yes "),
+        Ok((bytes, fds)) => print!("no ({} bytes, {} fds) ", bytes, fds),
+        Err(e) => print!("no ({})", e),
+    }
+    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+
+    let mut fd_buf = [-1; 6];
+    match b.recv_fds(&mut[0u8; 20], &mut fd_buf) {
+        Ok((1, 0)) if fd_buf[0] == -1 => print!("yes "),
+        Ok((bytes, fds)) => print!("no ({} bytes, {} fds) ", bytes, fds),
+        Err(e) => print!("no ({}) ", e),
+    }
+
+    // send twice
+    a.send_fds(b"2", &[a.as_raw_fd(), a.as_raw_fd()]).expect("send two fds");
+    a.send_fds(b"3", &[b.as_raw_fd(), b.as_raw_fd(), b.as_raw_fd()])
+        .expect("write three more fds");
+    let mut fd_buf = [-1; 6];
+    match b.recv_fds(&mut[0u8; 3], &mut fd_buf) {
+        Ok((1, 2)) if fd_buf[1] != -1  &&  fd_buf[2] == -1 => print!("yes "),
+        Ok((bytes, fds)) => print!("no ({} bytes, {} fds) ", bytes, fds),
+        Err(e) => print!("no ({})", e),
+    }
+    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
+
+    let mut fd_buf = [-1; 6];
+    match b.recv_fds(&mut[0u8; 3], &mut fd_buf) {
+        Ok((1, 3)) if fd_buf[2] != -1  &&  fd_buf[3] == -1 => println!("yes"),
+        Ok((bytes, fds)) => println!("no ({} bytes, {} fds)", bytes, fds),
+        Err(e) => println!("no ({})", e),
+    }
+    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
+    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[2]) };
+}
+
 fn main() {
     println!("OS {}", std::env::consts::OS);
     std_bind_max_len_path();
+    std_get_local_max_path_addr();
     std_reply_max_len_path();
     longer_addrs();
     std_checks_family();
+    stream_ancillary_payloads_not_merged();
 }

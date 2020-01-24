@@ -238,47 +238,6 @@ fn datagram_separate_payloads() {
     }
 }
 
-#[test]
-fn stream_ancillary_payloads_not_merged() {
-    let (mut a, b) = UnixStream::pair().expect("create stream socket pair");
-
-    // send some then nothing
-    a.send_fds(b"1", &[a.as_raw_fd()]).expect("send one fd");
-    a.write(b"0").expect("write more bytes but no fds");
-    let mut fd_buf = [-1; 6];
-    let (bytes, fds) = b.recv_fds(&mut[0u8; 20], &mut fd_buf).expect("receive fds");
-    assert_eq!(bytes, 1);
-    assert_eq!(fds, 1);
-    assert_ne!(fd_buf[0], -1);
-    let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
-    let mut fd_buf = [-1; 6];
-    let (bytes, fds) = b.recv_fds(&mut[0u8; 20], &mut fd_buf)
-        .expect("receive with ancillary capacity");
-    assert_eq!(bytes, 1);
-    assert_eq!(fds, 0);
-    assert_eq!(fd_buf[0], -1);
-
-    // send twice
-    a.send_fds(b"2", &[a.as_raw_fd(), a.as_raw_fd()]).expect("send two fds");
-    a.send_fds(b"3", &[b.as_raw_fd(), b.as_raw_fd(), b.as_raw_fd()])
-        .expect("write three more fds");
-    let mut fd_buf = [-1; 6];
-    let (bytes, fds) = b.recv_fds(&mut[0u8; 3], &mut fd_buf).expect("receive fds");
-    assert_eq!(bytes, 1);
-    assert_eq!(fds, 2);
-    assert_eq!(fd_buf[2], -1);
-    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
-    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
-    let mut fd_buf = [-1; 6];
-    let (bytes, fds) = b.recv_fds(&mut[0u8; 3], &mut fd_buf).expect("receive fds");
-    assert_eq!(bytes, 1);
-    assert_eq!(fds, 3);
-    assert_eq!(fd_buf[3], -1);
-    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
-    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
-    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[2]) };
-}
-
 #[test] /// a just-to-be-absolutely-sure test
 fn stream_fd_order() {
     let (mut a, mut b) = UnixStream::pair().expect("create stream socket pair");

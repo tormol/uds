@@ -2,7 +2,7 @@
 
 A unix domain sockets Rust library that supports abstract addresses, fd-passing and SOCK_SEQPACKET sockets.
 
-[![crates.io page](https://img.shields.io/crates/v/uds.svg)](https://crates.io/crates/uds) ![License: Apache v2 / MIT](https://img.shields.io/crates/l/uds.svg) [![Documentation](https://docs.rs/uds/badge.svg)](https://docs.rs/uds/) [![cirrus-ci build status](https://api.cirrus-ci.com/github/tormol/uds.svg)](https://cirrus-ci.com/github/tormol/uds) [![travis build status](https://travis-ci.org/tormol/uds.svg)](https://travis-ci.org/tormol/uds)
+[![crates.io page](https://img.shields.io/crates/v/uds.svg)](https://crates.io/crates/uds) ![License: Apache v2 / MIT](https://img.shields.io/crates/l/uds.svg) [![Documentation](https://docs.rs/uds/badge.svg)](https://docs.rs/uds/) [![cirrus-ci build status](https://api.cirrus-ci.com/github/tormol/uds.svg)](https://cirrus-ci.com/github/tormol/uds) [![travis build status](https://travis-ci.com/tormol/uds.svg?branch=master)](https://travis-ci.com/tormol/uds)
 
 When possible, features are implemented via extension traits for [`std::os::unix::net`](https://doc.rust-lang.org/std/os/unix/net/index.html) types (and optionally [mio-uds](https://crates.io/crates/mio-uds) types) instead of exposing new structs.
 The only new socket structs this crate exposes are those for seqpacket sockets.

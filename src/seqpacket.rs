@@ -66,13 +66,19 @@ macro_rules! impl_mio_if_enabled {($type:tt) => {
 /// They have guaranteed in-order and reliable delivery,
 /// which unix datagrams technically doesn't.
 ///
-/// While zero-length packets can be sent (on Linux at least), there is
-/// no way to distinguish them from 'end of connection' when receiving.
-///
 /// # Operating system support
 ///
 /// Sequential-packet sockets are supported by Linux and FreeBSD, but not by
 /// for example macOS or OpenBSD.
+///
+/// # Zero-length packets
+/// 
+/// While zero-length packets can be sent and received, there is no way to
+/// distinguish receiving one from reaching end of connection
+/// unless the packet has an ancilly payload.
+/// On FreeBSD (and probably other BSDs with seqpacket socket),
+/// beware of trying to receive with a zero-length buffer,
+/// as the call will always succeed.
 ///
 /// # Examples
 ///
@@ -111,7 +117,8 @@ macro_rules! impl_mio_if_enabled {($type:tt) => {
 ///
 /// Connect to a listener on an abstract address:
 ///
-/// ```
+#[cfg_attr(any(target_os="linux", target_os="android"), doc="```")]
+#[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
 /// use uds::{UnixSeqpacketListener, UnixSeqpacketConn, UnixSocketAddr};
 ///
 /// let addr = UnixSocketAddr::new("@seqpacket example").unwrap();
@@ -280,7 +287,7 @@ impl UnixSeqpacketConn {
     /// # use uds::UnixSeqpacketConn;
     /// let (a, b) = UnixSeqpacketConn::pair().expect("create seqpacket pair");
     /// a.set_nonblocking(true).unwrap();
-    /// assert_eq!(a.recv(&mut[]).unwrap_err().kind(), ErrorKind::WouldBlock);
+    /// assert_eq!(a.recv(&mut[0; 20]).unwrap_err().kind(), ErrorKind::WouldBlock);
     /// ```
     ///
     /// Trying to send when the OS buffer for the connection is full:
@@ -405,7 +412,7 @@ impl UnixSeqpacketListener {
 /// let (a, b) = UnixSeqpacketConn::pair().expect("create nonblocking seqpacket pair");
 ///
 /// // trying to receive when there are no packets waiting
-/// assert_eq!(a.recv(&mut[]).unwrap_err().kind(), ErrorKind::WouldBlock);
+/// assert_eq!(a.recv(&mut[0]).unwrap_err().kind(), ErrorKind::WouldBlock);
 ///
 /// // trying to send when the OS buffer for the connection is full
 /// loop {

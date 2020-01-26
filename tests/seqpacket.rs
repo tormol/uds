@@ -34,7 +34,8 @@ fn zero_length_packet_sort_of_works() {
     assert_eq!(a.send(&[]).expect("send zero-length packet"), 0);
     assert_eq!(b.recv(&mut[0u8; 8]).expect("receive zero-length packet"), (0, false));
     a.send(&[]).unwrap();
-    assert_eq!(b.recv(&mut[]).expect("receive zero-length packet with empty buffer"), (0, false));
+    // Only checks length because FreeBSD thinks it gets truncated
+    assert_eq!(b.recv(&mut[]).expect("receive zero-length packet with empty buffer").0, 0);
     a.send(&[]).unwrap();
     a.send(&[]).unwrap();
     assert_eq!(b.recv(&mut[0u8; 8]).unwrap(), (0, false));

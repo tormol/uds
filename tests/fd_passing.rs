@@ -122,8 +122,8 @@ fn stream_truncate_fds() {
 
     // try to receive fds afterwards (this tests the OS more than this crate)
     b.set_nonblocking(true).expect("enable nonblocking");
-    let error = b.recv_fds(&mut[], &mut[0; 2])
-        .expect_err("receive fd later without any bytes waiting");
+    let error = b.recv_fds(&mut[1], &mut[0; 2])
+        .expect_err("won't receive fd later without any bytes waiting");
     assert_eq!(error.kind(), ErrorKind::WouldBlock);
     // try to receive fds later when there is more data
     a.write(b"aa").expect("write normally - without ancillary");
@@ -138,7 +138,7 @@ fn stream_truncate_fds() {
     assert_eq!(fds, 0);
 
     // try to receive what was truncated, now that we received with ancillary buffer the first time
-    let error = b.recv_fds(&mut[], &mut[0; 2])
+    let error = b.recv_fds(&mut[1], &mut[0; 2])
         .expect_err("receive fd later without any bytes waiting");
     assert_eq!(error.kind(), ErrorKind::WouldBlock);
     a.send_fds(b"aaaa", &[]).expect("send empty fd slice");

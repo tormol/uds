@@ -35,9 +35,10 @@ fn as_u8(slice: &[c_char]) -> &[u8] {
 ///
 /// # Examples
 ///
-/// Creating an abstract address:
+/// Creating an abstract address (fails if the OS doesn't support them):
 ///
-/// ```
+#[cfg_attr(any(target_os="linux", target_os="android"), doc="```")]
+#[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
 /// use uds::UnixSocketAddr;
 ///
 /// let addr = UnixSocketAddr::new("@abstract").unwrap();

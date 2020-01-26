@@ -305,8 +305,10 @@ impl<'a> Iterator for Ancillary<'a> {
                     // pointer is aligned due to the cmsg header
                     let first_fd = CMSG_DATA(self.next_message) as *const RawFd;
                     let fds = slice::from_raw_parts(first_fd, num_fds);
-                    #[cfg(target_vendor="apple")] {
+                    #[cfg(any(target_vendor="apple", target_os="freebsd"))] {
                         // set cloexec
+                        // This is necessary on FreeBSD as MSG_CMSG_CLOEXEC
+                        // appears to have no effect.
                         // FIXME this should be done in a separate iteration
                         // when the fds are received, and not after user code
                         // has had a chance to run.

@@ -56,8 +56,7 @@ fn datagram_truncate_fds() {
     // send some, receive with zero-length fd slice
     a.send_fds(b"aa", &[a.as_raw_fd()]).expect("send one fd");
     let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut[]).expect("receive with empty fd buffer");
-    assert_eq!(bytes, 2);
-    assert_eq!(fds, 0);
+    assert_eq!((bytes, fds), (2, 0));
 
     // send four, receive two
     a.send_fds(b"aaa", &[a.as_raw_fd(), a.as_raw_fd(), b.as_raw_fd(), b.as_raw_fd()])
@@ -65,8 +64,7 @@ fn datagram_truncate_fds() {
     let mut fd_buf = [-1; 2];
     let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut fd_buf)
         .expect("receive with smaller fd buffer");
-    assert_eq!(bytes, 3);
-    assert_eq!(fds, 2);
+    assert_eq!((bytes, fds), (3, 2));
     assert_ne!(fd_buf[0], -1);
     let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
     assert_ne!(fd_buf[1], -1);

@@ -22,7 +22,7 @@ task:
   test_script:
     - . $HOME/.cargo/env
     - cargo run --bin characteristics
-    - cargo test --all-features
+    - cargo test --all-features --no-fail-fast
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -42,7 +42,7 @@ task:
     - cargo build --all-features
   test_script:
     - cargo run --bin characteristics
-    - cargo test --all-features
+    - cargo test --all-features --no-fail-fast
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -60,7 +60,7 @@ task:
     - cargo check -Z minimal-versions
     - cargo build -Z minimal-versions --features mio # no version of mio-uds compiles
   test_script:
-    - cargo test -Z minimal-versions --features mio
+    - cargo test -Z minimal-versions --features mio --no-fail-fast
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -83,8 +83,8 @@ task:
     - cargo build --target i686-unknown-linux-gnu --all-features
     - cargo build --target i686-unknown-linux-musl --all-features
   test_script:
-    - cargo test --target i686-unknown-linux-gnu --all-features
-    - cargo test --target i686-unknown-linux-musl --all-features
+    - cargo test --target i686-unknown-linux-gnu --all-features --no-fail-fast
+    - cargo test --target i686-unknown-linux-musl --all-features --no-fail-fast
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 

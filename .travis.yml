@@ -4,10 +4,10 @@ env: RUST_BACKTRACE=1
 
 script:
   - cargo run --bin characteristics
-  - cargo check && \
-  - cargo check --features mio && \
-  - cargo check --features mio-uds && \
-  - cargo test --all-features
+  - cargo check
+  - cargo check --features mio
+  - cargo check --features mio-uds
+  - cargo test --all-features --no-fail-fast
 
 jobs:
   include:

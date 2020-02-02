@@ -374,10 +374,12 @@ impl UnixSeqpacketListener {
     /// # use std::io::ErrorKind;
     /// # use uds::{UnixSocketAddr, UnixSeqpacketListener};
     /// #
-    /// # let addr = UnixSocketAddr::new_unspecified();
-    /// let listener = UnixSeqpacketListener::bind_unix_addr(&addr).unwrap();
-    /// listener.set_nonblocking(true).unwrap();
+    /// # let addr = UnixSocketAddr::from_path("nonblocking_seqpacket_listener.socket").unwrap();
+    /// # let _ = std::fs::remove_file("nonblocking_seqpacket_listener.socket");
+    /// let listener = UnixSeqpacketListener::bind_unix_addr(&addr).expect("create listener");
+    /// listener.set_nonblocking(true).expect("enable noblocking mode");
     /// assert_eq!(listener.accept_unix_addr().unwrap_err().kind(), ErrorKind::WouldBlock);
+    /// # std::fs::remove_file("nonblocking_seqpacket_listener.socket").expect("delete socket file");
     /// ```
     pub fn set_nonblocking(&self,  nonblocking: bool) -> Result<(), io::Error> {
         set_nonblocking(self.fd, nonblocking)

@@ -126,14 +126,12 @@ fn stream_truncate_fds() {
     // try to receive fds later when there is more data
     a.write(b"aa").expect("write normally - without ancillary");
     let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut[0; 2]).expect("receive with capacity");
-    assert_eq!(bytes, 2);
-    assert_eq!(fds, 0);
+    assert_eq!((bytes, fds), (2, 0));
 
     // send some, receive with zero-length fd slice
     a.send_fds(b"aaa", &[a.as_raw_fd()]).expect("send one fd");
     let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut[]).expect("receive with empty fd buffer");
-    assert_eq!(bytes, 3);
-    assert_eq!(fds, 0);
+    assert_eq!((bytes, fds), (3, 0));
 
     // try to receive what was truncated, now that we received with ancillary buffer the first time
     let error = b.recv_fds(&mut[1], &mut[0; 2])
@@ -142,9 +140,7 @@ fn stream_truncate_fds() {
     a.send_fds(b"aaaa", &[]).expect("send empty fd slice");
     let mut fd_buf = [-1; 4];
     let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut fd_buf).expect("receive with capacity");
-    assert_eq!(bytes, 4);
-    assert_eq!(fds, 0);
-    assert_eq!(fd_buf, [-1; 4]);
+    assert_eq!((bytes, fds, fd_buf), (4, 0, [-1; 4]));
 
     // send four, receive two
     a.send_fds(b"aaaaa", &[a.as_raw_fd(), a.as_raw_fd(), b.as_raw_fd(), b.as_raw_fd()])
@@ -152,19 +148,18 @@ fn stream_truncate_fds() {
     let mut fd_buf = [-1; 2];
     let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut fd_buf)
         .expect("receive with smaller fd buffer");
-    assert_eq!(bytes, 5);
-    assert_eq!(fds, 2);
+    assert_eq!((bytes, fds), (5, 2));
+    println!("a={}, b={}, received={:?}", a.as_raw_fd(), b.as_raw_fd(), fd_buf);
     assert_ne!(fd_buf[0], -1);
     let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
     assert_ne!(fd_buf[1], -1);
     let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
 
     // try to receive what was truncated
-    a.send_fds(b"aaaaaa", &[a.as_raw_fd()]).expect("send one more fd");
+    a.send_fds(b"aaaaaa", &[a.as_raw_fd()]).expect("send one more fd"); // fails on freebsd
     let mut fd_buf = [-1; 4];
     let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut fd_buf).expect("receive with capacity");
-    assert_eq!(bytes, 6);
-    assert_eq!(fds, 1);
+    assert_eq!((bytes, fds), (6, 1));
     assert_ne!(fd_buf[0], -1);
     let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
     assert_eq!(&fd_buf[1..], [-1; 3]);

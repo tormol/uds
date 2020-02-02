@@ -11,6 +11,9 @@
 //! File-descriptor passing and abstract socket support for stream and datagram sockets is provided
 //! via extension traits for existing types in `std::os::unix::net` and (opt-in) `mio_uds`.
 
+// Too many features unavailable on solarish to bother cfg()ing individually.
+#![cfg_attr(any(target_os="illumos", target_os="solaris"), allow(unused))]
+
 extern crate libc;
 #[cfg(feature="mio-uds")]
 extern crate mio_uds;

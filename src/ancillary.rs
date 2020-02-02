@@ -37,6 +37,8 @@ pub fn send_ancillary(
     socket: RawFd,  to: Option<&UnixSocketAddr>,  flags: c_int,
     bytes: &[IoSlice],  fds: &[RawFd],  creds: Option<SendCredentials>
 ) -> Result<usize, io::Error> {
+    #[cfg(not(any(target_os="linux", target_os="android")))]
+    let _ = creds; // silence `unused` warning
     unsafe {
         let mut msg: msghdr = mem::zeroed();
         msg.msg_name = ptr::null_mut();
@@ -267,6 +269,7 @@ pub enum AncillaryItem<'a> {
     /// Consumer of the iterator is responsible for closing them.
     Fds(&'a[RawFd]),
     /// Credentials of the sending process.
+    #[allow(unused)]
     Credentials(ReceivedCredentials),
     //Timestamp(),
     //SecurityContext(&'a[u8]),
@@ -360,6 +363,7 @@ impl<'a> Ancillary<'a> {
         self.msg.msg_flags & MSG_TRUNC != 0
     }
     /// Returns `true` if ancillary messages were dropped due to a too short ancillary buffer.
+    #[allow(unused)] // type is not yet exposed
     pub fn ancillary_truncated(&self) -> bool {
         self.msg.msg_flags & MSG_CTRUNC != 0
     }

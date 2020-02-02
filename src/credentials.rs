@@ -14,6 +14,7 @@ use libc::{ucred, SO_PEERCRED};
 /// Only on Linux (& Android) does one need to send credentials, and on other
 /// operating systems this struct is ignored.
 #[derive(Clone,Copy, PartialEq,Eq, Debug)]
+#[allow(unused)] // not used yet
 pub enum SendCredentials {
     Effective,
     Real,

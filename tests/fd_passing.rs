@@ -64,11 +64,15 @@ fn datagram_truncate_fds() {
     let mut fd_buf = [-1; 2];
     let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut fd_buf)
         .expect("receive with smaller fd buffer");
-    assert_eq!((bytes, fds), (3, 2));
-    assert_ne!(fd_buf[0], -1);
-    let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
-    assert_ne!(fd_buf[1], -1);
-    let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[1]) };
+    if cfg!(any(target_os="linux", target_os="android", target_vendor="apple")) {
+        assert_eq!((bytes, fds), (3, 2));
+        assert_ne!(fd_buf[0], -1);
+        let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+        assert_ne!(fd_buf[1], -1);
+        let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[1]) };
+    } else {// discards all of them
+        assert_eq!((bytes, fds, fd_buf), (3, 0, [-1; 2]));
+    }
 }
 
 #[test]
@@ -148,21 +152,27 @@ fn stream_truncate_fds() {
     let mut fd_buf = [-1; 2];
     let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut fd_buf)
         .expect("receive with smaller fd buffer");
-    assert_eq!((bytes, fds), (5, 2));
-    println!("a={}, b={}, received={:?}", a.as_raw_fd(), b.as_raw_fd(), fd_buf);
-    assert_ne!(fd_buf[0], -1);
-    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
-    assert_ne!(fd_buf[1], -1);
-    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
+    if cfg!(any(target_os="linux", target_os="android", target_vendor="apple")) {
+        assert_eq!((bytes, fds), (5, 2));
+        println!("a={}, b={}, received={:?}", a.as_raw_fd(), b.as_raw_fd(), fd_buf);
+        assert_ne!(fd_buf[0], -1);
+        let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+        assert_ne!(fd_buf[1], -1);
+        let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
 
-    // try to receive what was truncated
-    a.send_fds(b"aaaaaa", &[a.as_raw_fd()]).expect("send one more fd"); // fails on freebsd
-    let mut fd_buf = [-1; 4];
-    let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut fd_buf).expect("receive with capacity");
-    assert_eq!((bytes, fds), (6, 1));
-    assert_ne!(fd_buf[0], -1);
-    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
-    assert_eq!(&fd_buf[1..], [-1; 3]);
+        // try to receive what was truncated
+        a.send_fds(b"aaaaaa", &[a.as_raw_fd()]).expect("send one more fd"); // fails on freebsd
+        let mut fd_buf = [-1; 4];
+        let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut fd_buf).expect("receive with capacity");
+        assert_eq!((bytes, fds), (6, 1));
+        assert_ne!(fd_buf[0], -1);
+        let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+        assert_eq!(&fd_buf[1..], [-1; 3]);
+    } else {// discards all of them
+        assert_eq!((bytes, fds, fd_buf), (5, 0, [-1; 2]));
+    }
+
+    // TODO test receiving what was sent in one go with two recvmsg()s without sending more between
 }
 
 #[test]

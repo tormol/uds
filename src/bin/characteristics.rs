@@ -241,6 +241,15 @@ fn stream_ancillary_payloads_not_merged() {
     let _ = unsafe { UnixStream::from_raw_fd(fd_buf[2]) };
 }
 
+fn print_credentials() {
+    print!("credentials ");
+    let (a, _b) = UnixStream::pair().expect("create stream socket pair");
+    match a.initial_peer_credentials() {
+        Ok(creds) => println!("{:?}", creds),
+        Err(e) => println!("<{}>", e),
+    }
+}
+
 fn main() {
     println!("OS {}", std::env::consts::OS);
     std_bind_max_len_path();
@@ -249,4 +258,5 @@ fn main() {
     longer_addrs();
     std_checks_family();
     stream_ancillary_payloads_not_merged();
+    print_credentials();
 }

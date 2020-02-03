@@ -7,6 +7,7 @@ use libc::SOCK_STREAM;
 use crate::addr::UnixSocketAddr;
 use crate::helpers::*;
 use crate::ancillary::*;
+use crate::credentials::*;
 
 pub trait UnixStreamExt: AsRawFd + FromRawFd + Sized {
     fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
@@ -28,7 +29,9 @@ pub trait UnixStreamExt: AsRawFd + FromRawFd + Sized {
             .map(|(bytes, _, fds)| (bytes, fds) )
     }
 
-    //fn peer_credentials(&self) -> QueriedCredentials;
+    fn initial_peer_credentials(&self) -> Result<ConnCredentials, io::Error> {
+        peer_credentials(self.as_raw_fd())
+    }
 }
 
 impl UnixStreamExt for UnixStream {
@@ -149,6 +152,28 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
     fn recv_fds(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd]) -> Result<(usize, usize), io::Error> {
         recv_fds(self.as_raw_fd(), None, &mut[IoSliceMut::new(buf)], fd_buf)
             .map(|(bytes, _, fds)| (bytes, fds) )
+    }
+
+    /// Get the credentials of the process that created the socket pair this socket is one end of.
+    ///
+    /// This function will return an error of kind `NotConnected` for sockets
+    /// that have been "connected" to an address or not connected at all.
+    ///
+    /// The use cases of this function gotta be very narrow:
+    ///
+    /// * It will return the credentials of the current process unless
+    ///   the side of the socket this method is called on was received via
+    ///   FD-passing or inherited from a parent.
+    /// * If it was created by the direct parent process,
+    ///   one might as well use `getppid()` and go from there?
+    /// * A returned pid can be repurposed by the OS before the call returnes.
+    /// * uids or groups will be those in effect when the pair was created,
+    ///   and will not reflect changes in privileges.
+    ///
+    /// Despite these limitations, the feature is supported by Linux
+    /// (at least), so might as well expose it.
+    fn initial_pair_credentials(&self) -> Result<ConnCredentials, io::Error> {
+        peer_credentials(self.as_raw_fd())
     }
 }
 

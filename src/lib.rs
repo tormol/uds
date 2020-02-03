@@ -52,6 +52,7 @@ mod seqpacket;
 pub use addr::{UnixSocketAddr, UnixSocketAddrRef};
 pub use traits::{UnixListenerExt, UnixStreamExt, UnixDatagramExt};
 pub use seqpacket::{UnixSeqpacketListener, UnixSeqpacketConn};
+pub use credentials::ConnCredentials;
 
 pub mod nonblocking {
     pub use crate::seqpacket::NonblockingUnixSeqpacketListener as UnixSeqpacketListener;

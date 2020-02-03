@@ -11,6 +11,7 @@ use mio::{event::Evented, unix::EventedFd, Ready, Poll, PollOpt, Token};
 use crate::addr::*;
 use crate::helpers::*;
 use crate::ancillary::*;
+use crate::credentials::*;
 
 /// Implement traits apropriate for any file-descriptor-wrapping type.
 macro_rules! impl_rawfd_traits {($type:tt) => {
@@ -187,6 +188,13 @@ impl UnixSeqpacketConn {
     pub fn peer_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
         peer_addr(self.fd)
     }
+    /// Get information about the process of the peer when the connection was established.
+    ///
+    /// See documentation of the returned type for details.
+    pub fn initial_peer_credentials(&self) -> Result<ConnCredentials, io::Error> {
+        peer_credentials(self.fd)
+    }
+
 
     /// Send a packet to the peer.
     pub fn send(&self,  packet: &[u8]) -> Result<usize, io::Error> {
@@ -509,6 +517,12 @@ impl NonblockingUnixSeqpacketConn {
     /// Get the address of the other side of the connection.
     pub fn peer_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
         peer_addr(self.fd)
+    }
+    /// Get information about the process of the peer when the connection was established.
+    ///
+    /// See documentation of the returned type for details.
+    pub fn initial_peer_credentials(&self) -> Result<ConnCredentials, io::Error> {
+        peer_credentials(self.fd)
     }
 
     /// Send a packet to the peer.

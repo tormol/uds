@@ -217,3 +217,30 @@ fn no_peer_credentials_of_regularly_connected_datagram_socket() {
     remove_file(a_pathname).expect("delete socket file");
     remove_file(b_pathname).expect("delete socket file");
 }
+
+
+
+#[test]
+fn peer_selinux_context() {
+    let (a, _b) = UnixStream::pair().expect("create unix stream socket pair");
+    let mut buf = [0u8; 1024];
+    match a.initial_peer_selinux_context(&mut buf) {
+        Ok(len) => {
+            assert!(len <= buf.len(), "length is within bounds");
+            assert_ne!(len, 0, "context is not an empty string");
+            assert!(buf[..len].iter().all(|&b| b.is_ascii() && !b.is_ascii_control() ));
+            assert_eq!(
+                &buf[len..],
+                &vec![b'\0'; buf.len()-len][..],
+                "unused part of buffer is untouched"
+            );
+            if cfg!(not(any(target_os="linux", target_os="android"))) {
+                panic!("unexpectedly succeeded on non-Linux OS");
+            }
+        }
+        Err(e) => {
+            assert_eq!(&buf[..], &[0u8; 1024][..], "buffer is untouched on error");
+            // fails on Linux on Cirrus, probably as a result of running inside a docker container
+        }
+    }
+}

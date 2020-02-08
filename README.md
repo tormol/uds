@@ -7,7 +7,7 @@ A unix domain sockets Rust library that supports abstract addresses, fd-passing,
 When possible, features are implemented via extension traits for [`std::os::unix::net`](https://doc.rust-lang.org/std/os/unix/net/index.html) types (and optionally [mio-uds](https://crates.io/crates/mio-uds) types) instead of exposing new structs.
 The only new socket structs this crate exposes are those for seqpacket sockets.
 
-Timestamps, SELinux context, and ancillary credentials are not yet supported.
+Ancillary credentials and timestamps are not yet supported.
 
 ## Example
 

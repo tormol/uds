@@ -20,7 +20,7 @@ use libc::{getsockopt, c_void, socklen_t};
 #[cfg(any(target_os="linux", target_os="android"))]
 use libc::{pid_t, uid_t, gid_t, getpid, getuid, geteuid, getgid, getegid};
 #[cfg(any(target_os="linux", target_os="android"))]
-use libc::{ucred, SOL_SOCKET, SO_PEERCRED};
+use libc::{ucred, SOL_SOCKET, SO_PEERCRED, SO_PEERSEC};
 #[cfg(any(target_os="freebsd", target_os="dragonfly", target_vendor="apple"))]
 use libc::{xucred, XUCRED_VERSION, LOCAL_PEERCRED};
 #[cfg(target_vendor="apple")]
@@ -59,6 +59,25 @@ impl SendCredentials {
         ucred.gid = gid;
         return ucred;
     }
+}
+
+
+
+#[cfg(any(target_os="linux", target_os="android"))]
+pub fn selinux_context(fd: RawFd,  buffer: &mut[u8]) -> Result<usize, io::Error> {
+    unsafe {
+        let ptr = buffer.as_mut_ptr() as *mut c_void;
+        let mut capacity = buffer.len().min(socklen_t::max_value() as usize) as socklen_t;
+        match getsockopt(fd, SOL_SOCKET, SO_PEERSEC, ptr, &mut capacity) {
+            -1 => Err(io::Error::last_os_error()),
+            _ => Ok(capacity as usize),
+        }
+    }
+}
+
+#[cfg(not(any(target_os="linux", target_os="android")))]
+pub fn selinux_context(_fd: RawFd,  _buffer: &mut[u8]) -> Result<usize, io::Error> {
+    Err(io::Error::new(Other, "not available"))
 }
 
 

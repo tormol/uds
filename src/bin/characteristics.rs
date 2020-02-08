@@ -542,6 +542,13 @@ fn print_credentials() {
         Ok(creds) => println!("yes ({:?})", creds),
         Err(e) => println!("no ({})", e), // fails on DragonFly BSD and NetBSD
     }
+
+    print!("SELinux_context ");
+    let mut buf = [0u8; 1024];
+    match a.initial_peer_selinux_context(&mut buf) {
+        Ok(len) => println!("yes ({:?} ({} bytes))", String::from_utf8_lossy(&buf[..len]), len),
+        Err(e) => println!("no ({})", e),
+    }
 }
 
 fn main() {

@@ -236,6 +236,18 @@ impl UnixSeqpacketConn {
     pub fn initial_peer_credentials(&self) -> Result<ConnCredentials, io::Error> {
         peer_credentials(self.fd)
     }
+    /// Get the SELinux security context of the process that created the other
+    /// end of this connection.
+    ///
+    /// Will return an error on other operating systems than Linux or Android,
+    /// and also if running inside kubernetes.
+    /// On success the number of bytes used is returned. (like `Read`)
+    ///
+    /// The default security context is `unconfined`, without any trailing NUL.  
+    /// A buffor of 50 bytes is probably always big enough.
+    pub fn initial_peer_selinux_context(&self,  buf: &mut[u8]) -> Result<usize, io::Error> {
+        selinux_context(self.as_raw_fd(), buf)
+    }
 
 
     /// Send a packet to the peer.
@@ -826,6 +838,18 @@ impl NonblockingUnixSeqpacketConn {
     /// See documentation of the returned type for details.
     pub fn initial_peer_credentials(&self) -> Result<ConnCredentials, io::Error> {
         peer_credentials(self.fd)
+    }
+    /// Get the SELinux security context of the process that created the other
+    /// end of this connection.
+    ///
+    /// Will return an error on other operating systems than Linux or Android,
+    /// and also if running inside kubernetes.
+    /// On success the number of bytes used is returned. (like `Read`)
+    ///
+    /// The default security context is `unconfined`, without any trailing NUL.  
+    /// A buffor of 50 bytes is probably always big enough.
+    pub fn initial_peer_selinux_context(&self,  buf: &mut[u8]) -> Result<usize, io::Error> {
+        selinux_context(self.as_raw_fd(), buf)
     }
 
     /// Send a packet to the peer.

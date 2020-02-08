@@ -85,7 +85,8 @@ macro_rules! impl_mio_if_enabled {($type:tt) => {
 ///
 /// What is sent separately is received separately:
 ///
-/// ```
+#[cfg_attr(not(target_vendor="apple"), doc="```")]
+#[cfg_attr(target_vendor="apple", doc="```no_run")]
 /// let (a, b) = uds::UnixSeqpacketConn::pair().expect("Cannot create seqpacket pair");
 /// 
 /// a.send(b"first").unwrap();
@@ -100,7 +101,8 @@ macro_rules! impl_mio_if_enabled {($type:tt) => {
 ///
 /// Connect to a listener on a socket file and write to it:
 ///
-/// ```
+#[cfg_attr(not(target_vendor="apple"), doc="```")]
+#[cfg_attr(target_vendor="apple", doc="```no_run")]
 /// use uds::{UnixSeqpacketListener, UnixSeqpacketConn};
 ///
 /// # let _ = std::fs::remove_file("seqpacket.socket"); // pre-emptively delete just in case
@@ -165,7 +167,8 @@ impl UnixSeqpacketConn {
     ///
     /// # Examples
     ///
-    /// ```
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
     /// let (a, b) = uds::UnixSeqpacketConn::pair().unwrap();
     /// assert!(a.local_unix_addr().unwrap().is_unnamed());
     /// assert!(b.local_unix_addr().unwrap().is_unnamed());
@@ -245,7 +248,8 @@ impl UnixSeqpacketConn {
     ///
     /// Both new and old can send and receive, and share queues:
     ///
-    /// ```
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
     /// let (a1, b) = uds::nonblocking::UnixSeqpacketConn::pair().unwrap();
     /// let a2 = a1.try_clone().unwrap();
     ///
@@ -268,7 +272,8 @@ impl UnixSeqpacketConn {
     ///
     /// Clone can still be used after the first one has been closed:
     ///
-    /// ```
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
     /// let (a, b1) = uds::nonblocking::UnixSeqpacketConn::pair().unwrap();
     /// a.send(b"hello").unwrap();
     ///
@@ -290,7 +295,8 @@ impl UnixSeqpacketConn {
     ///
     /// Trying to receive when there are no packets waiting:
     ///
-    /// ```
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
     /// # use std::io::ErrorKind;
     /// # use uds::UnixSeqpacketConn;
     /// let (a, b) = UnixSeqpacketConn::pair().expect("create seqpacket pair");
@@ -300,7 +306,8 @@ impl UnixSeqpacketConn {
     ///
     /// Trying to send when the OS buffer for the connection is full:
     ///
-    /// ```
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
     /// # use std::io::ErrorKind;
     /// # use uds::UnixSeqpacketConn;
     /// let (a, b) = UnixSeqpacketConn::pair().expect("create seqpacket pair");
@@ -326,7 +333,8 @@ impl UnixSeqpacketConn {
 ///
 /// # Examples
 ///
-/// ```
+#[cfg_attr(not(target_vendor="apple"), doc="```")]
+#[cfg_attr(target_vendor="apple", doc="```no_run")]
 /// # let _ = std::fs::remove_file("seqpacket_listener.socket");
 /// let listener = uds::UnixSeqpacketListener::bind("seqpacket_listener.socket")
 ///     .expect("Create seqpacket listener");
@@ -378,7 +386,8 @@ impl UnixSeqpacketListener {
     ///
     /// # Examples
     ///
-    /// ```
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
     /// # use std::io::ErrorKind;
     /// # use uds::{UnixSocketAddr, UnixSeqpacketListener};
     /// #
@@ -415,7 +424,8 @@ impl UnixSeqpacketListener {
 ///
 /// Sending or receiving when it would block a normal socket:
 ///
-/// ```
+#[cfg_attr(not(target_vendor="apple"), doc="```")]
+#[cfg_attr(target_vendor="apple", doc="```no_run")]
 /// use uds::nonblocking::UnixSeqpacketConn;
 /// use std::io::ErrorKind;
 ///
@@ -435,7 +445,8 @@ impl UnixSeqpacketListener {
 ///
 /// Registering with mio:
 ///
-#[cfg_attr(feature="mio", doc="```")]
+#[cfg_attr(all(feature="mio", not(target_vendor="apple")), doc="```")]
+#[cfg_attr(all(feature="mio", target_vendor="apple"), doc="```no_run")]
 #[cfg_attr(not(feature="mio"), doc="```no_compile")]
 /// use uds::nonblocking::UnixSeqpacketConn;
 /// use mio::{Poll, Token, Ready, PollOpt, Events};
@@ -495,7 +506,8 @@ impl NonblockingUnixSeqpacketConn {
     ///
     /// # Examples
     ///
-    /// ```
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
     /// let (a, b) = uds::nonblocking::UnixSeqpacketConn::pair().unwrap();
     /// assert!(a.local_unix_addr().unwrap().is_unnamed());
     /// assert!(b.local_unix_addr().unwrap().is_unnamed());
@@ -573,7 +585,8 @@ impl NonblockingUnixSeqpacketConn {
     ///
     /// # Examples
     ///
-    /// ```
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
     /// # use uds::nonblocking::UnixSeqpacketConn;
     /// # use std::io::ErrorKind;
     /// #
@@ -611,7 +624,8 @@ impl NonblockingUnixSeqpacketConn {
 ///
 /// # Examples
 ///
-/// ```
+#[cfg_attr(not(target_vendor="apple"), doc="```")]
+#[cfg_attr(target_vendor="apple", doc="```no_run")]
 /// use uds::nonblocking::{UnixSeqpacketListener, UnixSeqpacketConn};
 /// use std::io::ErrorKind;
 ///
@@ -649,7 +663,8 @@ impl NonblockingUnixSeqpacketListener {
     }
     /// `accept_unix_addr()` doesn't block if no connections are waiting:
     ///
-    /// ```
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
     /// # use uds::nonblocking::UnixSeqpacketListener;
     /// # use std::io::ErrorKind;
     /// #

@@ -1,3 +1,5 @@
+#![cfg(not(target_vendor="apple"))]
+
 extern crate uds;
 
 use std::io::ErrorKind::*;

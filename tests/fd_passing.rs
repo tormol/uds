@@ -1,8 +1,9 @@
 extern crate uds;
 
-use std::io::{ErrorKind, Read, Write};
+use std::io::{ErrorKind::*, Read, Write};
 use std::os::unix::io::{AsRawFd, FromRawFd};
 use std::os::unix::net::{UnixDatagram, UnixStream};
+use std::env::consts::*;
 
 use uds::{UnixDatagramExt, UnixStreamExt};
 
@@ -62,16 +63,18 @@ fn datagram_truncate_fds() {
     a.send_fds(b"aaa", &[a.as_raw_fd(), a.as_raw_fd(), b.as_raw_fd(), b.as_raw_fd()])
         .expect("send four fds");
     let mut fd_buf = [-1; 2];
-    let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut fd_buf)
-        .expect("receive with smaller fd buffer");
-    if cfg!(any(target_os="linux", target_os="android", target_vendor="apple")) {
-        assert_eq!((bytes, fds), (3, 2));
-        assert_ne!(fd_buf[0], -1);
-        let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
-        assert_ne!(fd_buf[1], -1);
-        let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[1]) };
-    } else {// discards all of them
-        assert_eq!((bytes, fds, fd_buf), (3, 0, [-1; 2]));
+    match b.recv_fds(&mut[0u8; 10], &mut fd_buf) {// receives to capacity or none
+        Ok((3, 2)) => {
+            assert_ne!(fd_buf[0], -1);
+            let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+            assert_ne!(fd_buf[1], -1);
+            let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[1]) };
+        }
+        Ok((3, 0)) => assert_eq!(fd_buf, [-1; 2]),
+        Ok((bytes, fds)) => {
+            panic!("received {} bytes and {} fds but expected 3 bytes and 2 or 0 fds", bytes, fds);
+        }
+        Err(e) => panic!("receive with smaller fd buffer failed: {}", e),
     }
 }
 
@@ -126,7 +129,7 @@ fn stream_truncate_fds() {
     b.set_nonblocking(true).expect("enable nonblocking");
     let error = b.recv_fds(&mut[1], &mut[0; 2])
         .expect_err("won't receive fd later without any bytes waiting");
-    assert_eq!(error.kind(), ErrorKind::WouldBlock);
+    assert_eq!(error.kind(), WouldBlock);
     // try to receive fds later when there is more data
     a.write(b"aa").expect("write normally - without ancillary");
     let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut[0; 2]).expect("receive with capacity");
@@ -140,7 +143,7 @@ fn stream_truncate_fds() {
     // try to receive what was truncated, now that we received with ancillary buffer the first time
     let error = b.recv_fds(&mut[1], &mut[0; 2])
         .expect_err("receive fd later without any bytes waiting");
-    assert_eq!(error.kind(), ErrorKind::WouldBlock);
+    assert_eq!(error.kind(), WouldBlock);
     a.send_fds(b"aaaa", &[]).expect("send empty fd slice");
     let mut fd_buf = [-1; 4];
     let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut fd_buf).expect("receive with capacity");
@@ -150,29 +153,38 @@ fn stream_truncate_fds() {
     a.send_fds(b"aaaaa", &[a.as_raw_fd(), a.as_raw_fd(), b.as_raw_fd(), b.as_raw_fd()])
         .expect("send four fds");
     let mut fd_buf = [-1; 2];
-    let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut fd_buf)
-        .expect("receive with smaller fd buffer");
-    if cfg!(any(target_os="linux", target_os="android", target_vendor="apple")) {
-        assert_eq!((bytes, fds), (5, 2));
-        println!("a={}, b={}, received={:?}", a.as_raw_fd(), b.as_raw_fd(), fd_buf);
-        assert_ne!(fd_buf[0], -1);
-        let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
-        assert_ne!(fd_buf[1], -1);
-        let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
-
+    match b.recv_fds(&mut[0u8; 10], &mut fd_buf) {// receives to capacity or nothing
+        Ok((5, 2)) => {
+            println!("a={}, b={}, received={:?}", a.as_raw_fd(), b.as_raw_fd(), fd_buf);
+            assert_ne!(fd_buf[0], -1);
+            let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+            assert_ne!(fd_buf[1], -1);
+            let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
+        },
+        Ok((5, 0)) => {
+            assert_eq!(fd_buf, [-1; 2]);
+            if cfg!(any(target_os="linux", target_os="android", target_vendor="apple")) {
+                panic!("all FDs were dropped, which is unexpected for {}", OS);
+            }
+        }
+        Ok((bytes, fds)) => {
+            panic!("received {} bytes and {} fds but expected 5 bytes and 2 or 0 fds", bytes, fds);
+        }
+        Err(e) => panic!("receiving with too small ancillary buffer failed: {}", e),
+    }
+    if cfg!(any(target_os="linux", target_os="android")) {
         // try to receive what was truncated
         a.send_fds(b"aaaaaa", &[a.as_raw_fd()]).expect("send one more fd"); // fails on freebsd
-        let mut fd_buf = [-1; 4];
+        let mut fd_buf = [-1; 6];
         let (bytes, fds) = b.recv_fds(&mut[0u8; 10], &mut fd_buf).expect("receive with capacity");
         assert_eq!((bytes, fds), (6, 1));
         assert_ne!(fd_buf[0], -1);
         let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
-        assert_eq!(&fd_buf[1..], [-1; 3]);
-    } else {// discards all of them
-        assert_eq!((bytes, fds, fd_buf), (5, 0, [-1; 2]));
+        assert_eq!(&fd_buf[1..], [-1; 5]);
     }
 
     // TODO test receiving what was sent in one go with two recvmsg()s without sending more between
+    // TODO test not receiving all bytes either.
 }
 
 #[test]

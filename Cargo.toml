@@ -14,7 +14,7 @@ categories = ["os::unix-apis", "asynchronous"]
 edition = "2018"
 exclude = ["tests", "src/bin"]
 
-[dependencies]
+[target."cfg(unix)".dependencies]
 libc = "0.2.59" # .59 added FIONCLEX for Linux
 # enabling this feature implements the extension traits for mio-uds types
 mio-uds = {version="0.6", optional=true} # no patch release builds with -Z minimal-versions

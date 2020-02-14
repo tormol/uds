@@ -23,9 +23,9 @@ jobs:
   - name: "Linux ppc64le stable"
     os: linux
     arch: ppc64le
-  - name: "Linux s390x stable"
-    os: linux
-    arch: s390x
+  # - name: "Linux s390x stable"
+  #   os: linux
+  #   arch: s390x
   # - name: "Windows stable"
   #   os: windows
   #   arch: amd64

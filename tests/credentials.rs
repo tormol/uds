@@ -58,7 +58,7 @@ fn assert_credentials_matches_current_process(creds: &ConnCredentials,  socket_t
             // other sanity checks
             assert!(number_of_groups >= 1, "{} has at least some groups", socket_type);
             for (i, &group) in groups.iter().enumerate().take(number_of_groups as usize) {
-                assert!(group <= 999, "{} group[{}] is not noise", socket_type, i);
+                assert_ne!(group, !0, "{} group[{}] is not a marker value", socket_type, i);
             }
             assert_eq!(
                 &groups[number_of_groups as usize..],
@@ -104,14 +104,18 @@ fn peer_credentials_of_seqpacket_conn() {
 )]
 fn pair_credentials_of_datagram_socketpair() {
     let (a, b) = UnixDatagram::pair().expect("create unix datagram socket pair");
-    if cfg!(target_vendor="apple") {
-        let err = a.initial_pair_credentials()
-            .expect_err("datagram pair credentials not supported on macOS");
-        assert_eq!(err.kind(), InvalidInput);
-    } else {
-        let creds = a.initial_pair_credentials().expect("get credentials of datagram socket pair");
-        assert_credentials_matches_current_process(&creds, "datagram socketpair");
-        assert_eq!(b.initial_pair_credentials().unwrap(), creds);
+    match a.initial_pair_credentials() {
+        Ok(creds) => {
+            assert_credentials_matches_current_process(&creds, "datagram socketpair");
+            assert_eq!(b.initial_pair_credentials().unwrap(), creds);
+        }
+        Err(ref e) if e.kind() != InvalidInput => {
+            panic!("failed with unexpect error variant {:?}", e.kind());
+        }
+        Err(_) if cfg!(any(target_os="linux", target_os="android")) => {
+            panic!("failed on Linux");
+        }
+        Err(_) => {}
     }
 }
 
@@ -126,7 +130,7 @@ fn no_peer_credentials_of_unconnected_datagram_socket() {
     remove_file("datagram_credentials.socket").unwrap();
     let err = socket.initial_pair_credentials()
         .expect_err("get credentials of unconnected datagram socket");
-    assert!(err.kind() == NotConnected/*junk returned*/  ||  err.kind() == InvalidInput/*macOS*/);
+    assert!(err.kind() == NotConnected/*junk returned*/  ||  err.kind() == InvalidInput/*failed properly*/);
 }
 
 #[cfg_attr(
@@ -144,10 +148,10 @@ fn no_peer_credentials_of_regularly_connected_datagram_socket() {
     b.connect(a_pathname).expect("connect b to a");
 
     let err = a.initial_pair_credentials()
-        .expect_err("get credentials of unconnected datagram socket");
+        .expect_err("get credentials of regularly connected datagram socket");
     assert!(err.kind() == NotConnected/*junk returned*/  ||  err.kind() == InvalidInput/*macOS*/);
-    let err = a.initial_pair_credentials()
-        .expect_err("get credentials of unconnected datagram socket");
+    let err = b.initial_pair_credentials()
+        .expect_err("get credentials of regularly connected datagram socket");
     assert!(err.kind() == NotConnected/*junk returned*/  ||  err.kind() == InvalidInput/*macOS*/);
 
     remove_file(a_pathname).expect("delete socket file");

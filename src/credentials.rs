@@ -9,14 +9,12 @@ use std::mem;
 use libc::{getsockopt, c_void, socklen_t};
 #[cfg(any(target_os="linux", target_os="android"))]
 use libc::{pid_t, uid_t, gid_t, getpid, getuid, geteuid, getgid, getegid};
-#[cfg(any(target_os="linux", target_os="android", target_os="freebsd"))]
-use libc::SOL_SOCKET as SOL_LOCAL; // Apple does the right thing for once!
-#[cfg(target_vendor="apple")]
-use libc::SOL_LOCAL;
 #[cfg(any(target_os="linux", target_os="android"))]
-use libc::{ucred, SO_PEERCRED};
+use libc::{ucred, SOL_SOCKET, SO_PEERCRED};
 #[cfg(any(target_os="freebsd", target_vendor="apple"))]
 use libc::{xucred, XUCRED_VERSION, LOCAL_PEERCRED};
+#[cfg(target_vendor="apple")]
+use libc::SOL_LOCAL; // Apple is for once the one that does the right thing!
 
 /// Credentials to be sent with `send_ancillary()`.
 ///
@@ -116,7 +114,7 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
     unsafe {
         let ptr = &mut ucred as *mut ucred as *mut c_void;
         let mut size = mem::size_of::<ucred>() as socklen_t;
-        if getsockopt(conn, SOL_LOCAL, SO_PEERCRED, ptr, &mut size) == -1 {
+        if getsockopt(conn, SOL_SOCKET, SO_PEERCRED, ptr, &mut size) == -1 {
             Err(io::Error::last_os_error())
         } else if let Some(pid) = NonZeroU32::new(ucred.pid as u32) {
             Ok(ConnCredentials::LinuxLike{ pid, euid: ucred.uid as u32, egid: ucred.gid as u32 })
@@ -130,11 +128,20 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
 pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
     let mut xucred: xucred = unsafe { mem::zeroed() };
     xucred.cr_version = XUCRED_VERSION;
-    xucred.cr_ngroups = {xucred.cr_groups.len() as i8}.into();
+    xucred.cr_ngroups = xucred.cr_groups.len() as _;
+    // initialize to values that don't signify root, to reduce severity of bugs
+    xucred.cr_uid = !0;
+    for group_slot in &mut xucred.cr_groups {
+        *group_slot = !0;
+    }
+    #[cfg(target_os="freebsd")]
+    const PEERCRED_SOCKET_LEVEL: i32 = 0; // yes literal zero: not SOL_SOCKET and SOL_LOCAL is not a thing
+    #[cfg(target_vendor="apple")]
+    use SOL_LOCAL as PEERCRED_SOCKET_LEVEL;
     unsafe {
         let ptr = &mut xucred as *mut xucred as *mut c_void;
         let mut size = mem::size_of::<xucred>() as socklen_t;
-        match getsockopt(conn, SOL_LOCAL, LOCAL_PEERCRED, ptr, &mut size) {
+        match getsockopt(conn, PEERCRED_SOCKET_LEVEL, LOCAL_PEERCRED, ptr, &mut size) {
             -1 => Err(io::Error::last_os_error()),
             _ if xucred.cr_version != XUCRED_VERSION => {
                 Err(io::Error::new(InvalidData, "unknown version of peer credentials"))

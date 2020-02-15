@@ -156,8 +156,9 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
 
     /// Get the credentials of the process that created the socket pair this socket is one end of.
     ///
-    /// This function will return an error of kind `NotConnected` for sockets
-    /// that have been "connected" to an address or not connected at all.
+    /// This function will return an error of kind `NotConnected` or
+    /// `InvalidInput`for sockets that have been "connected" to an address
+    /// or not connected at all.
     ///
     /// The use cases of this function gotta be very narrow:
     ///
@@ -170,8 +171,8 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
     /// * uids or groups will be those in effect when the pair was created,
     ///   and will not reflect changes in privileges.
     ///
-    /// Despite these limitations, the feature is supported by Linux
-    /// (at least), so might as well expose it.
+    /// Despite these limitations, the feature is supported by Linux at least
+    /// (but not macOS or FreeBSD), so might as well expose it.
     fn initial_pair_credentials(&self) -> Result<ConnCredentials, io::Error> {
         peer_credentials(self.as_raw_fd())
     }

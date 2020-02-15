@@ -1,4 +1,4 @@
-/* Copyright 2019 Torbjørn Birch Moltu
+/* Copyright 2019-2020 Torbjørn Birch Moltu
  *
  * Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
  * http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
@@ -6,10 +6,15 @@
  * copied, modified, or distributed except according to those terms.
  */
 
-//! A unix domain sockets crate that supports abstract addresses, fd-passing and SOCK_SEQPACKET sockets.
+//! A unix domain sockets library that supports abstract addresses, fd-passing,
+//! SOCK_SEQPACKET sockets and more.
 //!
-//! File-descriptor passing and abstract socket support for stream and datagram sockets is provided
-//! via extension traits for existing types in `std::os::unix::net` and (opt-in) `mio_uds`.
+//! File-descriptor passing and abstract socket support
+//! for stream and datagram sockets is provided via extension traits for
+//! existing types in `std::os::unix::net` and from [mio_uds](https://github.com/alexcrichton/mio_uds)
+//! (the latter is opt-in and must be enabled with `features=["mio_uds"]` in Cargo.toml).
+//!
+//! See README for status of operating system support and other general info.
 
 #![cfg(unix)] // compile as empty crate on windows
 
@@ -59,4 +64,19 @@ pub use credentials::ConnCredentials;
 pub mod nonblocking {
     pub use crate::seqpacket::NonblockingUnixSeqpacketListener as UnixSeqpacketListener;
     pub use crate::seqpacket::NonblockingUnixSeqpacketConn as UnixSeqpacketConn;
+}
+
+#[cfg(debug_assertions)]
+mod doctest_md_files {
+    macro_rules! mdfile {($content:expr, $(#[$meta:meta])* $attach_to:ident) => {
+        #[doc=$content]
+        #[allow(unused)]
+        $(#[$meta])* // can't #[cfg_attr(, doc=)] in .md file
+        enum $attach_to {}
+    }}
+    mdfile!{
+        include_str!("../README.md"),
+        #[cfg(any(target_os="linux", target_os="android"))] // uses abstract addrs
+        Readme
+    }
 }

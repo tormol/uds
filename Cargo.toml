@@ -1,9 +1,8 @@
 [package]
 name = "uds"
-version = "0.0.0"
+version = "0.1.0"
 description = """
 A unix domain socket crate that supports abstract addresses, fd-passing and seqpacket sockets.
-Only tested on Linux.
 """
 readme = "README.md"
 repository = "https://github.com/tormol/uds"

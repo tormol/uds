@@ -49,7 +49,7 @@ fn std_get_local_max_path_addr() {
         Some(std_path) => {
             let std_path = std_path.to_str().expect("convert Path that should be ASCII to str");
             println!(
-                "no (returned path differs: {} vs {} ({} bytes vs {}))",
+                "buggy (returned path differs: {} vs {} ({} bytes vs {}))",
                 std_path, max_path, std_path.len(), max_path.len()
             );
         },
@@ -115,7 +115,7 @@ fn longer_addrs() {
     impl std::ops::Deref for LongAddr {
         type Target = [u8];
         fn deref(&self) -> &[u8] {
-            unsafe {
+            let slice = unsafe {
                 let included = std::mem::size_of_val(&self.sockaddr.sun_path);
                 let extra = std::mem::size_of_val(&self.extra);
                 let path_ptr = &self.sockaddr.sun_path[0] as *const _ as *const u8;
@@ -125,7 +125,8 @@ fn longer_addrs() {
                     std::mem::size_of::<Self>() - included - extra
                 );
                 std::slice::from_raw_parts(path_ptr, included+extra)
-            }
+            };
+            &slice[..slice.iter().take_while(|&&b| b != b'\0' ).count()]
         }
     }
     fn new_longaddr(fill: u8,  extra_len: usize) -> (LongAddr, libc::socklen_t) {
@@ -175,9 +176,11 @@ fn longer_addrs() {
             // TODO more experimentation
             libc::close(ret);
             match remove_file(std::str::from_utf8(&*path_addr).unwrap()) {
-                Err(ref err) if err.kind() == NotFound => println!("bind() succeeded but path was not created"),
+                Err(ref err) if err.kind() == NotFound => {
+                    println!("bind() succeeded but path was not created");
+                },
                 Ok(_) => println!("yes"),
-                Err(err) => println!("bind() succeeded (but deleting file failed with {}", err),
+                Err(err) => println!("bind() succeeded but deleting file failed with {}", err),
             }
         }
     }

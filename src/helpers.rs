@@ -147,13 +147,12 @@ impl Socket {
     }
 
     pub fn new(socket_type: c_int,  nonblocking: bool) -> Result<Self, io::Error> {
-        // Set close-on-exec atomically wit SOCK_CLOEXEC if possible.
+        // Set close-on-exec atomically with SOCK_CLOEXEC if possible.
         // Falls through to the portable but race-prone way for compatibility
         // with Linux < 2.6.27 becaue Rust std still supports 2.6.18.
         // (EINVAL is what std checks for, and EPROTONOTSUPPORT is for
         // known-but-not-supported protcol or protocol families), 
-        // FIXME illumos also have the flags but libc doesn't expose them
-        #[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")))] {
+        #[cfg(not(target_vendor="apple"))] {
             let type_flags = socket_type | SOCK_CLOEXEC | if nonblocking {SOCK_NONBLOCK} else {0};
             match cvt!(unsafe { socket(AF_UNIX, type_flags, 0) }) {
                 Ok(fd) => return Ok(Socket(fd)),
@@ -233,10 +232,9 @@ impl Socket {
 
     pub fn pair(socket_type: c_int,  nonblocking: bool) -> Result<(Self, Self), io::Error> {
         let mut fd_buf = [-1; 2];
-        // Set close-on-exec atomically wit SOCK_CLOEXEC if possible.
+        // Set close-on-exec atomically with SOCK_CLOEXEC if possible.
         // Falls through for compatibility with Linux < 2.6.27
-        // FIXME illumos also have the flags but libc doesn't expose them
-        #[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")))] {
+        #[cfg(not(target_vendor="apple"))] {
             let type_flags = socket_type | SOCK_CLOEXEC | if nonblocking {SOCK_NONBLOCK} else {0};
             match cvt!(unsafe { socketpair(AF_UNIX, type_flags, 0, fd_buf[..].as_mut_ptr()) }) {
                 Ok(_) => return Ok((Socket(fd_buf[0]), Socket(fd_buf[1]))),

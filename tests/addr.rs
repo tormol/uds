@@ -35,7 +35,7 @@ fn unspecified_creates_abstract() {
 fn cannot_bind_to_unspecified() {
     let bind_err = UnixListener::bind_unix_addr(&UnixSocketAddr::new_unspecified())
         .expect_err("bind to unspecified address when abstract addresses are not supported");
-    assert_eq!(bind_err.kind(), InvalidInput);
+    assert!(bind_err.kind() == InvalidInput  ||  bind_err.kind() == Other/*solarish*/);
 }
 
 #[test]

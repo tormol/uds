@@ -85,6 +85,7 @@ fn stream_connected_from() {
     assert!(is_cloexec(conn.as_raw_fd()));
 }
 
+#[cfg(not(any(target_os="illumos", target_os="solaris")))]
 #[test]
 fn received() {
     let (foo, bar) = UnixStream::pair().expect("create unix stream pair");

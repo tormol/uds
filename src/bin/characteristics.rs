@@ -203,7 +203,10 @@ fn stream_ancillary_payloads_not_merged() {
     b.set_nonblocking(true).expect("make receiving socket nonblocking");
 
     // send some then nothing
-    a.send_fds(b"1", &[a.as_raw_fd()]).expect("send one fd");
+    if let Err(e) = a.send_fds(b"1", &[a.as_raw_fd()]) {
+        println!("N/A ({})", e);
+        return;
+    }
     a.write(b"0").expect("write more bytes but no fds");
     let mut fd_buf = [-1; 6];
     match b.recv_fds(&mut[0u8; 20], &mut fd_buf) {

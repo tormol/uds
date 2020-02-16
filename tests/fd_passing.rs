@@ -1,3 +1,5 @@
+#![cfg_attr(any(target_os="illumos", target_os="solaris"), allow(unused))]
+
 extern crate uds;
 
 use std::io::{ErrorKind::*, Read, Write};
@@ -7,7 +9,7 @@ use std::env::consts::*;
 
 use uds::{UnixDatagramExt, UnixStreamExt};
 
-#[test]
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
 fn datagram_send_no_fds() {
     let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
 
@@ -45,7 +47,7 @@ fn datagram_send_no_fds() {
     assert_eq!(fd_buf, [-1; 3]);
 }
 
-#[test]
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
 fn datagram_truncate_fds() {
     let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
 
@@ -78,7 +80,7 @@ fn datagram_truncate_fds() {
     }
 }
 
-#[test]
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
 fn stream_send_no_fds() {
     let (mut a, mut b) = UnixStream::pair().expect("create stream socket pair");
 
@@ -116,7 +118,7 @@ fn stream_send_no_fds() {
     assert_eq!(fd_buf, [-1; 3]);
 }
 
-#[test]
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
 fn stream_truncate_fds() {
     let (mut a, mut b) = UnixStream::pair().expect("create stream socket pair");
 
@@ -187,7 +189,7 @@ fn stream_truncate_fds() {
     // TODO test not receiving all bytes either.
 }
 
-#[test]
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
 fn datagram_pass_one_fd() {
     let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
     a.send_fds(b"", &[a.as_raw_fd()]).expect("send one file descriptor");
@@ -220,7 +222,7 @@ fn datagram_pass_two_receive_one() {
     assert_eq!(fds, 0);
 }
 
-#[test]
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
 fn datagram_separate_payloads() {
     let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
 
@@ -253,7 +255,8 @@ fn datagram_separate_payloads() {
     }
 }
 
-#[test] /// a just-to-be-absolutely-sure test
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
+/// a just-to-be-absolutely-sure test
 fn stream_fd_order() {
     let (mut a, mut b) = UnixStream::pair().expect("create stream socket pair");
     a.send_fds(b"2", &[a.as_raw_fd(), b.as_raw_fd()]).expect("send two fds");
@@ -272,7 +275,7 @@ fn stream_fd_order() {
     a.read(&mut[0u8; 10]).expect("read bytes sent from received fd[1] (`b`)");
 }
 
-#[test]
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
 fn closed_before_received() {
     let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
     a.send_fds(&[], &[a.as_raw_fd()]).expect("send fd");
@@ -284,4 +287,22 @@ fn closed_before_received() {
     let a = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
     a.send(b"still alive").expect("send from fd closed before received");
     b.recv(&mut[0u8; 16]).expect("receive what was sent from sent fd");
+}
+
+#[cfg(any(target_os="illumos", target_os="solaris"))]
+#[test]
+fn errors_on_solarish() {
+    let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
+    let err = a.send_fds(b"0", &[]).expect_err("send empty fd slice");
+    assert!(format!("{}", err).contains("available"));
+    let err = a.send_fds(b"1", &[a.as_raw_fd()]).expect_err("send fd");
+    assert!(format!("{}", err).contains("available"));
+
+    b.set_nonblocking(true).expect("make nonblocking");
+    let err = b.recv_fds(&mut[0; 16], &mut[])
+        .expect_err("receive with empty fd buffer");
+    assert!(format!("{}", err).contains("available"));
+    let err = b.recv_fds(&mut[0; 16], &mut[-1; 4])
+        .expect_err("receive with fd capacity");
+    assert!(format!("{}", err).contains("available"));
 }

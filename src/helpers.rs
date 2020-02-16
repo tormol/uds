@@ -9,8 +9,11 @@ use std::mem;
 
 use libc::{c_int, sockaddr, socklen_t, AF_UNIX};
 use libc::{bind, connect, getsockname, getpeername};
-use libc::{socket, accept, close, listen, socketpair, ioctl, FIONBIO};
+use libc::{socket, accept, close, listen, socketpair};
+use libc::{ioctl, FIONBIO, FIOCLEX, FIONCLEX};
 use libc::{fcntl, F_DUPFD_CLOEXEC, EINVAL, dup};
+#[cfg(any(target_os="illumos", target_os="solaris"))]
+use libc::{F_GETFD, F_SETFD, FD_CLOEXEC};
 
 #[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")))]
 use libc::{SOCK_CLOEXEC, SOCK_NONBLOCK};
@@ -37,9 +40,22 @@ pub const MSG_NOSIGNAL: c_int = 0; // SO_NOSIGPIPE is set instead
 
 /// Enable / disable CLOEXEC, for when SOCK_CLOEXEC can't be used.
 pub fn set_cloexec(fd: RawFd,  close_on_exec: bool) -> Result<(), io::Error> {
-    let op = if close_on_exec {libc::FIOCLEX} else {libc::FIONCLEX};
-    cvt!(unsafe { ioctl(fd, op) })?;
-    Ok(())
+    let op = if close_on_exec {FIOCLEX} else {FIONCLEX};
+    match cvt!(unsafe { ioctl(fd, op) }) {
+        Ok(_) => Ok(()),
+        #[cfg(any(target_os="illumos", target_os="solaris"))]
+        Err(ref e) if e.kind() == ErrorKind::InvalidInput => {
+            unsafe {
+                let prev = cvt!(fcntl(fd, F_GETFD))?;
+                let change_to = if close_on_exec {prev | FD_CLOEXEC} else {prev & !FD_CLOEXEC};
+                if change_to != prev {
+                    cvt!(fcntl(fd, F_SETFD, change_to))?;
+                }
+                Ok(())
+            }
+        },
+        Err(e) => Err(e),
+    }
 }
 /// Enable / disable FIONBIO. Used if SOCK_NONBLOCK can't be used.
 pub fn set_nonblocking(fd: RawFd,  nonblocking: bool) -> Result<(), io::Error> {

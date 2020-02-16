@@ -15,11 +15,8 @@ use libc::{fcntl, F_DUPFD_CLOEXEC, EINVAL, dup};
 #[cfg(any(target_os="illumos", target_os="solaris"))]
 use libc::{F_GETFD, F_SETFD, FD_CLOEXEC};
 
-#[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")))]
-use libc::{SOCK_CLOEXEC, SOCK_NONBLOCK};
-#[cfg(not(any(target_vendor="apple", target_os="netbsd", target_os="illumos", target_os="solaris")))]
-// FIXME netbsd and illumos has it, but libc doesn't expose it
-use libc::{accept4, ENOSYS};
+#[cfg(not(target_vendor="apple"))]
+use libc::{SOCK_CLOEXEC, SOCK_NONBLOCK, accept4, ENOSYS};
 #[cfg(target_vendor="apple")]
 use libc::{setsockopt, SOL_SOCKET, SO_NOSIGPIPE, c_void};
 
@@ -183,11 +180,7 @@ impl Socket {
             // ENOSYS is handled for compatibility with Linux < 2.6.28,
             // because Rust std still supports Linux 2.6.18.
             // (used by RHEL 5 which doesn't reach EOL until November 2020).
-            #[cfg(any(
-                target_os="linux", target_os="android",
-                target_os="freebsd", target_os="dragonfly", target_os="openbsd"
-                // FIXME netbsd and illumos also has this, but libc doesn't expose it
-            ))] {
+            #[cfg(not(target_vendor="apple"))] {
                 let flags = SOCK_CLOEXEC | if nonblocking {SOCK_NONBLOCK} else {0};
                 match cvt_r!(accept4(fd, addr_ptr, len_ptr, flags)) {
                     Ok(fd) => return Ok(Socket(fd)),

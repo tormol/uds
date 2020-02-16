@@ -14,7 +14,7 @@ edition = "2018"
 exclude = ["tests", "src/bin"]
 
 [target."cfg(unix)".dependencies]
-libc = "0.2.59" # .59 added FIONCLEX for Linux
+libc = "0.2.69" # .69 added accept4() for NetBSD, Illumos and solaris
 # enabling this feature implements the extension traits for mio-uds types
 mio-uds = {version="0.6", optional=true} # no patch release builds with -Z minimal-versions
 # enabling this feature implements Evented for this crate's non-blocking seqpacket types

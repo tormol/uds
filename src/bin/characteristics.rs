@@ -20,6 +20,20 @@ fn max_path_len() -> usize {
     unsafe { mem::size_of_val(&mem::zeroed::<libc::sockaddr_un>().sun_path) }
 }
 
+fn std_bind_max_len_path() {
+    print!("std_bind_max_len_path ");
+    let max_len = max_path_len();
+    let max_path = std::iter::repeat('B').take(max_len).collect::<String>();
+    let _ = remove_file(&max_path);
+    match UnixDatagram::bind(&max_path) {
+        Ok(_) => {
+            println!("yes");
+            remove_file(&max_path).expect("delete socket file created by std");
+        }
+        Err(e) => println!("no ({})", e),
+    }
+}
+
 fn max_path_addr(fill: u8) -> (libc::sockaddr_un, libc::socklen_t) {
     unsafe {
         let mut addr: libc::sockaddr_un = mem::zeroed();
@@ -32,8 +46,8 @@ fn max_path_addr(fill: u8) -> (libc::sockaddr_un, libc::socklen_t) {
     }
 }
 
-fn std_get_local_max_path_addr() {
-    print!("std_get_local_max_path_addr ");
+fn std_get_local_max_len_path() {
+    print!("std_get_local_max_len_path ");
     let max_len = UnixSocketAddr::max_path_len();
     let max_path = std::iter::repeat('s').take(max_len).collect::<String>();
     let max_addr = UnixSocketAddr::from_path(&max_path)
@@ -57,20 +71,6 @@ fn std_get_local_max_path_addr() {
     }
 
     remove_file(&max_path).expect("delete socket file");
-}
-
-fn std_bind_max_len_path() {
-    print!("std_bind_max_len ");
-    let max_len = max_path_len();
-    let max_path = std::iter::repeat('B').take(max_len).collect::<String>();
-    let _ = remove_file(&max_path);
-    match UnixDatagram::bind(&max_path) {
-        Ok(_) => {
-            println!("yes");
-            remove_file(&max_path).expect("delete socket file created by std");
-        }
-        Err(e) => println!("no ({})", e),
-    }
 }
 
 fn std_reply_max_len_path() {
@@ -106,11 +106,12 @@ fn std_reply_max_len_path() {
     remove_file(&max_path).expect("delete max len socket file");
 }
 
-fn longer_addrs() {
+fn longer_paths() {
+    const MAX_EXTRA_TEST: usize = 100;
     #[repr(C)]
     struct LongAddr {
         sockaddr: libc::sockaddr_un,
-        extra: [u8; 100],
+        extra: [u8; MAX_EXTRA_TEST],
     }
     impl std::ops::Deref for LongAddr {
         type Target = [u8];
@@ -156,34 +157,62 @@ fn longer_addrs() {
         }
     }
 
-    print!("longer_addrs ");
-    let socket_a = UnixDatagram::unbound().unwrap();
-    let (path_addr, addrlen) = new_longaddr(b'P', 1);
-    unsafe {
-        let ret = libc::bind(
-            socket_a.as_raw_fd(),
-            &path_addr.sockaddr as *const _ as *const libc::sockaddr,
-            addrlen
-        );
-        if ret == -1 {
-            let error = io::Error::last_os_error();
-            if error.raw_os_error() == Some(libc::EINVAL) {
-                println!("no");
+    fn try_longer(fill: u8,  extra_len: usize) -> Result<bool, String> {
+        let socket_a = UnixDatagram::unbound().unwrap();
+        let (path_addr, addrlen) = new_longaddr(fill, extra_len);
+        unsafe {
+            let ret = libc::bind(
+                socket_a.as_raw_fd(),
+                &path_addr.sockaddr as *const _ as *const libc::sockaddr,
+                addrlen
+            );
+            if ret == -1 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EINVAL) {
+                    Ok(false)
+                } else {
+                    Err(format!("rejected with {} instead of EINVAL", error))
+                }
             } else {
-                println!("rejected with {} instead of EINVAL", error);
-            }
-        } else {
-            // TODO more experimentation
-            libc::close(ret);
-            match remove_file(std::str::from_utf8(&*path_addr).unwrap()) {
-                Err(ref err) if err.kind() == NotFound => {
-                    println!("bind() succeeded but path was not created");
-                },
-                Ok(_) => println!("yes"),
-                Err(err) => println!("bind() succeeded but deleting file failed with {}", err),
+                // TODO more experimentation
+                libc::close(ret);
+                match remove_file(std::str::from_utf8(&*path_addr).unwrap()) {
+                    Err(ref err) if err.kind() == NotFound => {
+                        Err(format!("bind() succeeded but path was not created"))
+                    },
+                    Ok(_) => Ok(true),
+                    Err(err) => Err(format!("bind() succeeded but deleting file failed with {}", err)),
+                }
             }
         }
     }
+
+    print!("longer_paths ");
+    match try_longer(b'P', 1) {
+        Ok(true) => {}
+        Ok(false) => {
+            println!("no");
+            return;
+        }
+        Err(description) => {
+            println!("{}", description);
+            return;
+        }
+    }
+    for extra_len in 1..=MAX_EXTRA_TEST {
+        match try_longer(b'a' + (extra_len as u8 % 10), extra_len) {
+            Ok(true) => {}
+            Ok(false) => {
+                println!("{}", extra_len-1);
+                return;
+            }
+            Err(description) => {
+                println!("{} (at 100 {})", extra_len-1, description);
+                return;
+            }
+        }
+    }
+    println!("100+");
 }
 
 fn std_checks_family() {
@@ -289,9 +318,9 @@ fn print_credentials() {
 fn main() {
     println!("OS {}", std::env::consts::OS);
     std_bind_max_len_path();
-    std_get_local_max_path_addr();
+    std_get_local_max_len_path();
     std_reply_max_len_path();
-    longer_addrs();
+    longer_paths();
     std_checks_family();
     stream_ancillary_payloads_not_merged();
     seqpacket_recv_empty();

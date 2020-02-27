@@ -69,17 +69,21 @@ macro_rules! impl_mio_if_enabled {($type:tt) => {
 ///
 /// # Operating system support
 ///
-/// Sequential-packet sockets are supported by Linux and FreeBSD, but not by
-/// for example macOS or OpenBSD.
+/// Sequential-packet sockets are supported by Linux, FreeBSD, NetBSD
+/// and Illumos, but not by for example macOS or OpenBSD.
 ///
 /// # Zero-length packets
 /// 
-/// While zero-length packets can be sent and received, there is no way to
-/// distinguish receiving one from reaching end of connection
-/// unless the packet has an ancilly payload.
-/// On FreeBSD (and probably other BSDs with seqpacket socket),
-/// beware of trying to receive with a zero-length buffer,
-/// as the call will always succeed.
+/// ... are best avoided:  
+/// On Linux and FreeBSD zero-length packets can be sent and received,
+/// but there is no way to distinguish receiving one from reaching
+/// end of connection unless the packet has an ancillary payload.
+/// Also beware of trying to receive with a zero-length buffer,
+/// as that will on FreeBSD (and probably other BSDs with seqpacket sockets)
+/// always succeed even if there is no packet waiting.
+///
+/// Illumos and Solaris doesn't support receiving zero-length packets at all:
+/// writes succeed but recv() will block.
 ///
 /// # Examples
 ///

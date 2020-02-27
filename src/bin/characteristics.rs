@@ -14,7 +14,7 @@ use std::mem::{self, ManuallyDrop};
 extern crate libc;
 
 extern crate uds;
-use uds::{UnixListenerExt, UnixStreamExt, UnixSocketAddr};
+use uds::{UnixListenerExt, UnixStreamExt, UnixSocketAddr, nonblocking::UnixSeqpacketConn};
 
 fn max_path_len() -> usize {
     unsafe { mem::size_of_val(&mem::zeroed::<libc::sockaddr_un>().sun_path) }
@@ -247,6 +247,36 @@ fn stream_ancillary_payloads_not_merged() {
     let _ = unsafe { UnixStream::from_raw_fd(fd_buf[2]) };
 }
 
+fn seqpacket_recv_empty() {
+    print!("seqpacket_recv_empty ");
+    let (a, b) = match UnixSeqpacketConn::pair() {
+        Ok(pair) => pair,
+        Err(e) => {
+            println!("N/A ({})", e); // seqpacket not supported
+            return;
+        }
+    };
+
+    match b.recv(&mut[]) {
+        Ok((0, false)) => {
+            println!("always"); // receive always succeeds
+            return;
+        },
+        Err(ref e) if e.kind() == WouldBlock => {},
+        unexpected => {
+            println!("strange (recv() with empty buffer returned {:?})", unexpected);
+            return;
+        }
+    }
+    a.send(&[]).expect("send empty packet without ancillary");
+    match b.recv(&mut[0; 8]) {
+        Ok((0, false)) => println!("yes"), // fully supported
+        Err(ref e) if e.kind() == WouldBlock => println!("no"), // empty send ignored
+        unexpected => println!("strange (recv() returned {:?})", unexpected),
+    }
+    // TODO test receiving with ancillary
+}
+
 fn print_credentials() {
     print!("credentials ");
     let (a, _b) = UnixStream::pair().expect("create stream socket pair");
@@ -264,5 +294,6 @@ fn main() {
     longer_addrs();
     std_checks_family();
     stream_ancillary_payloads_not_merged();
+    seqpacket_recv_empty();
     print_credentials();
 }

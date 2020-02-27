@@ -30,6 +30,7 @@ fn truncated_packets_are_not_resumed() {
     assert_eq!(&buf[..3], b"hel");
 }
 
+#[cfg(not(any(target_os="illumos", target_os="solaris")))]
 #[test]
 fn zero_length_packet_sort_of_works() {
     let (a, b) = NonblockingUnixSeqpacketConn::pair().unwrap();
@@ -112,8 +113,10 @@ fn recv_vectored() {
 
     assert_eq!(a.send_vectored(&[]).unwrap(), 0);
     assert_eq!(a.send_vectored(&[IoSlice::new(&[])]).unwrap(), 0);
-    assert_eq!(b.recv(&mut buf).unwrap(), (0, false));
-    assert_eq!(b.recv(&mut buf).unwrap(), (0, false));
+    if cfg!(not(any(target_os="illumos", target_os="solaris"))) {
+        assert_eq!(b.recv(&mut buf).unwrap(), (0, false));
+        assert_eq!(b.recv(&mut buf).unwrap(), (0, false));
+    }
 
     a.send_vectored(&[IoSlice::new(b"merge"), IoSlice::new(b" me")]).unwrap();
     assert_eq!(b.recv(&mut buf).unwrap(), (8, false));

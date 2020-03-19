@@ -47,37 +47,79 @@ impl SendCredentials {
 
 /// Credentials of the peer process when it called `connect()`, `accept()` or `pair()`.
 ///
+/// User and group IDs can be misleading if the peer side of the socket
+/// has been transfered to another process or the peer has changed privileges.  
+/// pid is almost impossible to use correctly, as the peer might have
+/// terminated and the pid reused, or as for euid, the socket has been sent
+/// to another process.
+///
 /// What information is received varies from OS to OS:
 /// 
-/// * Linux, OpenBSD and NetBSD provides process id, effective user id
+/// * Linux, OpenBSD and NetBSD provides process id, effective user ID
 ///   and effective group id.
-/// * macOS, FreeBSD and Dragonfly BSD provides effective user id
+/// * macOS, FreeBSD and DragonFly BSD provides effective user ID
 ///   and group memberships.
-/// * Illumos doesn't have this feature, so functions .
+/// * Illumos and Solaris provide more than one could possibly want.
+///
+/// Current limitations of this crate:
+///
+/// * OpenBSD, NetBSD, DragonFly BSD, Illumos and Solaris are not supported yet.
+///   On these OSes, functions that can return this type
+///   will return an error instead.
+/// * FreeBSD also provides pid, but this crate doesn't know that yet.
 #[derive(Clone,Copy, PartialEq)]
 pub enum ConnCredentials {
     LinuxLike{ pid: NonZeroU32, euid: u32, egid: u32 },
-    MacOsLike{ euid: u32, number_of_groups: u8, groups: [u32; 16/*what libc uses for all*/] },
+    MacOsLike{ euid: u32, number_of_groups: u8, groups: [u32; 16/*what libc uses for all OSes*/] },
 }
 impl ConnCredentials {
+    /// Get the process ID of the initial peer of a connection.
+    ///
+    /// This is currently only available on Linux & Android,
+    /// but will in the future also be available on OpenBSD and NetBSD,
+    /// and possibly also FreeBSD and Solaris.
     pub fn pid(&self) -> Option<NonZeroU32> {
         match self {
             &ConnCredentials::LinuxLike{ pid, .. } => Some(pid),
             &ConnCredentials::MacOsLike{ .. } => None,
         }
     }
+    /// Get the effective user ID of the initial peer of a connection.
+    ///
+    /// This is provided by any supported OS.
     pub fn euid(&self) -> u32 {
         match self {
             &ConnCredentials::LinuxLike{ euid, .. } => euid,
             &ConnCredentials::MacOsLike{ euid, .. } => euid,
         }
     }
+    /// Get the effective group ID of the initial peer of a connection.
+    ///
+    /// * On Linux, Android and in the future OpenBSD and NetBSD,
+    ///   `egid` from the `LinuxLike` variant is returned.
+    /// * On FreeBSD, macOS and in the future DragonFly BSD,
+    ///   `groups[0]` from the `MacOsLike` variant is returned
+    ///   (except in the unlikely case that `number_of_groups` is zero).
+    // Sources for that the first group is egid: `<sys/ucred.h>` for
+    // [macOS](https://github.com/apple/darwin-xnu/blob/cc0ca6d1af34cf5daee3673d1b0d770538f19ca5/bsd/sys/ucred.h#L140),
+    // [FreeBSD](https://svnweb.freebsd.org/base/stable/11/sys/sys/ucred.h?revision=331722&view=markup#l93),
+    // [DragonFly BSD](http://gitweb.dragonflybsd.org/dragonfly.git/blob/91dc43dd1215cf13344c65a8f9478bfd31b95814:/sys/sys/ucred.h#l77).
+    // Used by the implementation of `getpeereid()` for
+    // [FreeBSD](https://svnweb.freebsd.org/base/head/lib/libc/gen/getpeereid.c?view=markup),
+    // [DragonFly BSD](http://gitweb.dragonflybsd.org/dragonfly.git/blob/HEAD:/lib/libc/gen/getpeereid.c#l77),
+    // [macOS](https://opensource.apple.com/source/Libc/Libc-1082.50.1/gen/FreeBSD/getpeereid.c.auto.html)
+    // TODO remove None case before 0.2
     pub fn egid(&self) -> Option<u32> {
         match self {
             &ConnCredentials::LinuxLike{ egid, .. } => Some(egid),
-            &ConnCredentials::MacOsLike{ .. } => None,
+            &ConnCredentials::MacOsLike{ number_of_groups: 1..=255, groups, .. } => Some(groups[0]),
+            &ConnCredentials::MacOsLike{ number_of_groups: 0, .. } => None,
         }
     }
+    /// Get the groups that the initial peer of a connection was a mamber of.
+    ///
+    /// This is only available on FreeBSD and macOS (and in the future
+    /// DragonFly BSD), and an empty slice is returned on other OSes.
     pub fn groups(&self) -> &[u32] {
         match self {
             &ConnCredentials::LinuxLike{ .. } => &[],
@@ -190,7 +232,7 @@ pub type RawReceivedCredentials = libc::ucred;
 ///   kernel.  
 ///   Peer chooses whether to send effective or real uid or gid, unless root
 ///   in which case it can send whatever it wants.
-/// * On FreeBSD, NetBSD, Dragonfly, Illumos and likely macOS it is provided
+/// * On FreeBSD, NetBSD, DragonFly BSD, Illumos and likely macOS it is provided
 ///   by the OS automatically when the socket option is set.
 /// * OpenBSD doesn't appear to support receiving credentials.
 #[derive(Clone,Copy, PartialEq,Eq,Hash, Debug)]
@@ -242,7 +284,7 @@ impl ReceivedCredentials {
 
     /// The pid of the peer.
     ///
-    /// This information is only available on Linux, Android and Dragonfly BSD.
+    /// This information is only available on Linux, Android and DragonFly BSD.
     pub fn pid(&self) -> Option<u32> {
         #[cfg(any(target_os="linux", target_os="android", target_os="dragonfly"))] {
             Some(self.pid)

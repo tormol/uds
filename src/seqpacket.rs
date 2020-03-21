@@ -6,7 +6,10 @@ use std::path::Path;
 use libc::{SOCK_SEQPACKET, MSG_EOR, c_void, close, send};
 
 #[cfg(feature="mio")]
-use mio::{event::Evented, unix::EventedFd, Ready, Poll, PollOpt, Token};
+use mio::{event::Evented, unix::EventedFd, Poll, Token as Token_06, Ready, PollOpt};
+
+#[cfg(feature="mio_07")]
+use mio_07::{event::Source, unix::SourceFd, Registry, Token as Token_07, Interest};
 
 use crate::addr::*;
 use crate::helpers::*;
@@ -39,20 +42,50 @@ macro_rules! impl_rawfd_traits {($type:tt) => {
     }
 }}
 
-/// Implement `mio::Evented` for a f-wrapping type.
+/// Implement `mio::Evented` and `mio::Source` for a fd-wrapping type.
 macro_rules! impl_mio_if_enabled {($type:tt) => {
     #[cfg(feature="mio")]
     impl Evented for $type {
-        fn register(&self,  poll: &Poll,  token: Token,  interest: Ready,  opts: PollOpt)
+        fn register(&self,  poll: &Poll,  token: Token_06,  interest: Ready,  opts: PollOpt)
         -> Result<(), io::Error> {
             EventedFd(&self.fd).register(poll, token, interest, opts)
         }
-        fn reregister(&self,  poll: &Poll,  token: Token,  interest: Ready,  opts: PollOpt)
+        fn reregister(&self,  poll: &Poll,  token: Token_06,  interest: Ready,  opts: PollOpt)
         -> Result<(), io::Error> {
             EventedFd(&self.fd).reregister(poll, token, interest, opts)
         }
         fn deregister(&self,  poll: &Poll) -> Result<(), io::Error> {
             EventedFd(&self.fd).deregister(poll)
+        }
+    }
+
+    #[cfg(feature="mio_07")]
+    impl Source for $type {
+        fn register(&mut self,  registry: &Registry,  token: Token_07,  interest: Interest)
+        -> Result<(), io::Error> {
+            SourceFd(&self.fd).register(registry, token, interest)
+        }
+        fn reregister(&mut self,  registry: &Registry,  token: Token_07,  interest: Interest)
+        -> Result<(), io::Error> {
+            SourceFd(&self.fd).reregister(registry, token, interest)
+        }
+        fn deregister(&mut self,  registry: &Registry) -> Result<(), io::Error> {
+            SourceFd(&self.fd).deregister(registry)
+        }
+    }
+
+    #[cfg(feature="mio_07")]
+    impl<'a> Source for &'a $type {
+        fn register(&mut self,  registry: &Registry,  token: Token_07,  interest: Interest)
+        -> Result<(), io::Error> {
+            SourceFd(&self.fd).register(registry, token, interest)
+        }
+        fn reregister(&mut self,  registry: &Registry,  token: Token_07,  interest: Interest)
+        -> Result<(), io::Error> {
+            SourceFd(&self.fd).reregister(registry, token, interest)
+        }
+        fn deregister(&mut self,  registry: &Registry) -> Result<(), io::Error> {
+            SourceFd(&self.fd).deregister(registry)
         }
     }
 }}
@@ -418,10 +451,18 @@ impl UnixSeqpacketListener {
 /// `MSG_DONTWAIT`. If creating this type from a raw file descriptor, ensure
 /// the fd is set to nonblocking before using it through this type.
 ///
-/// This type can be used with mio if the `mio` feature is enabled:
+/// This type can be used with mio if one of the mio features are enabled:
+///
+/// For mio version 0.6:
 /// 
 /// ```toml
 /// uds = { version = "x.y", features=["mio"] }
+/// ```
+///
+/// For mio version 0.7:
+///
+/// ```toml
+/// uds = { version = "x.y", features=["mio_07"] }
 /// ```
 ///
 /// # Examples
@@ -447,7 +488,7 @@ impl UnixSeqpacketListener {
 /// }
 /// ```
 ///
-/// Registering with mio:
+/// Registering with mio (v0.6):
 ///
 #[cfg_attr(all(feature="mio", not(target_vendor="apple")), doc="```")]
 #[cfg_attr(all(feature="mio", target_vendor="apple"), doc="```no_run")]

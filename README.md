@@ -81,6 +81,13 @@ To enable them, add this to Cargo.toml:
 uds = {version="0.1.0", features=["mio-uds"]}
 ```
 
+Mio 0.7 is also supported:
+
+```toml
+[dependencies]
+uds = {version="0.1.0", features=["mio_07"]}
+```
+
 ## Minimum Rust version
 
 The minimum Rust version is 1.36, because of `std::io::IoSlice`.

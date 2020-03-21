@@ -65,6 +65,22 @@ impl UnixStreamExt for mio_uds::UnixStream {
     }
 }
 
+#[cfg(feature="mio_07")]
+impl UnixStreamExt for mio_07::net::UnixStream {
+    fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
+        let socket = Socket::new(SOCK_STREAM, true)?;
+        connect_to(socket.as_raw_fd(), addr)?;
+        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
+    }
+    fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
+    -> Result<Self, io::Error> {
+        let socket = Socket::new(SOCK_STREAM, true)?;
+        bind_to(socket.as_raw_fd(), from)?;
+        connect_to(socket.as_raw_fd(), to)?;
+        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
+    }
+}
+
 
 
 /// Extension trait for using [`UnixSocketAddr`](struct.UnixSocketAddr.html) with `UnixListener` types.
@@ -104,6 +120,24 @@ impl UnixListenerExt for UnixListener {
 #[cfg(feature="mio-uds")]
 impl UnixListenerExt for mio_uds::UnixListener {
     type Conn = mio_uds::UnixStream;
+
+    fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> {
+        let socket = Socket::new(SOCK_STREAM, true)?;
+        bind_to(socket.as_raw_fd(), on)?;
+        socket.start_listening()?;
+        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
+    }
+
+    fn accept_unix_addr(&self) -> Result<(Self::Conn, UnixSocketAddr), io::Error> {
+        let (socket, addr) = Socket::accept_from(self.as_raw_fd(), true)?;
+        let conn = unsafe { Self::Conn::from_raw_fd(socket.into_raw_fd()) };
+        Ok((conn, addr))
+    }
+}
+
+#[cfg(feature="mio_07")]
+impl UnixListenerExt for mio_07::net::UnixListener {
+    type Conn = mio_07::net::UnixStream;
 
     fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_STREAM, true)?;
@@ -182,3 +216,6 @@ impl UnixDatagramExt for UnixDatagram {}
 
 #[cfg(feature="mio-uds")]
 impl UnixDatagramExt for mio_uds::UnixDatagram {}
+
+#[cfg(feature="mio_07")]
+impl UnixDatagramExt for mio_07::net::UnixDatagram {}

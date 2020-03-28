@@ -14,7 +14,7 @@ use libc::{getpid, geteuid, getegid, getgid, getgroups};
 #[cfg_attr(
     not(any(
         target_os="linux", target_os="android",
-        target_os="freebsd", target_vendor="apple",
+        target_os="freebsd", target_os="dragonfly", target_vendor="apple",
         target_os="openbsd",
         target_os="illumos", target_os="solaris"
     )),
@@ -87,7 +87,7 @@ fn assert_credentials_matches_current_process(creds: &ConnCredentials,  socket_t
 #[cfg_attr(
     any(
         target_os="linux", target_os="android",
-        target_os="freebsd", target_vendor="apple",
+        target_os="freebsd", target_os="dragonfly", target_vendor="apple",
         target_os="openbsd",
         target_os="illumos", target_os="solaris"
     ),
@@ -109,7 +109,7 @@ fn peer_credentials_of_stream_conn() {
 #[cfg_attr(
     any(
         target_os="linux", target_os="android",
-        target_os="freebsd", target_vendor="apple",
+        target_os="freebsd", target_os="dragonfly", target_vendor="apple",
         target_os="openbsd",
         target_os="illumos", target_os="solaris"
     ),
@@ -117,16 +117,22 @@ fn peer_credentials_of_stream_conn() {
 )]
 fn peer_credentials_of_stream_pair() {
     let (a, b) = UnixStream::pair().expect("create unix stream pair");
-    let creds = a.initial_peer_credentials().expect("get pair credentials");
-    assert_credentials_matches_current_process(&creds, "stream pair");
-    assert_eq!(b.initial_peer_credentials().unwrap(), creds); // same process
-    assert_eq!(a.initial_peer_credentials().unwrap(), creds); // consistent
+    match a.initial_peer_credentials() {
+        Ok(creds) => {
+            assert_credentials_matches_current_process(&creds, "stream pair");
+            assert_eq!(b.initial_peer_credentials().unwrap(), creds); // same process
+            assert_eq!(a.initial_peer_credentials().unwrap(), creds); // consistent
+        }
+        Err(ref e) if e.kind() == NotConnected => {/*fails with this error on DragonFly BSD*/}
+        Err(e) => panic!("failed with unexpected error {}", e)
+    }
 }
 
 #[cfg_attr(
     any(
         target_os="linux", target_os="android",
-        target_os="freebsd", target_os="openbsd",
+        target_os="freebsd", target_os="dragonfly",
+        target_os="openbsd",
         target_os="illumos", target_os="solaris"
     ),
     test
@@ -147,23 +153,29 @@ fn peer_credentials_of_seqpacket_conn() {
 #[cfg_attr(
     any(
         target_os="linux", target_os="android",
-        target_os="freebsd", target_os="openbsd",
+        target_os="freebsd", target_os="dragonfly",
+        target_os="openbsd",
         target_os="illumos", target_os="solaris"
     ),
     test
 )]
 fn peer_credentials_of_seqpacket_pair() {
     let (a, b) = UnixSeqpacketConn::pair().expect("create unix seqpacket pair");
-    let creds = a.initial_peer_credentials().expect("get pair credentials");
-    assert_credentials_matches_current_process(&creds, "seqpacket pair");
-    assert_eq!(b.initial_peer_credentials().unwrap(), creds); // same process
-    assert_eq!(a.initial_peer_credentials().unwrap(), creds); // consistent
+    match a.initial_peer_credentials() {
+        Ok(creds) => {
+            assert_credentials_matches_current_process(&creds, "seqpacket pair");
+            assert_eq!(b.initial_peer_credentials().unwrap(), creds); // same process
+            assert_eq!(a.initial_peer_credentials().unwrap(), creds); // consistent
+        }
+        Err(ref e) if e.kind() == NotConnected => {/*fails with this error on DragonFly BSD*/}
+        Err(e) => panic!("failed with unexpected error {}", e)
+    }
 }
 
 #[cfg_attr(
     any(
         target_os="linux", target_os="android",
-        target_os="freebsd", target_vendor="apple",
+        target_os="freebsd", target_os="dragonfly", target_vendor="apple",
         target_os="openbsd",
         target_os="illumos", target_os="solaris"
     ),
@@ -176,21 +188,17 @@ fn pair_credentials_of_datagram_socketpair() {
             assert_credentials_matches_current_process(&creds, "datagram socketpair");
             assert_eq!(b.initial_pair_credentials().unwrap(), creds);
         }
-        Err(ref e) if e.kind() != InvalidInput  &&  !e.to_string().contains("not supported") => {
-            // fails with ENOTSUP on OmniOS, which becomes ErrorKind::Other
-            panic!("failed with unexpected error variant {:?}", e.kind());
+        Err(ref e) if e.kind() == InvalidInput  ||  e.to_string().contains("not supported") => {
+            // fails with ENOTSUP on OmniOS and DragonFly, which becomes ErrorKind::Other
         }
-        Err(_) if cfg!(any(target_os="linux", target_os="android")) => {
-            panic!("failed on Linux");
-        }
-        Err(_) => {}
+        Err(e) => panic!("failed with unexpected error variant {:?}", e.kind())
     }
 }
 
 #[cfg_attr(
     any(
         target_os="linux", target_os="android",
-        target_os="freebsd", target_vendor="apple",
+        target_os="freebsd", target_os="dragonfly", target_vendor="apple",
         target_os="openbsd",
         target_os="illumos", target_os="solaris"
     ),
@@ -213,7 +221,7 @@ fn no_peer_credentials_of_unconnected_datagram_socket() {
 #[cfg_attr(
     any(
         target_os="linux", target_os="android",
-        target_os="freebsd", target_vendor="apple",
+        target_os="freebsd", target_os="dragonfly", target_vendor="apple",
         target_os="openbsd",
         target_os="illumos", target_os="solaris"
     ),

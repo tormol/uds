@@ -4,7 +4,7 @@ use std::num::NonZeroU32;
 use std::io::ErrorKind::*;
 #[cfg(any(
     target_os="linux", target_os="android",
-    target_os="freebsd", target_vendor="apple",
+    target_os="freebsd", target_os="dragonfly", target_vendor="apple",
     target_os="openbsd"
 ))]
 use std::mem;
@@ -13,7 +13,7 @@ use std::ptr;
 
 #[cfg(any(
     target_os="linux", target_os="android",
-    target_os="freebsd", target_vendor="apple",
+    target_os="freebsd", target_os="dragonfly", target_vendor="apple",
     target_os="openbsd"
 ))]
 use libc::{getsockopt, c_void, socklen_t};
@@ -21,7 +21,7 @@ use libc::{getsockopt, c_void, socklen_t};
 use libc::{pid_t, uid_t, gid_t, getpid, getuid, geteuid, getgid, getegid};
 #[cfg(any(target_os="linux", target_os="android"))]
 use libc::{ucred, SOL_SOCKET, SO_PEERCRED};
-#[cfg(any(target_os="freebsd", target_vendor="apple"))]
+#[cfg(any(target_os="freebsd", target_os="dragonfly", target_vendor="apple"))]
 use libc::{xucred, XUCRED_VERSION, LOCAL_PEERCRED};
 #[cfg(target_vendor="apple")]
 use libc::SOL_LOCAL; // Apple is for once the one that does the right thing!
@@ -75,14 +75,14 @@ impl SendCredentials {
 ///   and effective group id.
 /// * macOS, FreeBSD and DragonFly BSD provides effective user ID
 ///   and group memberships. (The first group is also the effective group ID.)
-///   FreeBSD 13+ will also provide process ID.
-/// * Illumos and Solaris provide more than one could possibly want.
+///   [FreeBSD 13+ will also provide process ID](https://www.freebsd.org/cgi/man.cgi?query=unix&sektion=0&manpath=FreeBSD+13-current&format=html).
+/// * Illumos and Solaris provide [more than one could possibly want](https://illumos.org/man/3C/ucred)
 ///   (the `LinuxLike` variant is most likely returned).
 ///
 /// Current limitations of this crate:
 ///
-/// * NetBSD and DragonFly BSD are not supported.
-///   On these OSes, functions that can return this type
+/// * NetBSD is not supported.
+///   There functions that can return this type
 ///   will return an error instead.
 /// * Illumos and Solaris provides enough information to fill out
 ///   both variants, but obviously only one can be returned.
@@ -186,7 +186,7 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
     }
 }
 
-#[cfg(any(target_os="freebsd", target_vendor="apple"))]
+#[cfg(any(target_os="freebsd", target_os="dragonfly", target_vendor="apple"))]
 pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
     let mut xucred: xucred = unsafe { mem::zeroed() };
     xucred.cr_version = XUCRED_VERSION;
@@ -196,7 +196,7 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
     for group_slot in &mut xucred.cr_groups {
         *group_slot = !0;
     }
-    #[cfg(target_os="freebsd")]
+    #[cfg(any(target_os="freebsd", target_os="dragonfly"))]
     const PEERCRED_SOCKET_LEVEL: i32 = 0; // yes literal zero: not SOL_SOCKET, and SOL_LOCAL is not a thing
     #[cfg(target_vendor="apple")]
     use SOL_LOCAL as PEERCRED_SOCKET_LEVEL;
@@ -306,7 +306,7 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
     }
 }
 
-#[cfg(any(target_os="dragonfly", target_os="netbsd"))]
+#[cfg(target_os="netbsd")]
 pub fn peer_credentials(_: RawFd) -> Result<ConnCredentials, io::Error> {
     Err(io::Error::new(Other, "Not yet supported"))
 }

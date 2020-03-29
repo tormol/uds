@@ -523,11 +523,24 @@ fn accept_timeout() {
 }
 
 fn print_credentials() {
-    print!("credentials ");
+    print!("peer credentials ");
+    let _ = remove_file("conncreds.socket");
+    let _listener = UnixListener::bind("conncreds.socket")
+        .expect("create conncreds.socket and listen to it");
+    let client = UnixStream::connect("conncreds.socket")
+        .expect("connect to conncreds.socket");
+    remove_file("conncreds.socket").expect("delete created socket file");
+    match client.initial_peer_credentials() {
+        Ok(creds) => println!("yes ({:?})", creds),
+        Err(e) => println!("no ({})", e),
+    }
+    drop((client, _listener));
+
+    print!("pair credentials ");
     let (a, _b) = UnixStream::pair().expect("create stream socket pair");
     match a.initial_peer_credentials() {
-        Ok(creds) => println!("{:?}", creds),
-        Err(e) => println!("<{}>", e),
+        Ok(creds) => println!("yes ({:?})", creds),
+        Err(e) => println!("no ({})", e), // fails on DragonFly BSD and NetBSD
     }
 }
 

@@ -1,11 +1,12 @@
 #![allow(unused)] // when not applicable, tests should still compile
 
-use std::os::unix::net::{UnixStream, UnixDatagram};
+use std::os::unix::net::{UnixListener, UnixStream, UnixDatagram};
 use std::io::{self, ErrorKind::*};
 use std::fs::remove_file;
 
 extern crate uds;
-use uds::{ConnCredentials, UnixStreamExt, UnixSeqpacketConn, UnixDatagramExt};
+use uds::{ConnCredentials, UnixStreamExt, UnixDatagramExt};
+use uds::{UnixSeqpacketListener, UnixSeqpacketConn};
 
 extern crate libc;
 use libc::{getpid, geteuid, getegid, getgid, getgroups};
@@ -93,9 +94,31 @@ fn assert_credentials_matches_current_process(creds: &ConnCredentials,  socket_t
     test
 )]
 fn peer_credentials_of_stream_conn() {
-    let (a, b) = UnixStream::pair().expect("create unix stream pair");
-    let creds = a.initial_peer_credentials().expect("get credentials of peer");
+    let path = "stream_credentials.socket";
+    let _ = remove_file(path);
+    let listener = UnixListener::bind(path).expect("create socket file");
+    let client = UnixStream::connect(path).expect("connect");
+    remove_file(path).expect("delete socket file");
+    let creds = client.initial_peer_credentials().expect("get credentials of server");
     assert_credentials_matches_current_process(&creds, "stream conn");
+    let (server, _) = listener.accept().expect("accept");
+    assert_eq!(server.initial_peer_credentials().unwrap(), creds); // same process
+    assert_eq!(client.initial_peer_credentials().unwrap(), creds); // consistent
+}
+
+#[cfg_attr(
+    any(
+        target_os="linux", target_os="android",
+        target_os="freebsd", target_vendor="apple",
+        target_os="openbsd",
+        target_os="illumos", target_os="solaris"
+    ),
+    test
+)]
+fn peer_credentials_of_stream_pair() {
+    let (a, b) = UnixStream::pair().expect("create unix stream pair");
+    let creds = a.initial_peer_credentials().expect("get pair credentials");
+    assert_credentials_matches_current_process(&creds, "stream pair");
     assert_eq!(b.initial_peer_credentials().unwrap(), creds); // same process
     assert_eq!(a.initial_peer_credentials().unwrap(), creds); // consistent
 }
@@ -109,10 +132,32 @@ fn peer_credentials_of_stream_conn() {
     test
 )]
 fn peer_credentials_of_seqpacket_conn() {
+    let path = "seqpacket_credentials.socket";
+    let _ = remove_file(path);
+    let listener = UnixSeqpacketListener::bind(path).expect("create socket file");
+    let client = UnixSeqpacketConn::connect(path).expect("connect");
+    remove_file(path).expect("delete socket file");
+    let creds = client.initial_peer_credentials().expect("get credentials of server");
+    assert_credentials_matches_current_process(&creds, "stream conn");
+    let (server, _) = listener.accept_unix_addr().expect("accept");
+    assert_eq!(server.initial_peer_credentials().unwrap(), creds); // same process
+    assert_eq!(client.initial_peer_credentials().unwrap(), creds); // consistent
+}
+
+#[cfg_attr(
+    any(
+        target_os="linux", target_os="android",
+        target_os="freebsd", target_os="openbsd",
+        target_os="illumos", target_os="solaris"
+    ),
+    test
+)]
+fn peer_credentials_of_seqpacket_pair() {
     let (a, b) = UnixSeqpacketConn::pair().expect("create unix seqpacket pair");
-    let creds = a.initial_peer_credentials().expect("get credentials of peer");
-    assert_credentials_matches_current_process(&creds, "seqpacket conn");
-    assert_eq!(b.initial_peer_credentials().unwrap(), creds);
+    let creds = a.initial_peer_credentials().expect("get pair credentials");
+    assert_credentials_matches_current_process(&creds, "seqpacket pair");
+    assert_eq!(b.initial_peer_credentials().unwrap(), creds); // same process
+    assert_eq!(a.initial_peer_credentials().unwrap(), creds); // consistent
 }
 
 #[cfg_attr(

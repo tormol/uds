@@ -178,8 +178,6 @@ fn longer_paths() {
                     Err(format!("rejected with {} instead of EINVAL", error))
                 }
             } else {
-                // TODO more experimentation
-                libc::close(ret);
                 match remove_file(std::str::from_utf8(&*path_addr).unwrap()) {
                     Err(ref err) if err.kind() == NotFound => {
                         Err(format!("bind() succeeded but path was not created"))
@@ -355,6 +353,50 @@ fn fd_might_not_be_cloned() {
     }
 }
 
+fn fd_cloned_same_process() {
+    print!("fd_cloned_same_process ");
+    let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
+    if let Err(e) = a.send_fds(b"intentionally left non-empty", &[a.as_raw_fd()]) {
+        println!("N/A (send failed with {})", e);
+    } else {
+        let mut fd_buf = [-1; 2];
+        match b.recv_fds(&mut[0; 32], &mut fd_buf) {
+            Ok((_, 1)) if fd_buf[0] == a.as_raw_fd() => println!("no"),
+            Ok((_, 1)) => {
+                println!("yes");
+                let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+            },
+            unexpected => println!("BUG recv_fds() returned {:?}", unexpected),
+        }
+    }
+}
+
+fn fd_cloned_on_send() {
+    print!("fd_cloned_on_send ");
+    let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
+    if let Err(e) = a.send_fds(b"intentionally left non-empty", &[a.as_raw_fd()]) {
+        println!("N/A (send failed with {})", e);
+    } else {
+        let a_fd = a.as_raw_fd();
+        drop(a);
+        let new_fd = UnixDatagram::unbound().expect("create unbound datagram socket");
+        let mut fd_buf = [-1; 2];
+        match b.recv_fds(&mut[0; 32], &mut fd_buf) {
+            Ok((_, 1)) if fd_buf[0] == a_fd  &&  new_fd.as_raw_fd() == a_fd => {
+                println!("N/A (original, now reused fd returned)");
+            }
+            Ok((_, 1)) => {
+                let received = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+                match received.local_unix_addr() {
+                    Ok(_) => println!("yes"),
+                    Err(e) => println!("no ({})", e),
+                }
+            }
+            unexpected => println!("BUG recv_fds() returned {:?}", unexpected)
+        }
+    }
+}
+
 fn stream_ancillary_payloads_not_merged() {
     print!("stream_ancillary_payloads_not_merged ");
     let (mut a, b) = UnixStream::pair().expect("create stream socket pair");
@@ -372,7 +414,9 @@ fn stream_ancillary_payloads_not_merged() {
         Ok((bytes, fds)) => print!("no ({} bytes, {} fds) ", bytes, fds),
         Err(e) => print!("no ({})", e),
     }
-    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+    if fd_buf[0] != a.as_raw_fd() {
+        let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+    }
 
     let mut fd_buf = [-1; 6];
     match b.recv_fds(&mut[0u8; 20], &mut fd_buf) {
@@ -391,8 +435,10 @@ fn stream_ancillary_payloads_not_merged() {
         Ok((bytes, fds)) => print!("no ({} bytes, {} fds) ", bytes, fds),
         Err(e) => print!("no ({})", e),
     }
-    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
-    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
+    if fd_buf[0] != a.as_raw_fd()  &&  fd_buf[0] != b.as_raw_fd() {
+        let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+        let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
+    }
 
     let mut fd_buf = [-1; 6];
     match b.recv_fds(&mut[0u8; 3], &mut fd_buf) {
@@ -400,9 +446,11 @@ fn stream_ancillary_payloads_not_merged() {
         Ok((bytes, fds)) => println!("no ({} bytes, {} fds)", bytes, fds),
         Err(e) => println!("no ({})", e),
     }
-    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
-    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
-    let _ = unsafe { UnixStream::from_raw_fd(fd_buf[2]) };
+    if fd_buf[0] != a.as_raw_fd()  &&  fd_buf[0] != b.as_raw_fd() {
+        let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+        let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
+        let _ = unsafe { UnixStream::from_raw_fd(fd_buf[2]) };
+    }
 }
 
 fn seqpacket_recv_empty() {
@@ -494,6 +542,8 @@ fn main() {
     std_checks_family();
     fd_must_remain_open_until_received();
     fd_might_not_be_cloned();
+    fd_cloned_same_process();
+    fd_cloned_on_send();
     stream_ancillary_payloads_not_merged();
     seqpacket_recv_empty();
     accept_timeout();

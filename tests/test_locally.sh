@@ -1,5 +1,5 @@
 #!/bin/sh
-MSRV="1.36.0"
+MSRV="1.39.0"
 
 set -e
 export RUST_BACKTRACE=1
@@ -14,8 +14,10 @@ for target in $check_targets; do
     cargo check --target "$target" --tests --examples --features mio
     cargo check --target "$target" --tests --examples --features mio-uds
     cargo check --target "$target" --features mio_07
+    cargo check --target "$target" --features tokio
     cargo check --target "$target" --all-features
     RUSTFLAGS='--cfg features="os-poll"' cargo check --target "$target" --tests --examples --features mio_07
+    RUSTFLAGS='--cfg features="os-poll"' cargo check --target "$target" --tests --examples --features tokio
     RUSTFLAGS='--cfg features="os-poll"' cargo check --target "$target" --tests --examples --all-features
     echo
 done

@@ -8,6 +8,7 @@ script:
   - cargo check --features mio
   - cargo check --features mio-uds
   - cargo check --features mio_07
+  - cargo check --features tokio
   - export RUSTFLAGS='--cfg features="os-poll"'
   - cargo test --all-features --no-fail-fast
 

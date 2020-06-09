@@ -14,7 +14,8 @@ use std::mem::{self, ManuallyDrop};
 extern crate libc;
 
 extern crate uds;
-use uds::{UnixListenerExt, UnixStreamExt, UnixSocketAddr, nonblocking::UnixSeqpacketConn};
+use uds::{UnixListenerExt, UnixStreamExt, UnixDatagramExt, UnixSocketAddr};
+use uds::nonblocking::UnixSeqpacketConn;
 
 fn max_path_len() -> usize {
     unsafe { mem::size_of_val(&mem::zeroed::<libc::sockaddr_un>().sun_path) }
@@ -226,6 +227,66 @@ fn std_checks_family() {
     println!("yes"); // FIXME if it ever doesn't
 }
 
+fn fd_must_remain_open_until_received() {
+    print!("fd_must_remain_open_until_received ");
+    let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
+    b.set_nonblocking(true).expect("make receiving socket nonblocking");
+    {
+        let to_send = UnixDatagram::unbound().expect("create unbound datagram socket");
+        assert!(to_send.local_addr().expect("get addr of unbound socket").is_unnamed());
+        if let Err(e) = a.send_fds(b"non-empty", &[to_send.as_raw_fd()]) {
+            println!("N/A sending fd failed with {}", e);
+            return;
+        }
+    }
+    let mut fd_buf = [-1; 1];
+    match b.recv_fds(&mut[0; 10], &mut fd_buf[..]) {
+        Ok((_, 1)) => {
+            let received = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+            match received.local_addr() {
+                Ok(_) => println!("no"),
+                Err(e) => println!("yes (operation on fd failed with {})", e),
+            }
+        },
+        Ok((_, 0)) => println!("yes (fd was not received)"),
+        Ok((_, too_many)) => println!("N/A (received {} fds out of a single sent", too_many),
+        Err(ref e) if e.kind() == WouldBlock => println!("yes (datagram got dropped"),
+        Err(e) => println!("N/A (receive failed with unexpected reaseon {})", e),
+    }
+}
+
+fn fd_might_not_be_cloned() {
+    print!("fd_might_not_be_cloned ");
+    let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
+    b.set_nonblocking(true).expect("make receiving socket nonblocking");
+    if let Err(e) = a.send_fds(b"non-empty", &[a.as_raw_fd()]) {
+        println!("N/A sending fd failed with {}", e);
+        return;
+    }
+    let mut fd_buf = [-1; 1];
+    match b.recv_fds(&mut[0; 10], &mut fd_buf[..]) {
+        Ok((_, 1)) if fd_buf[0] == a.as_raw_fd() => {
+            drop(a);
+            let received = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+            match received.local_addr() {
+                Ok(_) => println!("maybe (fd {} still alive after close()d once)", fd_buf[0]),
+                Err(_) => println!("yes (sent and got fd {})", fd_buf[0]),
+            }
+        }
+        Ok((_, 1)) => {
+            let received = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+            match received.local_addr() {
+                Ok(_) => println!("no (sent fd {} got fd {})", a.as_raw_fd(), fd_buf[0]),
+                Err(e) => println!("maybe (operation on different fd failed with {})", e),
+            }
+        }
+        Ok((_, 0)) => println!("yes (fd was not received)"),
+        Ok((_, too_many)) => println!("N/A (received {} fds out of a single sent", too_many),
+        Err(ref e) if e.kind() == WouldBlock => println!("yes (datagram got dropped"),
+        Err(e) => println!("N/A (receive failed with unexpected reaseon {})", e),
+    }
+}
+
 fn stream_ancillary_payloads_not_merged() {
     print!("stream_ancillary_payloads_not_merged ");
     let (mut a, b) = UnixStream::pair().expect("create stream socket pair");
@@ -322,6 +383,8 @@ fn main() {
     std_reply_max_len_path();
     longer_paths();
     std_checks_family();
+    fd_must_remain_open_until_received();
+    fd_might_not_be_cloned();
     stream_ancillary_payloads_not_merged();
     seqpacket_recv_empty();
     print_credentials();

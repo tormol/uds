@@ -58,7 +58,8 @@ macOS doesn't support SOCK_SEQPACKET sockets, and abstract socket addresses is L
 If you're writing a datagram server though, using std or mio-uds means you can't respond to abstract adresses, forcing clients to use path addresses and deal with cleaning up the socket file after themselves.
 
 Even when all operating systems you care about supports something, they might behave differently:  
-On Linux file descriptors are cloned when they are sent, but macOS and the BSDs first clones them when they are received. This means that if a FD is closed before the peer receives it you have a problem.
+On Linux file descriptors are cloned when they are sent, but macOS and the BSDs first clones them when they are received. This means that if a FD is closed before the peer receives it you have a problem.  
+Also, some OSes might return the original file descriptor without cloning it if it's received within the same process as it was sent from. (Dragonfly BSD, possibly macOS and maybe FreeBSD).
 
 ## mio integration
 

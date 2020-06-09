@@ -6,6 +6,7 @@ use std::io::{ErrorKind::*, Read, Write};
 use std::os::unix::io::{AsRawFd, FromRawFd};
 use std::os::unix::net::{UnixDatagram, UnixStream};
 use std::env::consts::*;
+use std::mem::ManuallyDrop;
 
 use uds::{UnixDatagramExt, UnixStreamExt};
 
@@ -68,9 +69,13 @@ fn datagram_truncate_fds() {
     match b.recv_fds(&mut[0u8; 10], &mut fd_buf) {// receives to capacity or none
         Ok((3, 2)) => {
             assert_ne!(fd_buf[0], -1);
-            let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+            if fd_buf[0] != a.as_raw_fd()  &&  fd_buf[0] != b.as_raw_fd() {
+                let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+            }
             assert_ne!(fd_buf[1], -1);
-            let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[1]) };
+            if fd_buf[1] != a.as_raw_fd()  &&  fd_buf[1] != b.as_raw_fd() {
+                let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[1]) };
+            }
         }
         Ok((3, 0)) => assert_eq!(fd_buf, [-1; 2]),
         Ok((bytes, fds)) => {
@@ -159,9 +164,13 @@ fn stream_truncate_fds() {
         Ok((5, 2)) => {
             println!("a={}, b={}, received={:?}", a.as_raw_fd(), b.as_raw_fd(), fd_buf);
             assert_ne!(fd_buf[0], -1);
-            let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+            if fd_buf[0] != a.as_raw_fd()  &&  fd_buf[0] != b.as_raw_fd() {
+                let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+            }
             assert_ne!(fd_buf[1], -1);
-            let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
+            if fd_buf[1] != a.as_raw_fd()  &&  fd_buf[1] != b.as_raw_fd() {
+                let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
+            }
         },
         Ok((5, 0)) => {
             assert_eq!(fd_buf, [-1; 2]);
@@ -198,15 +207,18 @@ fn datagram_pass_one_fd() {
         .expect("receive with ancillary buffer");
     assert_eq!(bytes, 0);
     assert_eq!(fds, 1);
-    let received = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+    let mut received = unsafe { ManuallyDrop::new(UnixDatagram::from_raw_fd(fd_buf[0])) };
     received.send(b"got it").expect("send from received fd");
     let bytes = b.recv(&mut[0u8; 10]).expect("receive datagram sent from received fd");
     assert_eq!(bytes, 6);
+    if received.as_raw_fd() != a.as_raw_fd() {
+        unsafe { ManuallyDrop::drop(&mut received) };
+    }
 }
 
 #[test]
 fn datagram_pass_two_receive_one() {
-    //! Tests that glibc's 64bit minimum payload length is handled.
+    //! Tests somewhat that glibc's 64bit minimum payload length is handled
     let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
     a.send_fds(b"", &[a.as_raw_fd(), b.as_raw_fd()]).expect("send one file descriptor");
     let mut fd_buf = [-1];
@@ -214,7 +226,9 @@ fn datagram_pass_two_receive_one() {
         .expect("receive with ancillary buffer");
     assert_eq!(bytes, 0);
     assert_eq!(fds, 1);
-    let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+    if fd_buf[0] != a.as_raw_fd() {
+        let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+    }
     b.send_fds(b"nothing", &[]).expect("send another datagram with no fds");
     let (bytes, fds) = a.recv_fds(&mut[0u8; 10], &mut fd_buf)
         .expect("receive with ancillary buffer");
@@ -234,7 +248,9 @@ fn datagram_separate_payloads() {
     assert_eq!(bytes, 1);
     assert_eq!(fds, 1);
     assert_ne!(fd_buf[0], -1);
-    let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+    if fd_buf[0] != a.as_raw_fd() {
+        let _ = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+    }
     assert_eq!(fd_buf[1], -1);
     let (bytes, fds) = b.recv_fds(&mut[0u8; 1], &mut fd_buf).expect("receive fds");
     assert_eq!(bytes, 0);
@@ -250,8 +266,10 @@ fn datagram_separate_payloads() {
         assert_eq!(fds, 2);
         assert!(fd_buf[..2].iter().all(|&fd| fd != -1 ));
         assert_eq!(fd_buf[2], -1);
-        unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
-        unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
+        if fd_buf[0] != a.as_raw_fd()  &&  fd_buf[0] != b.as_raw_fd() {
+            let _ = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+            let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
+        }
     }
 }
 
@@ -264,8 +282,8 @@ fn stream_fd_order() {
     let (bytes, fds) = b.recv_fds(&mut[0u8; 3], &mut fd_buf).expect("receive fds");
     assert_eq!(bytes, 1);
     assert_eq!(fds, 2);
-    let mut received_a = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
-    let mut received_b = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
+    let mut received_a = unsafe { ManuallyDrop::new(UnixStream::from_raw_fd(fd_buf[0])) };
+    let mut received_b = unsafe { ManuallyDrop::new(UnixStream::from_raw_fd(fd_buf[1])) };
 
     let _ = a.set_nonblocking(true);
     let _ = b.set_nonblocking(true);
@@ -273,6 +291,12 @@ fn stream_fd_order() {
     b.read(&mut[0u8; 10]).expect("read bytes sent from received fd[0] (`a`)");
     received_b.write(b"I'm b").expect("write via transferred fd");
     a.read(&mut[0u8; 10]).expect("read bytes sent from received fd[1] (`b`)");
+    if received_a.as_raw_fd() != a.as_raw_fd() {// DragonFly BSD is VERY lazy
+        unsafe { ManuallyDrop::drop(&mut received_a) };
+    }
+    if received_b.as_raw_fd() != b.as_raw_fd() {
+        unsafe { ManuallyDrop::drop(&mut received_b) };
+    }
 }
 
 #[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
@@ -289,11 +313,10 @@ fn closed_before_received() {
     b.recv(&mut[0u8; 16]).expect("receive what was sent from sent fd");
 }
 
-#[cfg(any(target_os="illumos", target_os="solaris"))]
-#[test]
+#[cfg_attr(any(target_os="illumos", target_os="solaris"), test)]
 fn errors_on_solarish() {
     let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
-    let err = a.send_fds(b"0", &[]).expect_err("send empty fd slice");
+    assert_eq!(a.send_fds(b"0", &[]).expect("send empty fd slice"), (1, 0));
     assert!(format!("{}", err).contains("available"));
     let err = a.send_fds(b"1", &[a.as_raw_fd()]).expect_err("send fd");
     assert!(format!("{}", err).contains("available"));

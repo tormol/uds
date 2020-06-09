@@ -46,7 +46,7 @@ task:
   test_script:
     - cargo run --bin characteristics
     - export RUSTFLAGS='--cfg features="os-poll"'
-    - cargo test --all-features --no-fail-fast
+    - cargo test --all-features --no-fail-fast -- --test-threads=1
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -66,9 +66,10 @@ task:
     - # no version of mio-uds compiles
     - cargo build -Z minimal-versions --features mio_07
   test_script:
-    - cargo test -Z minimal-versions --features mio --no-fail-fast
+    - RUST_BACKTRACE=1
+    - cargo test -Z minimal-versions --features mio --no-fail-fast -- --test-threads=1
     - export RUSTFLAGS='--cfg features="os-poll"'
-    - cargo test -Z minimal-versions --features mio_07 --no-fail-fast
+    - cargo test -Z minimal-versions --features mio_07 --no-fail-fast -- --test-threads=1
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -95,8 +96,8 @@ task:
     - cargo build --target i686-unknown-linux-musl --all-features
   test_script:
     - export RUSTFLAGS='--cfg features="os-poll"'
-    - cargo test --target i686-unknown-linux-gnu --all-features --no-fail-fast
-    - cargo test --target i686-unknown-linux-musl --all-features --no-fail-fast
+    - cargo test --target i686-unknown-linux-gnu --all-features --no-fail-fast -- --test-threads=1
+    - cargo test --target i686-unknown-linux-musl --all-features --no-fail-fast -- --test-threads=1
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 

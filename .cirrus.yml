@@ -19,7 +19,7 @@ task:
     - cargo check --tests --examples
     - cargo check --features mio --tests --examples
     - cargo check --features mio-uds --tests --examples
-    - cargo check --features mio-07 --tests --examples
+    - cargo check --features mio_07 --tests --examples
     - cargo build --all-features --tests --examples
   test_script:
     - . $HOME/.cargo/env

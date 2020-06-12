@@ -31,6 +31,9 @@ mio_07 = {package="mio", version="0.7.0", features=["os-util", "uds"], optional=
 # instead RUSTFLAGS='--cfg feature="os-poll"' must be used to build & run mio_07 tests
 tokio_02 = {package="tokio", version = "0.2", features = ["io-driver"], optional=true}
 
+[target."cfg(unix)".dev-dependencies]
+tokio_02 = {package="tokio", version = "0.2", features = ["macros", "rt-core"]}
+
 [package.metadata.docs.rs]
 features = ["mio-uds", "mio", "mio_07", "tokio"]
 rustdoc-args = ["--cfg", "feature=\"os-poll\""]

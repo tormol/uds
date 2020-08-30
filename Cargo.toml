@@ -32,6 +32,8 @@ mio_07 = {package="mio", version="0.7.0", features=["os-util", "uds"], optional=
 tokio_02 = {package="tokio", version = "0.2", features = ["io-driver"], optional=true}
 
 [target."cfg(unix)".dev-dependencies]
+remove_dir_all = "=0.5.2" # Avoids MSRV bump (Stebalien/tempfile#120)
+tempfile = "3.1"
 tokio_02 = {package="tokio", version = "0.2", features = ["macros", "rt-core"]}
 
 [package.metadata.docs.rs]

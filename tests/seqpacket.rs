@@ -194,9 +194,38 @@ fn shutdown() {
 
 #[cfg(feature="tokio")]
 mod tokio {
+    use std::io;
     use std::net::Shutdown;
-    use uds::tokio::UnixSeqpacketConn;
+    use tempfile::tempdir;
+    use uds::tokio::{UnixSeqpacketConn, UnixSeqpacketListener};
     use tokio_02 as tokio;
+
+    #[tokio::test]
+    async fn test_listener_accept() {
+        let tmp_dir = tempdir().unwrap();
+        let sock_path = tmp_dir.path().join("listener.socket");
+        let mut listener = UnixSeqpacketListener::bind(&sock_path).unwrap();
+
+        let listener_handle = tokio::task::spawn(async move {
+            for i in 1usize..=3 {
+                let (mut socket, _) = listener.accept().await?;
+                tokio::task::spawn(async move {
+                    socket.send(&[b'h', b'i', b'0' + (i as u8)]).await.unwrap();
+                });
+            }
+            Ok::<(), io::Error>(())
+        });
+
+        for i in 1usize..=3 {
+            let mut socket = UnixSeqpacketConn::connect(&sock_path).await.unwrap();
+            let mut buf = [0u8; 3];
+            let read = socket.recv(&mut buf).await.unwrap();
+            assert_eq!(read, 3);
+            assert_eq!(&buf, &[b'h', b'i', b'0' + (i as u8)]);
+        }
+
+        assert!(listener_handle.await.is_ok());
+    }
 
     #[tokio::test]
     async fn test_conn_pair() {

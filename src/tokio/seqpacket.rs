@@ -1,4 +1,4 @@
-use crate::nonblocking;
+use crate::{nonblocking, UnixSocketAddr};
 use futures::{future::poll_fn, ready};
 use std::io;
 use std::net::Shutdown;
@@ -91,6 +91,59 @@ impl UnixSeqpacketConn {
                 Poll::Pending
             }
             x => Poll::Ready(x),
+        }
+    }
+}
+
+/// An I/O object representing a Unix Sequenced-packet socket.
+pub struct UnixSeqpacketListener {
+    io: PollEvented<nonblocking::UnixSeqpacketListener>,
+}
+
+impl UnixSeqpacketListener {
+    /// Connects to an unix seqpacket server listening at `path`.
+    pub fn bind<P: AsRef<Path>>(path: P) -> io::Result<UnixSeqpacketListener> {
+        let listener = nonblocking::UnixSeqpacketListener::bind(path)?;
+        let listener = UnixSeqpacketListener::new(listener)?;
+
+        Ok(listener)
+    }
+
+    pub(crate) fn new(
+        conn: nonblocking::UnixSeqpacketListener,
+    ) -> io::Result<UnixSeqpacketListener> {
+        let io = PollEvented::new(conn)?;
+        Ok(UnixSeqpacketListener { io })
+    }
+
+    /// Accepts a new incoming connection to this listener.
+    pub async fn accept(&mut self) -> io::Result<(UnixSeqpacketConn, UnixSocketAddr)> {
+        poll_fn(|cx| self.poll_accept(cx)).await
+    }
+
+    pub(crate) fn poll_accept(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<(UnixSeqpacketConn, UnixSocketAddr)>> {
+        let (io, addr) = ready!(self.poll_accept_nonblocking(cx))?;
+        let io = UnixSeqpacketConn::from_nonblocking(io)?;
+
+        Ok((io, addr)).into()
+    }
+
+    fn poll_accept_nonblocking(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<(nonblocking::UnixSeqpacketConn, UnixSocketAddr)>> {
+        ready!(self.io.poll_read_ready(cx, mio::Ready::readable()))?;
+
+        match self.io.get_ref().accept_unix_addr() {
+            Ok((socket, addr)) => Ok((socket, addr)).into(),
+            Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
+                self.io.clear_read_ready(cx, mio::Ready::readable())?;
+                Poll::Pending
+            }
+            Err(err) => Err(err).into(),
         }
     }
 }

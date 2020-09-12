@@ -4,6 +4,7 @@ extern crate uds;
 
 use std::io::ErrorKind::*;
 use std::io::{IoSlice, IoSliceMut};
+use std::net::Shutdown;
 use std::os::unix::io::AsRawFd;
 
 use uds::nonblocking::UnixSeqpacketConn as NonblockingUnixSeqpacketConn;
@@ -171,4 +172,22 @@ fn vectored() {
     assert_eq!(&array_2, b" me");
     let mut buffers = [IoSliceMut::new(&mut array_1)];
     assert_eq!(b.recv_vectored(&mut buffers).unwrap_err().kind(), WouldBlock);
+}
+
+#[test]
+fn shutdown() {
+    // Blocking
+    {
+        let (sock_tx, sock_rx) = UnixSeqpacketConn::pair().unwrap();
+        sock_tx.shutdown(Shutdown::Both).unwrap();
+        assert!(sock_tx.send(&[b'h', b'i', b'0']).is_err());
+        assert_eq!(sock_rx.recv(&mut [0u8; 3]).unwrap(), (0, false));
+    }
+    // Nonblocking
+    {
+        let (sock_tx, sock_rx) = NonblockingUnixSeqpacketConn::pair().unwrap();
+        sock_tx.shutdown(Shutdown::Both).unwrap();
+        assert!(sock_tx.send(&[b'h', b'i', b'0']).is_err());
+        assert_eq!(sock_rx.recv(&mut [0u8; 3]).unwrap(), (0, false));
+    }
 }

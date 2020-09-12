@@ -1,5 +1,6 @@
 use std::io::{self, ErrorKind, IoSlice, IoSliceMut};
 use std::mem;
+use std::net::Shutdown;
 use std::os::unix::io::{RawFd, FromRawFd, AsRawFd, IntoRawFd};
 use std::path::Path;
 
@@ -359,6 +360,17 @@ impl UnixSeqpacketConn {
     pub fn set_nonblocking(&self,  nonblocking: bool) -> Result<(), io::Error> {
         set_nonblocking(self.fd, nonblocking)
     }
+
+    /// Shuts down the read, write, or both halves of this connection.
+    pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
+        let how = match how {
+            Shutdown::Read => libc::SHUT_RD,
+            Shutdown::Write => libc::SHUT_WR,
+            Shutdown::Both => libc::SHUT_RDWR,
+        };
+        unsafe { cvt!(libc::shutdown(self.as_raw_fd(), how)) }?;
+        Ok(())
+    }
 }
 
 
@@ -649,6 +661,17 @@ impl NonblockingUnixSeqpacketConn {
         let cloned = Socket::try_clone_from(self.fd)?;
         // nonblockingness is shared and therefore inherited
         Ok(NonblockingUnixSeqpacketConn { fd: cloned.into_raw_fd() })
+    }
+
+    /// Shuts down the read, write, or both halves of this connection.
+    pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
+        let how = match how {
+            Shutdown::Read => libc::SHUT_RD,
+            Shutdown::Write => libc::SHUT_WR,
+            Shutdown::Both => libc::SHUT_RDWR,
+        };
+        unsafe { cvt!(libc::shutdown(self.as_raw_fd(), how)) }?;
+        Ok(())
     }
 }
 

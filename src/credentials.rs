@@ -54,7 +54,7 @@ impl SendCredentials {
 /// to another process.
 ///
 /// What information is received varies from OS to OS:
-/// 
+///
 /// * Linux, OpenBSD and NetBSD provides process id, effective user ID
 ///   and effective group id.
 /// * macOS, FreeBSD and DragonFly BSD provides effective user ID

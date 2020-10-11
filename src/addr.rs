@@ -172,7 +172,7 @@ impl UnixSocketAddr {
     /// # Examples
     ///
     /// Abstract address:
-    /// 
+    ///
     /// ```
     /// # use uds::UnixSocketAddr;
     /// if UnixSocketAddr::has_abstract_addresses() {
@@ -185,14 +185,14 @@ impl UnixSocketAddr {
     /// ```
     ///
     /// Escaped path address:
-    /// 
+    ///
     /// ```
     /// # use uds::UnixSocketAddr;
     /// assert!(UnixSocketAddr::new("./@path").unwrap().is_relative_path());
     /// ```
     ///
     /// Unnamed address:
-    /// 
+    ///
     /// ```
     /// # use uds::UnixSocketAddr;
     /// assert!(UnixSocketAddr::new("").unwrap().is_unnamed());
@@ -248,7 +248,7 @@ impl UnixSocketAddr {
     /// Create a pathname unix socket address.
     ///
     /// # Errors
-    /// 
+    ///
     /// This function will return an error if the path is too long for the
     /// underlying `sockaddr_un` type, or contains NUL (`'\0'`) bytes.
     pub fn from_path<P: AsRef<Path>+?Sized>(path: &P) -> Result<Self, io::Error> {
@@ -352,7 +352,7 @@ impl UnixSocketAddr {
     }
 
     /// This method can create unnamed and path addresses, but not abstract ones.
-    /// 
+    ///
     /// Creates unnamed addres for empty strings, and path addresses otherwise.
     ///
     /// # Errors
@@ -416,7 +416,7 @@ impl UnixSocketAddr {
     /// Prepare a `struct sockaddr*` and `socklen_t*` for passing to FFI
     /// (such as `getsockname()`, `getpeername()`, or `accept()`),
     /// and validate and normalize the produced address afterwards.
-    /// 
+    ///
     /// Validation:
     ///
     /// * Check that the address family is `AF_UNIX`.
@@ -527,7 +527,7 @@ impl UnixSocketAddr {
     /// If passing to `getpeername()`, `accept()` or similar, remember to set
     /// the length to the capacity,
     /// and consider using [`new_from_ffi()`](#method.new_from_ffi) instead.
-    /// 
+    ///
     /// # Safety
     ///
     /// Assigning a value > `sizeof(struct sockaddr_un)` to the `socklen_t`

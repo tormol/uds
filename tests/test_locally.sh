@@ -31,7 +31,7 @@ for target in $test_targets; do
     echo
 done
 
-export RUSTFLAGS='--cfg features="os-poll"' 
+export RUSTFLAGS='--cfg features="os-poll"'
 
 test_release_target="x86_64-unknown-linux-gnux32" # segfaults in debug mode
 echo "testing $test_release_target (in release mode)"

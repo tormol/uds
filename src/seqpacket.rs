@@ -107,7 +107,7 @@ macro_rules! impl_mio_if_enabled {($type:tt) => {
 /// and Illumos, but not by for example macOS or OpenBSD.
 ///
 /// # Zero-length packets
-/// 
+///
 /// ... are best avoided:  
 /// On Linux and FreeBSD zero-length packets can be sent and received,
 /// but there is no way to distinguish receiving one from reaching
@@ -126,7 +126,7 @@ macro_rules! impl_mio_if_enabled {($type:tt) => {
 #[cfg_attr(not(target_vendor="apple"), doc="```")]
 #[cfg_attr(target_vendor="apple", doc="```no_run")]
 /// let (a, b) = uds::UnixSeqpacketConn::pair().expect("Cannot create seqpacket pair");
-/// 
+///
 /// a.send(b"first").unwrap();
 /// a.send(b"second").unwrap();
 ///
@@ -220,7 +220,7 @@ impl UnixSeqpacketConn {
         let b = UnixSeqpacketConn { fd: b.into_raw_fd() };
         Ok((a, b))
     }
-    
+
     /// Get the address of this side of the connection.
     pub fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
         local_addr(self.fd)
@@ -466,7 +466,7 @@ impl UnixSeqpacketListener {
 /// This type can be used with mio if one of the mio features are enabled:
 ///
 /// For mio version 0.6:
-/// 
+///
 /// ```toml
 /// uds = { version = "x.y", features=["mio"] }
 /// ```
@@ -685,7 +685,7 @@ impl NonblockingUnixSeqpacketConn {
 /// and doesn't block if no client `connect()`ions are pending.
 ///
 /// This type can be used with mio if the `mio` feature is enabled:
-/// 
+///
 /// ```toml
 /// uds = { version = "x.y", features=["mio"] }
 /// ```

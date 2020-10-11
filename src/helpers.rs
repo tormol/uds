@@ -151,7 +151,7 @@ impl Socket {
         // Falls through to the portable but race-prone way for compatibility
         // with Linux < 2.6.27 becaue Rust std still supports 2.6.18.
         // (EINVAL is what std checks for, and EPROTONOTSUPPORT is for
-        // known-but-not-supported protcol or protocol families), 
+        // known-but-not-supported protcol or protocol families).
         #[cfg(not(target_vendor="apple"))] {
             let type_flags = socket_type | SOCK_CLOEXEC | if nonblocking {SOCK_NONBLOCK} else {0};
             match cvt!(unsafe { socket(AF_UNIX, type_flags, 0) }) {

@@ -206,7 +206,7 @@ fn datagram_pass_one_fd() {
 
 #[test]
 fn datagram_pass_two_receive_one() {
-    //! Tests that glibc's 64bit payload length 
+    //! Tests that glibc's 64bit minimum payload length is handled.
     let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
     a.send_fds(b"", &[a.as_raw_fd(), b.as_raw_fd()]).expect("send one file descriptor");
     let mut fd_buf = [-1];

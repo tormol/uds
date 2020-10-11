@@ -1,4 +1,5 @@
-//! An executable to test close-on-exec by exec()ing to this and 
+//! An executable to test close-on-exec by exec()ing to this program
+//! and checking the exit status.
 
 extern crate libc;
 

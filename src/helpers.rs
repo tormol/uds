@@ -12,13 +12,14 @@ use libc::{bind, connect, getsockname, getpeername};
 use libc::{socket, accept, close, listen, socketpair};
 use libc::{ioctl, FIONBIO, FIOCLEX, FIONCLEX};
 use libc::{fcntl, F_DUPFD_CLOEXEC, EINVAL, dup};
+use libc::{getsockopt, SOL_SOCKET, SO_ERROR, c_void};
 #[cfg(any(target_os="illumos", target_os="solaris"))]
 use libc::{F_GETFD, F_SETFD, FD_CLOEXEC};
 
 #[cfg(not(target_vendor="apple"))]
 use libc::{SOCK_CLOEXEC, SOCK_NONBLOCK, accept4, ENOSYS};
 #[cfg(target_vendor="apple")]
-use libc::{setsockopt, SOL_SOCKET, SO_NOSIGPIPE, c_void};
+use libc::{setsockopt, SO_NOSIGPIPE};
 
 use crate::addr::*;
 
@@ -103,6 +104,28 @@ pub fn local_addr(socket: RawFd) -> Result<UnixSocketAddr, io::Error> {
 /// Safe wrapper around `getpeername()`.
 pub fn peer_addr(socket: RawFd) -> Result<UnixSocketAddr, io::Error> {
     unsafe { get_unix_addr(socket, getpeername) }
+}
+
+/// Safe wrapper around `getsockopt(SO_ERROR)`.
+pub fn take_error(socket: RawFd) -> Result<Option<io::Error>, io::Error> {
+    unsafe {
+        let mut stored_errno: c_int = 0;
+        let mut optlen = mem::size_of::<c_int>() as socklen_t;
+        let dst_ptr = &mut stored_errno as *mut c_int as *mut c_void;
+        if getsockopt(socket, SOL_SOCKET, SO_ERROR, dst_ptr, &mut optlen) == -1 {
+            Err(io::Error::last_os_error())
+        } else if optlen != mem::size_of::<c_int>() as socklen_t {
+            // std panics here
+            Err(io::Error::new(
+                ErrorKind::InvalidData,
+                "got unexpected length from getsockopt(SO_ERROR)"
+            ))
+        } else if stored_errno == 0 {
+            Ok(None)
+        } else {
+            Ok(Some(io::Error::from_raw_os_error(stored_errno)))
+        }
+    }
 }
 
 

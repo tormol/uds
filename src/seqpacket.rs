@@ -280,6 +280,27 @@ impl UnixSeqpacketConn {
         recv_fds(self.fd, None, &mut[IoSliceMut::new(byte_buffer)], fd_buffer)
     }
 
+    /// Returns the value of the `SO_ERROR` option.
+    ///
+    /// This might only provide errors generated from nonblocking `connect()`s,
+    /// which this library doesn't support. It is therefore unlikely to be 
+    /// useful, but is provided for parity with stream counterpart in std.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
+    /// let (a, b) = uds::UnixSeqpacketConn::pair().unwrap();
+    /// drop(b);
+    ///
+    /// assert!(a.send(b"anyone there?").is_err());
+    /// assert!(a.take_error().unwrap().is_none());
+    /// ```
+    pub fn take_error(&self) -> Result<Option<io::Error>, io::Error> {
+        take_error(self.fd)
+    }
+
+
     /// Create a new file descriptor also pointing to this side of this connection.
     ///
     /// # Examples
@@ -419,6 +440,15 @@ impl UnixSeqpacketListener {
         let (socket, addr) = Socket::accept_from(self.fd, false)?;
         let conn = UnixSeqpacketConn { fd: socket.into_raw_fd() };
         Ok((conn, addr))
+    }
+
+    /// Returns the value of the `SO_ERROR` option.
+    ///
+    /// This might never produce any errors for listeners. It is therefore
+    /// unlikely to be useful, but is provided for parity with
+    /// `std::unix::net::UnixListener`.
+    pub fn take_error(&self) -> Result<Option<io::Error>, io::Error> {
+        take_error(self.fd)
     }
 
     /// Create a new file descriptor listening for the same connections.
@@ -637,6 +667,25 @@ impl NonblockingUnixSeqpacketConn {
         recv_fds(self.fd, None, &mut[IoSliceMut::new(byte_buffer)], fd_buffer)
     }
 
+    /// Returns the value of the `SO_ERROR` option.
+    ///
+    /// This might only provide errors generated from nonblocking `connect()`s,
+    /// which this library doesn't support. It is therefore unlikely to be 
+    /// useful, but is provided for parity with `mio`s `UnixStream`.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
+    /// let (a, _b) = uds::nonblocking::UnixSeqpacketConn::pair().unwrap();
+    ///
+    /// assert!(a.recv(&mut[0u8; 1024]).is_err());
+    /// assert!(a.take_error().unwrap().is_none());
+    /// ```
+    pub fn take_error(&self) -> Result<Option<io::Error>, io::Error> {
+        take_error(self.fd)
+    }
+
 
     /// Create a new file descriptor also pointing to this side of this connection.
     ///
@@ -760,6 +809,27 @@ impl NonblockingUnixSeqpacketListener {
         let (socket, addr) = Socket::accept_from(self.fd, true)?;
         let conn = NonblockingUnixSeqpacketConn { fd: socket.into_raw_fd() };
         Ok((conn, addr))
+    }
+
+    /// Returns the value of the `SO_ERROR` option.
+    ///
+    /// This might never produce any errors for listeners. It is therefore
+    /// unlikely to be useful, but is provided for parity with `mio`s
+    /// `UnixListener`.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(any(target_os="linux", target_os="android"), doc="```")]
+    #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
+    /// let listener = uds::nonblocking::UnixSeqpacketListener::bind_unix_addr(
+    ///     &uds::UnixSocketAddr::new("@nonblocking_take_error").unwrap()
+    /// ).unwrap();
+    ///
+    /// assert!(listener.accept_unix_addr().is_err());
+    /// assert!(listener.take_error().unwrap().is_none());
+    /// ```
+    pub fn take_error(&self) -> Result<Option<io::Error>, io::Error> {
+        take_error(self.fd)
     }
 
     /// Create a new file descriptor listening for the same connections.

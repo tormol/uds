@@ -13,7 +13,11 @@ categories = ["os::unix-apis", "asynchronous"]
 edition = "2018"
 exclude = ["tests", "src/bin"]
 
+[features]
+tokio = ["futures", "mio", "tokio_02"]
+
 [target."cfg(unix)".dependencies]
+futures = {version = "0.3", optional=true}
 libc = "0.2.69" # .69 added accept4() for NetBSD, Illumos and solaris
 # enabling this feature implements the extension traits for mio-uds types
 mio-uds = {version="0.6", optional=true} # no patch release builds with -Z minimal-versions
@@ -25,7 +29,13 @@ mio_07 = {package="mio", version="0.7.0", features=["os-util", "uds"], optional=
 # examples and tests for mio_07 also requires mio feature os-poll,
 # but adding it as a dev-dependency would also enable it in all cases (cargo bug #4866)
 # instead RUSTFLAGS='--cfg feature="os-poll"' must be used to build & run mio_07 tests
+tokio_02 = {package="tokio", version = "0.2", features = ["io-driver"], optional=true}
+
+[target."cfg(unix)".dev-dependencies]
+remove_dir_all = "=0.5.2" # Avoids MSRV bump (Stebalien/tempfile#120)
+tempfile = "3.1"
+tokio_02 = {package="tokio", version = "0.2", features = ["macros", "rt-core"]}
 
 [package.metadata.docs.rs]
-features = ["mio-uds", "mio", "mio_07"]
+features = ["mio-uds", "mio", "mio_07", "tokio"]
 rustdoc-args = ["--cfg", "feature=\"os-poll\""]

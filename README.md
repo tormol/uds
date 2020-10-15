@@ -88,10 +88,21 @@ Mio 0.7 is also supported:
 uds = {version="0.1.0", features=["mio_07"]}
 ```
 
+## tokio integration
+
+Futures-aware seqpacket types can optionally be used with [tokio](https://github.com/tokio-rs/tokio)
+(version 0.2):
+
+To enable it, add this to Cargo.toml:
+
+```toml
+[dependencies]
+uds = {version="0.1.0", features=["tokio"]}
+```
+
 ## Minimum Rust version
 
-The minimum Rust version is 1.36, because of `std::io::IoSlice`.
-If this is a problem I can make the parts that need it opt-out.
+The minimum Rust version is 1.39.
 
 ## `unsafe` usage
 

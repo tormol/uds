@@ -20,6 +20,7 @@ task:
     - cargo check --features mio --tests --examples
     - cargo check --features mio-uds --tests --examples
     - cargo check --features mio_07 --tests --examples
+    - cargo check --features tokio --tests --examples
     - cargo build --all-features --tests --examples
   test_script:
     - . $HOME/.cargo/env
@@ -29,9 +30,9 @@ task:
     - rm -rf $HOME/.cargo/registry/index
 
 task:
-  name: Linux amd64 1.36
+  name: Linux amd64 1.39
   container:
-    image: rust:1.36
+    image: rust:1.39
     cpu: 1
     memory: 1
   cargo_cache:
@@ -42,6 +43,7 @@ task:
     - cargo check --features mio
     - cargo check --features mio-uds
     - cargo check --features mio_07
+    - cargo check --features tokio
     - cargo build --all-features
   test_script:
     - cargo run --bin characteristics
@@ -65,11 +67,13 @@ task:
     - cargo build -Z minimal-versions --features mio
     - # no version of mio-uds compiles
     - cargo build -Z minimal-versions --features mio_07
+    - cargo build -Z minimal-versions --features tokio
   test_script:
     - RUST_BACKTRACE=1
     - cargo test -Z minimal-versions --features mio --no-fail-fast -- --test-threads=1
     - export RUSTFLAGS='--cfg features="os-poll"'
     - cargo test -Z minimal-versions --features mio_07 --no-fail-fast -- --test-threads=1
+    - cargo test -Z minimal-versions --features tokio --no-fail-fast -- --test-threads=1
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 

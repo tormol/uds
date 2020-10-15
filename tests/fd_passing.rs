@@ -299,7 +299,13 @@ fn stream_fd_order() {
     }
 }
 
-#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
+#[cfg_attr(
+    not(any(
+        target_vendor="apple", // flaky; timed out on https://travis-ci.com/github/tormol/uds/jobs/384395118
+        target_os="illumos", target_os="solaris"
+    )),
+    test
+)]
 fn closed_before_received() {
     let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
     a.send_fds(&[], &[a.as_raw_fd()]).expect("send fd");

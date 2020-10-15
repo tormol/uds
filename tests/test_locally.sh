@@ -26,7 +26,7 @@ test_targets="x86_64-unknown-linux-gnu x86_64-unknown-linux-musl \
               i686-unknown-linux-gnu i686-unknown-linux-musl"
 for target in $test_targets; do
     echo "testing $target"
-    cargo check --target "$target" --all-features -- --quiet
+    cargo check --target "$target" --all-features
     RUSTFLAGS='--cfg features="os-poll"' cargo test --target "$target" --all-features -- --quiet
     echo
 done

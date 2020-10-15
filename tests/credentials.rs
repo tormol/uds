@@ -15,7 +15,7 @@ use libc::{getpid, geteuid, getegid, getgid, getgroups};
     not(any(
         target_os="linux", target_os="android",
         target_os="freebsd", target_os="dragonfly", target_vendor="apple",
-        target_os="openbsd",
+        target_os="openbsd", target_os="netbsd",
         target_os="illumos", target_os="solaris"
     )),
     test
@@ -84,15 +84,7 @@ fn assert_credentials_matches_current_process(creds: &ConnCredentials,  socket_t
     }
 }
 
-#[cfg_attr(
-    any(
-        target_os="linux", target_os="android",
-        target_os="freebsd", target_os="dragonfly", target_vendor="apple",
-        target_os="openbsd",
-        target_os="illumos", target_os="solaris"
-    ),
-    test
-)]
+#[test]
 fn peer_credentials_of_stream_conn() {
     let path = "stream_credentials.socket";
     let _ = remove_file(path);
@@ -106,15 +98,7 @@ fn peer_credentials_of_stream_conn() {
     assert_eq!(client.initial_peer_credentials().unwrap(), creds); // consistent
 }
 
-#[cfg_attr(
-    any(
-        target_os="linux", target_os="android",
-        target_os="freebsd", target_os="dragonfly", target_vendor="apple",
-        target_os="openbsd",
-        target_os="illumos", target_os="solaris"
-    ),
-    test
-)]
+#[test]
 fn peer_credentials_of_stream_pair() {
     let (a, b) = UnixStream::pair().expect("create unix stream pair");
     match a.initial_peer_credentials() {
@@ -124,6 +108,7 @@ fn peer_credentials_of_stream_pair() {
             assert_eq!(a.initial_peer_credentials().unwrap(), creds); // consistent
         }
         Err(ref e) if e.kind() == NotConnected => {/*fails with this error on DragonFly BSD*/}
+        Err(ref e) if e.kind() == InvalidInput => {/*fails with this error on NetBSD*/}
         Err(e) => panic!("failed with unexpected error {}", e)
     }
 }
@@ -132,7 +117,7 @@ fn peer_credentials_of_stream_pair() {
     any(
         target_os="linux", target_os="android",
         target_os="freebsd", target_os="dragonfly",
-        target_os="openbsd",
+        target_os="openbsd", target_os="netbsd",
         target_os="illumos", target_os="solaris"
     ),
     test
@@ -154,7 +139,7 @@ fn peer_credentials_of_seqpacket_conn() {
     any(
         target_os="linux", target_os="android",
         target_os="freebsd", target_os="dragonfly",
-        target_os="openbsd",
+        target_os="openbsd", target_os="netbsd",
         target_os="illumos", target_os="solaris"
     ),
     test
@@ -168,19 +153,12 @@ fn peer_credentials_of_seqpacket_pair() {
             assert_eq!(a.initial_peer_credentials().unwrap(), creds); // consistent
         }
         Err(ref e) if e.kind() == NotConnected => {/*fails with this error on DragonFly BSD*/}
+        Err(ref e) if e.kind() == InvalidInput => {/*fails with this error on NetBSD*/}
         Err(e) => panic!("failed with unexpected error {}", e)
     }
 }
 
-#[cfg_attr(
-    any(
-        target_os="linux", target_os="android",
-        target_os="freebsd", target_os="dragonfly", target_vendor="apple",
-        target_os="openbsd",
-        target_os="illumos", target_os="solaris"
-    ),
-    test
-)]
+#[test]
 fn pair_credentials_of_datagram_socketpair() {
     let (a, b) = UnixDatagram::pair().expect("create unix datagram socket pair");
     match a.initial_pair_credentials() {
@@ -195,15 +173,7 @@ fn pair_credentials_of_datagram_socketpair() {
     }
 }
 
-#[cfg_attr(
-    any(
-        target_os="linux", target_os="android",
-        target_os="freebsd", target_os="dragonfly", target_vendor="apple",
-        target_os="openbsd",
-        target_os="illumos", target_os="solaris"
-    ),
-    test
-)]
+#[test]
 fn no_peer_credentials_of_unconnected_datagram_socket() {
     let _ = remove_file("datagram_credentials.socket");
     let socket = UnixDatagram::bind("datagram_credentials.socket")
@@ -218,15 +188,7 @@ fn no_peer_credentials_of_unconnected_datagram_socket() {
     );
 }
 
-#[cfg_attr(
-    any(
-        target_os="linux", target_os="android",
-        target_os="freebsd", target_os="dragonfly", target_vendor="apple",
-        target_os="openbsd",
-        target_os="illumos", target_os="solaris"
-    ),
-    test
-)]
+#[test]
 fn no_peer_credentials_of_regularly_connected_datagram_socket() {
     let a_pathname = "datagram_credentials_a.socket";
     let b_pathname = "datagram_credentials_b.socket";

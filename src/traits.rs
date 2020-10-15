@@ -188,11 +188,13 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
             .map(|(bytes, _, fds)| (bytes, fds) )
     }
 
-    /// Get the credentials of the process that created the socket pair this socket is one end of.
+    /// Get the credentials of the process that created a socket pair.
     ///
-    /// This function will return an error of kind `NotConnected` or
-    /// `InvalidInput`for sockets that have been "connected" to an address
-    /// or not connected at all.
+    /// This information is only available on Linux, and only for sockets that
+    /// was created with `pair()` or the underlying `socketpair()`.
+    /// For sockets that have merely been "connected" to an address
+    /// or not connected at all, an error of kind `NotConnected`
+    /// or `InvalidInput` is returned.
     ///
     /// The use cases of this function gotta be very narrow:
     ///
@@ -201,7 +203,7 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
     ///   FD-passing or inherited from a parent.
     /// * If it was created by the direct parent process,
     ///   one might as well use `getppid()` and go from there?
-    /// * A returned pid can be repurposed by the OS before the call returnes.
+    /// * A returned pid can be repurposed by the OS before the call returns.
     /// * uids or groups will be those in effect when the pair was created,
     ///   and will not reflect changes in privileges.
     ///

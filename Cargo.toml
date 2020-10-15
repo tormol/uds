@@ -17,8 +17,7 @@ exclude = ["tests", "src/bin"]
 tokio = ["futures", "mio", "tokio_02"]
 
 [target."cfg(unix)".dependencies]
-futures = {version = "0.3", optional=true}
-libc = "0.2.69" # .69 added accept4() for NetBSD, Illumos and solaris
+libc = "0.2.75" # .75 added peer credentials functions and types for solarish
 # enabling this feature implements the extension traits for mio-uds types
 mio-uds = {version="0.6", optional=true} # no patch release builds with -Z minimal-versions
 # enabling this feature implements Evented for this crate's non-blocking seqpacket types
@@ -29,6 +28,7 @@ mio_07 = {package="mio", version="0.7.0", features=["os-util", "uds"], optional=
 # examples and tests for mio_07 also requires mio feature os-poll,
 # but adding it as a dev-dependency would also enable it in all cases (cargo bug #4866)
 # instead RUSTFLAGS='--cfg feature="os-poll"' must be used to build & run mio_07 tests
+futures = {version = "0.3", optional=true}
 tokio_02 = {package="tokio", version = "0.2", features = ["io-driver"], optional=true}
 
 [target."cfg(unix)".dev-dependencies]

@@ -11,7 +11,11 @@ extern crate libc;
 use libc::{getpid, geteuid, getegid, getgid, getgroups};
 
 #[cfg_attr(
-    not(any(target_os="linux", target_os="android", target_os="freebsd", target_vendor="apple")),
+    not(any(
+        target_os="linux", target_os="android",
+        target_os="freebsd", target_vendor="apple",
+        target_os="illumos", target_os="solaris"
+    )),
     test
 )]
 fn peer_credentials_not_supported() {
@@ -79,7 +83,11 @@ fn assert_credentials_matches_current_process(creds: &ConnCredentials,  socket_t
 }
 
 #[cfg_attr(
-    any(target_os="linux", target_os="android", target_os="freebsd", target_vendor="apple"),
+    any(
+        target_os="linux", target_os="android",
+        target_os="freebsd", target_vendor="apple",
+        target_os="illumos", target_os="solaris"
+    ),
     test
 )]
 fn peer_credentials_of_stream_conn() {
@@ -90,7 +98,13 @@ fn peer_credentials_of_stream_conn() {
     assert_eq!(a.initial_peer_credentials().unwrap(), creds); // consistent
 }
 
-#[cfg_attr(any(target_os="linux", target_os="android", target_os="freebsd"), test)]
+#[cfg_attr(
+    any(
+        target_os="linux", target_os="android", target_os="freebsd",
+        target_os="illumos", target_os="solaris"
+    ),
+    test
+)]
 fn peer_credentials_of_seqpacket_conn() {
     let (a, b) = UnixSeqpacketConn::pair().expect("create unix seqpacket pair");
     let creds = a.initial_peer_credentials().expect("get credentials of peer");
@@ -99,7 +113,11 @@ fn peer_credentials_of_seqpacket_conn() {
 }
 
 #[cfg_attr(
-    any(target_os="linux", target_os="android", target_os="freebsd", target_vendor="apple"),
+    any(
+        target_os="linux", target_os="android",
+        target_os="freebsd", target_vendor="apple",
+        target_os="illumos", target_os="solaris"
+    ),
     test
 )]
 fn pair_credentials_of_datagram_socketpair() {
@@ -109,8 +127,9 @@ fn pair_credentials_of_datagram_socketpair() {
             assert_credentials_matches_current_process(&creds, "datagram socketpair");
             assert_eq!(b.initial_pair_credentials().unwrap(), creds);
         }
-        Err(ref e) if e.kind() != InvalidInput => {
-            panic!("failed with unexpect error variant {:?}", e.kind());
+        Err(ref e) if e.kind() != InvalidInput  &&  !e.to_string().contains("not supported") => {
+            // fails with ENOTSUP on OmniOS, which becomes ErrorKind::Other
+            panic!("failed with unexpected error variant {:?}", e.kind());
         }
         Err(_) if cfg!(any(target_os="linux", target_os="android")) => {
             panic!("failed on Linux");
@@ -120,7 +139,11 @@ fn pair_credentials_of_datagram_socketpair() {
 }
 
 #[cfg_attr(
-    any(target_os="linux", target_os="android", target_os="freebsd", target_vendor="apple"),
+    any(
+        target_os="linux", target_os="android",
+        target_os="freebsd", target_vendor="apple",
+        target_os="illumos", target_os="solaris"
+    ),
     test
 )]
 fn no_peer_credentials_of_unconnected_datagram_socket() {
@@ -130,11 +153,19 @@ fn no_peer_credentials_of_unconnected_datagram_socket() {
     remove_file("datagram_credentials.socket").unwrap();
     let err = socket.initial_pair_credentials()
         .expect_err("get credentials of unconnected datagram socket");
-    assert!(err.kind() == NotConnected/*junk returned*/  ||  err.kind() == InvalidInput/*failed properly*/);
+    assert!(
+        err.kind() == NotConnected // junk returned
+        ||  err.kind() == InvalidInput // failed properly
+        ||  err.to_string().contains("not supported") // failed with ENOTSUP
+    );
 }
 
 #[cfg_attr(
-    any(target_os="linux", target_os="android", target_os="freebsd", target_vendor="apple"),
+    any(
+        target_os="linux", target_os="android",
+        target_os="freebsd", target_vendor="apple",
+        target_os="illumos", target_os="solaris"
+    ),
     test
 )]
 fn no_peer_credentials_of_regularly_connected_datagram_socket() {
@@ -149,11 +180,19 @@ fn no_peer_credentials_of_regularly_connected_datagram_socket() {
 
     let err = a.initial_pair_credentials()
         .expect_err("get credentials of regularly connected datagram socket");
-    assert!(err.kind() == NotConnected/*junk returned*/  ||  err.kind() == InvalidInput/*macOS*/);
+    assert!(
+        err.kind() == NotConnected // junk returned
+        ||  err.kind() == InvalidInput // failed properly
+        ||  err.to_string().contains("not supported") // failed with ENOTSUP
+    );
     let err = b.initial_pair_credentials()
         .expect_err("get credentials of regularly connected datagram socket");
-    assert!(err.kind() == NotConnected/*junk returned*/  ||  err.kind() == InvalidInput/*macOS*/);
-
+    assert!(
+        err.kind() == NotConnected // junk returned
+        ||  err.kind() == InvalidInput // failed properly
+        ||  err.to_string().contains("not supported") // failed with ENOTSUP
+    );
+    
     remove_file(a_pathname).expect("delete socket file");
     remove_file(b_pathname).expect("delete socket file");
 }

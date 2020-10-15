@@ -4,6 +4,8 @@ use std::num::NonZeroU32;
 use std::io::ErrorKind::*;
 #[cfg(any(target_os="linux", target_os="android", target_os="freebsd", target_vendor="apple"))]
 use std::mem;
+#[cfg(any(target_os="illumos", target_os="solaris"))]
+use std::ptr;
 
 #[cfg(any(target_os="linux", target_os="android", target_os="freebsd", target_vendor="apple"))]
 use libc::{getsockopt, c_void, socklen_t};
@@ -15,6 +17,10 @@ use libc::{ucred, SOL_SOCKET, SO_PEERCRED};
 use libc::{xucred, XUCRED_VERSION, LOCAL_PEERCRED};
 #[cfg(target_vendor="apple")]
 use libc::SOL_LOCAL; // Apple is for once the one that does the right thing!
+#[cfg(any(target_os="illumos", target_os="solaris"))]
+use libc::{getpeerucred, ucred_free, ucred_t};
+#[cfg(any(target_os="illumos", target_os="solaris"))]
+use libc::{ucred_geteuid, ucred_getegid, ucred_getpid, ucred_getgroups, uid_t, gid_t, pid_t};
 
 /// Credentials to be sent with `send_ancillary()`.
 ///
@@ -49,24 +55,28 @@ impl SendCredentials {
 ///
 /// User and group IDs can be misleading if the peer side of the socket
 /// has been transfered to another process or the peer has changed privileges.  
-/// pid is almost impossible to use correctly, as the peer might have
+/// PID is almost impossible to use correctly, as the peer might have
 /// terminated and the pid reused, or as for euid, the socket has been sent
-/// to another process.
+/// to another process (via fd-passing or forking).
 ///
 /// What information is received varies from OS to OS:
 ///
-/// * Linux, OpenBSD and NetBSD provides process id, effective user ID
+/// * Linux, OpenBSD and NetBSD provides process ID, effective user ID
 ///   and effective group id.
 /// * macOS, FreeBSD and DragonFly BSD provides effective user ID
-///   and group memberships.
+///   and group memberships. (The first group is also the effective group ID.)
+///   FreeBSD 13+ will also provide process ID.
 /// * Illumos and Solaris provide more than one could possibly want.
+///   (the `LinuxLike` variant is most likely returned).
 ///
 /// Current limitations of this crate:
 ///
-/// * OpenBSD, NetBSD, DragonFly BSD, Illumos and Solaris are not supported yet.
+/// * NetBSD, OpenBSD and DragonFly BSD are not supported.
 ///   On these OSes, functions that can return this type
 ///   will return an error instead.
-/// * FreeBSD also provides pid, but this crate doesn't know that yet.
+/// * Illumos and Solaris provides enough information to fill out
+///   both variants, but obviously only one can be returned.
+/// * FreeBSD 13 will also provide pid, but this crate doesn't detect that.
 #[derive(Clone,Copy, PartialEq)]
 pub enum ConnCredentials {
     LinuxLike{ pid: NonZeroU32, euid: u32, egid: u32 },
@@ -118,7 +128,7 @@ impl ConnCredentials {
     }
     /// Get the groups that the initial peer of a connection was a mamber of.
     ///
-    /// This is only available on FreeBSD and macOS (and in the future
+    /// This is only available on FreeBSD and macOS (in the future also
     /// DragonFly BSD), and an empty slice is returned on other OSes.
     pub fn groups(&self) -> &[u32] {
         match self {
@@ -177,7 +187,7 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
         *group_slot = !0;
     }
     #[cfg(target_os="freebsd")]
-    const PEERCRED_SOCKET_LEVEL: i32 = 0; // yes literal zero: not SOL_SOCKET and SOL_LOCAL is not a thing
+    const PEERCRED_SOCKET_LEVEL: i32 = 0; // yes literal zero: not SOL_SOCKET, and SOL_LOCAL is not a thing
     #[cfg(target_vendor="apple")]
     use SOL_LOCAL as PEERCRED_SOCKET_LEVEL;
     unsafe {
@@ -204,6 +214,68 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
     }
 }
 
+#[cfg(any(target_os="illumos", target_os="solaris"))]
+pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
+    struct UcredAlloc(*mut ucred_t);
+    impl Drop for UcredAlloc {
+        fn drop(&mut self) {
+            unsafe {
+                if self.0 != ptr::null_mut() {
+                    ucred_free(self.0);
+                }
+            }
+        }
+    }
+    unsafe {
+        let mut ucred = UcredAlloc(ptr::null_mut());
+        if getpeerucred(conn, &mut ucred.0) == -1 {
+            Err(io::Error::last_os_error())
+        } else if ucred.0 == ptr::null_mut() {
+            Err(io::Error::new(NotConnected, "socket is not a connection"))
+        } else {
+            let euid = ucred_geteuid(ucred.0 as *const _);
+            let egid = ucred_getegid(ucred.0 as *const _);
+            let pid = ucred_getpid(ucred.0 as *const _);
+            let mut groups_ptr: *const gid_t = ptr::null_mut();
+            let ngroups = ucred_getgroups(ucred.0 as *const _, &mut groups_ptr);
+            println!("ucred {{ euid: {}, egid: {}, pid: {}, ngroups: {}, groups_ptr: {:#p} }}",
+                euid, egid, pid, ngroups, groups_ptr,
+            );
+            // https://illumos.org/man/3C/ucred says -1 is returned on error,
+            // but the types in libc are u32
+            if euid != -1i32 as uid_t  &&  egid != -1i32 as gid_t
+            &&  pid != -1i32 as pid_t  &&  pid != 0 {
+                Ok(ConnCredentials::LinuxLike {
+                    pid: NonZeroU32::new(pid as u32).unwrap(), // already checked
+                    euid: euid as u32,
+                    egid: egid as u32,
+                })
+            } else if euid != -1i32 as uid_t  &&  ngroups > 0  &&  groups_ptr != ptr::null() {
+                let mut groups = [u32::max_value(); 16];
+                let number_of_groups = ngroups.min(16) as u8;
+                for i in 0..number_of_groups {
+                    groups[i as usize] = *groups_ptr.offset(i as isize);
+                }
+                Ok(ConnCredentials::MacOsLike {
+                    euid: euid as u32,
+                    number_of_groups,
+                    groups,
+                })
+            } else if euid != -1i32 as uid_t  &&  egid != -1i32 as gid_t {
+                let mut groups = [u32::max_value(); 16];
+                groups[0] = egid as u32;
+                Ok(ConnCredentials::MacOsLike {
+                    euid: euid as u32,
+                    number_of_groups: 1,
+                    groups,
+                })
+            } else {
+                Err(io::Error::new(Other, "Not enough information was available"))
+            }
+        }
+    }
+}
+
 #[cfg(any(target_os="openbsd", target_os="dragonfly", target_os="netbsd"))]
 pub fn peer_credentials(_: RawFd) -> Result<ConnCredentials, io::Error> {
     Err(io::Error::new(Other, "Not yet supported"))
@@ -212,9 +284,10 @@ pub fn peer_credentials(_: RawFd) -> Result<ConnCredentials, io::Error> {
 #[cfg(not(any(
     target_os="linux", target_os="android", target_os="openbsd", target_os="netbsd",
     target_os="freebsd", target_os="dragonfly", target_os="netbsd", target_vendor="apple",
+    target_os="illumos", target_os="solaris",
 )))]
 pub fn peer_credentials(_: RawFd) -> Result<ConnCredentials, io::Error> {
-    Err(io::Error::new(Other, "not available"))
+    Err(io::Error::new(Other, "Not available"))
 }
 
 

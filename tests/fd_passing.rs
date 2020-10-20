@@ -216,7 +216,7 @@ fn datagram_pass_one_fd() {
     }
 }
 
-#[test]
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
 fn datagram_pass_two_receive_one() {
     //! Tests somewhat that glibc's 64bit minimum payload length is handled
     let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
@@ -320,10 +320,10 @@ fn closed_before_received() {
 }
 
 #[cfg_attr(any(target_os="illumos", target_os="solaris"), test)]
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), allow(unused))]
 fn errors_on_solarish() {
     let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
-    assert_eq!(a.send_fds(b"0", &[]).expect("send empty fd slice"), (1, 0));
-    assert!(format!("{}", err).contains("available"));
+    a.send_fds(b"0", &[]).expect("send empty fd slice");
     let err = a.send_fds(b"1", &[a.as_raw_fd()]).expect_err("send fd");
     assert!(format!("{}", err).contains("available"));
 

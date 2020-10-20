@@ -61,6 +61,16 @@ Even when all operating systems you care about supports something, they might be
 On Linux file descriptors are cloned when they are sent, but macOS and the BSDs first clones them when they are received. This means that if a FD is closed before the peer receives it you have a problem.  
 Also, some OSes might return the original file descriptor without cloning it if it's received within the same process as it was sent from. (Dragonfly BSD, possibly macOS and maybe FreeBSD).
 
+| | Linux | macOS | FreeBSD | NetBSD | Illumos |
+|-|-|-|-|-|-|
+| **Seqpacket** | Yes | N/A | Yes | Yes | N/A |
+| **peer credentials** | Yes | Yes | Yes | No | Yes |
+| **fd-passing** | Yes | Yes | Yes | Yes | No |
+| **abstract addresses** | Yes | N/A | N/A | N/A | N/A |
+| **mio (0.6 & 0.7 & uds)** | Yes | Yes | Yes | Yes | Yes |
+| **tokio** | Yes | Yes | Yes | Yes | Didn't run |
+| **Tested?** | Locally + CI | CI | CI + Manually | Manually | Manually |
+
 ## mio integration
 
 The non-blocking seqpacket types can optionally be used with [mio](https://github.com/tokio-rs/mio)
@@ -70,7 +80,7 @@ To enable it, add this to Cargo.toml:
 
 ```toml
 [dependencies]
-uds = {version="0.1.0", features=["mio"]}
+uds = {version="0.2.0", features=["mio"]}
 ```
 
 The extension traits can also be implement for [mio-uds](https://github.com/alexcrichton/mio-uds) types:
@@ -79,14 +89,14 @@ To enable them, add this to Cargo.toml:
 
 ```toml
 [dependencies]
-uds = {version="0.1.0", features=["mio-uds"]}
+uds = {version="0.2.0", features=["mio-uds"]}
 ```
 
 Mio 0.7 is also supported:
 
 ```toml
 [dependencies]
-uds = {version="0.1.0", features=["mio_07"]}
+uds = {version="0.2.0", features=["mio_07"]}
 ```
 
 ## tokio integration
@@ -98,7 +108,7 @@ To enable it, add this to Cargo.toml:
 
 ```toml
 [dependencies]
-uds = {version="0.1.0", features=["tokio"]}
+uds = {version="0.2.0", features=["tokio"]}
 ```
 
 ## Minimum Rust version
@@ -122,3 +132,24 @@ at your option.
 ### Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+
+## Release History
+
+### Version 0.2.0 (2020-10-21)
+
+* Require Rust 1.39.
+* Add mio 0.7 support, behind optional feature `mio_07`.  
+  (mio 0.6 is still supported and enabled with `mio` feature.)
+* Add tokio seqpacket types, behind optional feature `tokio`. (by @jmagnuson).
+* Add `shutdown()` to seqpacket connection types (by @jmagnuson).
+* Fix creating sockets failing on Illumos & Solaris.
+  (This crate was setting close-on-exec in an unsupported way.)
+* Support peer credentials on Illumos / Solaris.
+* Enable close-on-exec and non-blocking mode atomically on all OSes where prossible.  
+  (with `SOCK_CLOEXEC`, `SOCK_NONBLOCK` and `accept4()`)  
+  The only place missing these are macOS (and anything else by Apple).
+* Mark NetBSD Illumos as supported.
+
+### Version 0.1.0 (2029-02-15)
+
+(initial release)

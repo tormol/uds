@@ -4,7 +4,7 @@ use std::net::Shutdown;
 use std::os::unix::io::{RawFd, FromRawFd, AsRawFd, IntoRawFd};
 use std::path::Path;
 
-use libc::{SOCK_SEQPACKET, MSG_EOR, c_void, close, send};
+use libc::{SOCK_SEQPACKET, MSG_EOR, MSG_PEEK, c_void, close, send};
 
 #[cfg(feature="mio")]
 use mio::{event::Evented, unix::EventedFd, Poll, Token as Token_06, Ready, PollOpt};
@@ -247,7 +247,7 @@ impl UnixSeqpacketConn {
     /// Receive a packet from the peer.
     ///
     /// The returned `bool` indicates whether the packet was truncated due to
-    /// too short buffer.
+    /// the buffer beeing too small.
     pub fn recv(&self,  buffer: &mut[u8]) -> Result<(usize, bool), io::Error> {
         let mut buffers = [IoSliceMut::new(buffer)];
         let (bytes, ancillary) = recv_ancillary(self.fd, None, 0, &mut buffers, &mut[])?;
@@ -278,6 +278,39 @@ impl UnixSeqpacketConn {
     pub fn recv_fds(&self,  byte_buffer: &mut[u8],  fd_buffer: &mut[RawFd])
     -> Result<(usize, bool, usize), io::Error> {
         recv_fds(self.fd, None, &mut[IoSliceMut::new(byte_buffer)], fd_buffer)
+    }
+    /// Receive a packet without removing it from the incoming queue.
+    ///
+    /// The returned `bool` indicates whether the packet was truncated due to
+    /// the buffer being too small.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
+    /// let (a, b) = uds::UnixSeqpacketConn::pair().unwrap();
+    /// a.send(b"hello").unwrap();
+    /// let mut buf = [0u8; 10];
+    /// assert_eq!(b.peek(&mut buf[..1]).unwrap(), (1, true));
+    /// assert_eq!(&buf[..2], &[b'h', 0]);
+    /// assert_eq!(b.peek(&mut buf).unwrap(), (5, false));
+    /// assert_eq!(&buf[..5], b"hello");
+    /// assert_eq!(b.recv(&mut buf).unwrap(), (5, false));
+    /// assert_eq!(&buf[..5], b"hello");
+    /// ```
+    pub fn peek(&self,  buffer: &mut[u8]) -> Result<(usize, bool), io::Error> {
+        let mut buffers = [IoSliceMut::new(buffer)];
+        recv_ancillary(self.fd, None, MSG_PEEK, &mut buffers, &mut[])
+            .map(|(bytes, ancillary)| (bytes, ancillary.message_truncated()) )
+    }
+    /// Receive a packet without removing it from the incoming queue.
+    ///
+    /// The returned `bool` indicates whether the packet was truncated due to
+    /// the combined buffers being too small.
+    pub fn peek_vectored(&self,  buffers: &mut[IoSliceMut])
+    -> Result<(usize, bool), io::Error> {
+        recv_ancillary(self.fd, None, MSG_PEEK, buffers, &mut[])
+            .map(|(bytes, ancillary)| (bytes, ancillary.message_truncated()) )
     }
 
     /// Returns the value of the `SO_ERROR` option.
@@ -665,6 +698,40 @@ impl NonblockingUnixSeqpacketConn {
     pub fn recv_fds(&self,  byte_buffer: &mut[u8],  fd_buffer: &mut[RawFd])
     -> Result<(usize, bool, usize), io::Error> {
         recv_fds(self.fd, None, &mut[IoSliceMut::new(byte_buffer)], fd_buffer)
+    }
+    /// Receive a packet without removing it from the incoming queue.
+    ///
+    /// The returned `bool` indicates whether the packet was truncated due to
+    /// the buffer being too small.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
+    /// # use std::io::ErrorKind::*;
+    /// let (a, b) = uds::nonblocking::UnixSeqpacketConn::pair().unwrap();
+    /// let mut buf = [0u8; 10];
+    /// assert_eq!(b.peek(&mut buf).unwrap_err().kind(), WouldBlock);
+    /// a.send(b"hello").unwrap();
+    /// assert_eq!(b.peek(&mut buf).unwrap(), (5, false));
+    /// assert_eq!(&buf[..5], b"hello");
+    /// assert_eq!(b.recv(&mut buf).unwrap(), (5, false));
+    /// assert_eq!(&buf[..5], b"hello");
+    /// assert_eq!(b.peek(&mut buf).unwrap_err().kind(), WouldBlock);
+    /// ```
+    pub fn peek(&self,  buffer: &mut[u8]) -> Result<(usize, bool), io::Error> {
+        let mut buffers = [IoSliceMut::new(buffer)];
+        recv_ancillary(self.fd, None, MSG_PEEK, &mut buffers, &mut[])
+            .map(|(bytes, ancillary)| (bytes, ancillary.message_truncated()) )
+    }
+    /// Receive a packet without removing it from the incoming queue.
+    ///
+    /// The returned `bool` indicates whether the packet was truncated due to
+    /// the combined buffers being too small.
+    pub fn peek_vectored(&self,  buffers: &mut[IoSliceMut])
+    -> Result<(usize, bool), io::Error> {
+        recv_ancillary(self.fd, None, MSG_PEEK, buffers, &mut[])
+            .map(|(bytes, ancillary)| (bytes, ancillary.message_truncated()) )
     }
 
     /// Returns the value of the `SO_ERROR` option.

@@ -3,6 +3,7 @@ use std::mem;
 use std::net::Shutdown;
 use std::os::unix::io::{RawFd, FromRawFd, AsRawFd, IntoRawFd};
 use std::path::Path;
+use std::time::Duration;
 
 use libc::{SOCK_SEQPACKET, MSG_EOR, MSG_PEEK, c_void, close, send};
 
@@ -378,6 +379,90 @@ impl UnixSeqpacketConn {
         Ok(UnixSeqpacketConn { fd: cloned.into_raw_fd() })
     }
 
+    /// Sets the read timeout to the timeout specified.
+    ///
+    /// If the value specified is `None`, then `recv()` and it variants will
+    /// block indefinitely.
+    /// An `Err` is returned if the zero Duration is passed to this method.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
+    /// use std::io::ErrorKind;
+    /// use std::time::Duration;
+    /// use uds::UnixSeqpacketConn;
+    ///
+    /// let (a, b) = UnixSeqpacketConn::pair().unwrap();
+    /// a.set_read_timeout(Some(Duration::new(0, 2_000_000))).unwrap();
+    /// let error = a.recv(&mut[0; 1024]).unwrap_err();
+    /// assert_eq!(error.kind(), ErrorKind::WouldBlock);
+    /// ```
+    pub fn set_read_timeout(&self,  timeout: Option<Duration>)
+    -> Result<(), io::Error> {
+        set_timeout(self.fd, Shutdown::Read, timeout)
+    }
+    /// Get the read timeout of this socket.
+    ///
+    /// `None` is returned if there is no timeout.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
+    /// use uds::UnixSeqpacketConn;
+    /// use std::time::Duration;
+    ///
+    /// let timeout = Some(Duration::new(2, 0));
+    /// let conn = UnixSeqpacketConn::pair().unwrap().0;
+    /// conn.set_read_timeout(timeout).unwrap();
+    /// assert_eq!(conn.read_timeout().unwrap(), timeout);
+    /// ```
+    pub fn read_timeout(&self) -> Result<Option<Duration>, io::Error> {
+        get_timeout(self.fd, Shutdown::Read)
+    }
+    /// Sets the write timeout to the timeout specified.
+    ///
+    /// If the value specified is `None`, then `send()` and it variants will
+    /// block indefinitely.
+    /// An `Err` is returned if the zero Duration is passed to this method.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
+    /// # use std::io::ErrorKind;
+    /// # use std::time::Duration;
+    /// # use uds::UnixSeqpacketConn;
+    /// #
+    /// let (conn, _other) = UnixSeqpacketConn::pair().unwrap();
+    /// conn.set_write_timeout(Some(Duration::new(0, 500 * 1000))).unwrap();
+    /// loop {
+    ///     if let Err(e) = conn.send(&[0; 4096]) {
+    ///         assert_eq!(e.kind(), ErrorKind::WouldBlock);
+    ///         break
+    ///     }
+    /// }
+    /// ```
+    pub fn set_write_timeout(&self,  timeout: Option<Duration>)
+    -> Result<(), io::Error> {
+        set_timeout(self.fd, Shutdown::Write, timeout)
+    }
+    /// Get the write timeout of this socket.
+    ///
+    /// `None` is returned if there is no timeout.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
+    /// let conn = uds::UnixSeqpacketConn::pair().unwrap().0;
+    /// assert!(conn.write_timeout().unwrap().is_none());
+    /// ```
+    pub fn write_timeout(&self) -> Result<Option<Duration>, io::Error> {
+        get_timeout(self.fd, Shutdown::Write)
+    }
+
     /// Enable or disable nonblocking mode.
     ///
     /// Consider using the nonblocking variant of this type instead.
@@ -489,6 +574,52 @@ impl UnixSeqpacketListener {
         let cloned = Socket::try_clone_from(self.fd)?;
         Ok(UnixSeqpacketListener { fd: cloned.into_raw_fd() })
     }
+
+    /// Set a maximum duration to wait in a single `accept()` on this socket.
+    ///
+    /// `None` disables a previously set timeout.
+    /// An error is returnedd if the duration is zero.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(any(target_os="linux", target_os="android"), doc="```")]
+    #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
+    /// # use uds::{UnixSeqpacketListener, UnixSocketAddr};
+    /// # use std::io::ErrorKind;
+    /// # use std::time::Duration;
+    /// #
+    /// # let addr = UnixSocketAddr::new("@set_timeout").unwrap();
+    /// let listener = UnixSeqpacketListener::bind_unix_addr(&addr).unwrap();
+    /// listener.set_timeout(Some(Duration::new(0, 200_000_000))).unwrap();
+    /// let err = listener.accept_unix_addr().unwrap_err();
+    /// assert_eq!(err.kind(), ErrorKind::WouldBlock);
+    /// ```
+    pub fn set_timeout(&self,  timeout: Option<Duration>)
+    -> Result<(), io::Error> {
+        set_timeout(self.fd, Shutdown::Read, timeout)
+    }
+    /// Get the timeout for `accept()` on this socket.
+    ///
+    /// `None` is returned if there is no timeout.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(any(target_os="linux", target_os="android"), doc="```")]
+    #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
+    /// # use uds::{UnixSeqpacketListener, UnixSocketAddr};
+    /// # use std::time::Duration;
+    /// #
+    /// # let addr = UnixSocketAddr::new("@timeout").unwrap();
+    /// let listener = UnixSeqpacketListener::bind_unix_addr(&addr).unwrap();
+    /// assert_eq!(listener.timeout().unwrap(), None);
+    /// let timeout = Some(Duration::new(2, 0));
+    /// listener.set_timeout(timeout).unwrap();
+    /// assert_eq!(listener.timeout().unwrap(), timeout);
+    /// ```
+    pub fn timeout(&self) -> Result<Option<Duration>, io::Error> {
+        get_timeout(self.fd, Shutdown::Read)
+    }
+
     /// Enable or disable nonblocking-ness of [`accept_unix_addr()`](#method.accept_unix addr).
     ///
     /// The returned connnections will still be in blocking mode regardsless.

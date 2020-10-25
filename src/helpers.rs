@@ -3,9 +3,12 @@
 /// Functions to handle OS differences.
 /// Several adapted from std.
 
+use std::convert::TryInto;
 use std::os::unix::io::{RawFd, AsRawFd, IntoRawFd};
 use std::io::{self, ErrorKind};
 use std::mem;
+use std::net::Shutdown;
+use std::time::Duration;
 
 use libc::{c_int, sockaddr, socklen_t, AF_UNIX};
 use libc::{bind, connect, getsockname, getpeername};
@@ -13,13 +16,13 @@ use libc::{socket, accept, close, listen, socketpair};
 use libc::{ioctl, FIONBIO, FIOCLEX, FIONCLEX};
 use libc::{fcntl, F_DUPFD_CLOEXEC, EINVAL, dup};
 use libc::{getsockopt, SOL_SOCKET, SO_ERROR, c_void};
+use libc::{setsockopt, SO_RCVTIMEO, SO_SNDTIMEO, timeval};
 #[cfg(any(target_os="illumos", target_os="solaris"))]
 use libc::{F_GETFD, F_SETFD, FD_CLOEXEC};
-
 #[cfg(not(target_vendor="apple"))]
 use libc::{SOCK_CLOEXEC, SOCK_NONBLOCK, accept4, ENOSYS};
 #[cfg(target_vendor="apple")]
-use libc::{setsockopt, SO_NOSIGPIPE};
+use libc::SO_NOSIGPIPE;
 
 use crate::addr::*;
 
@@ -125,6 +128,72 @@ pub fn take_error(socket: RawFd) -> Result<Option<io::Error>, io::Error> {
         } else {
             Ok(Some(io::Error::from_raw_os_error(stored_errno)))
         }
+    }
+}
+
+/// Safe wrapper around `setsockopt(SO_RCVTIMEO)` or `setsockopt(SO_SNDTIMEO)`.
+pub fn set_timeout(socket: RawFd,  direction: Shutdown,  timeout: Option<Duration>)
+-> Result<(), io::Error> {
+    let mut time = unsafe { mem::zeroed::<timeval>() };
+    if let Some(duration) = timeout {
+        time.tv_sec = match duration.as_secs().try_into() {
+            Ok(seconds) => seconds,
+            Err(_) => {
+                return Err(io::Error::new(ErrorKind::InvalidInput, "timeout is too long"));
+            }
+        };
+        time.tv_usec = duration.subsec_micros() as _;
+        if time.tv_sec == 0  &&  time.tv_usec == 0 {
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                "zero-length timeouts are not supported"
+            ));
+        }
+    }
+
+    let option = match direction {
+        Shutdown::Read => SO_RCVTIMEO,
+        Shutdown::Write => SO_SNDTIMEO,
+        Shutdown::Both => unreachable!()
+    };
+
+    unsafe {
+        let time_ptr = &time as *const timeval as *const c_void;
+        let time_size = mem::size_of::<timeval>() as socklen_t;
+        cvt!(setsockopt(socket, SOL_SOCKET, option, time_ptr, time_size))?;
+    }
+    Ok(())
+}
+/// Safe wrapper around `getsockopt(SO_RCVTIMEO)` or `getsockopt(SO_SNDTIMEO)`.
+pub fn get_timeout(socket: RawFd,  direction: Shutdown)
+-> Result<Option<Duration>, io::Error> {
+    let timeout = unsafe {
+        let option = match direction {
+            Shutdown::Read => SO_RCVTIMEO,
+            Shutdown::Write => SO_SNDTIMEO,
+            Shutdown::Both => unreachable!()
+        };
+        let mut time = mem::zeroed::<timeval>();
+        let time_ptr = &mut time as *mut timeval as *mut c_void;
+        let mut time_size = mem::size_of::<timeval>() as socklen_t;
+        cvt!(getsockopt(socket, SOL_SOCKET, option, time_ptr, &mut time_size))?;
+        if time_size as usize != mem::size_of::<timeval>() {
+            return Err(io::Error::new(
+                ErrorKind::InvalidData,
+                "timeout has unexpected size"
+            ));
+        }
+        time
+    };
+
+    if timeout.tv_sec < 0 {
+        Err(io::Error::new(ErrorKind::InvalidData, "timeout is negative"))
+    } else if timeout.tv_usec < 0  ||  timeout.tv_usec >= 1_000_000 {
+        Err(io::Error::new(ErrorKind::InvalidData, "timeout has invalid microsecond part"))
+    } else if timeout.tv_sec == 0  &&  timeout.tv_usec == 0 {
+        Ok(None)
+    } else {
+        Ok(Some(Duration::new(timeout.tv_sec as u64, timeout.tv_usec as u32 * 1000)))
     }
 }
 

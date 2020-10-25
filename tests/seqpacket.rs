@@ -6,6 +6,7 @@ use std::io::ErrorKind::*;
 use std::io::{IoSlice, IoSliceMut};
 use std::net::Shutdown;
 use std::os::unix::io::AsRawFd;
+use std::time::{Duration, Instant};
 
 use uds::nonblocking::UnixSeqpacketConn as NonblockingUnixSeqpacketConn;
 use uds::{UnixSeqpacketConn, UnixSeqpacketListener};
@@ -190,6 +191,63 @@ fn shutdown() {
         assert!(sock_tx.send(&[b'h', b'i', b'0']).is_err());
         assert_eq!(sock_rx.recv(&mut [0u8; 3]).unwrap(), (0, false));
     }
+}
+
+#[test]
+fn read_timeout() {
+    let (conn, _other) = UnixSeqpacketConn::pair().expect("create seqpacket pair");
+    let timeout = Duration::new(0, 200_000_000);
+    assert_eq!(conn.read_timeout().expect("get default read timeout"), None);
+    conn.set_read_timeout(Some(timeout)).expect("set read timeout to 200ms");
+    assert_eq!(conn.read_timeout().expect("get read timeout"), Some(timeout));
+    let before = Instant::now();
+    let result = conn.recv(&mut[0]);
+    let after = Instant::now();
+    assert_eq!(result.expect_err("recv() timed out").kind(), WouldBlock);
+    let elapsed = after - before;
+    assert!(elapsed >= timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
+    assert!(elapsed < 2*timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
+}
+
+#[test]
+fn write_timeout() {
+    let (conn, _other) = UnixSeqpacketConn::pair().expect("create seqpacket pair");
+    let timeout = Duration::new(0, 150_000_000);
+    assert_eq!(conn.write_timeout().expect("get default write timeout"), None);
+    conn.set_write_timeout(Some(timeout)).expect("set write timeout to 200ms");
+    assert_eq!(conn.write_timeout().expect("get write timeout"), Some(timeout));
+    let elapsed = loop {
+        let before = Instant::now();
+        let result = conn.send(&[123; 456]);
+        let after = Instant::now();
+        if let Err(e) = result {
+            assert_eq!(e.kind(), WouldBlock);
+            break after - before;
+        }
+    };
+    assert!(elapsed >= timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
+    assert!(elapsed < 2*timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
+}
+
+#[test]
+fn accept_timeout() {
+    let addr = "accept_timeout.sock";
+    let timeout = Duration::new(0, 250_000_000);
+    let _ = std::fs::remove_file(addr);
+    let listener = UnixSeqpacketListener::bind(addr)
+        .expect("create seqpacket listener");
+    std::fs::remove_file(addr).expect("delete created socket file");
+
+    assert_eq!(listener.timeout().expect("get default timeout"), None);
+    listener.set_timeout(Some(timeout)).expect("set timeout to 200ms");
+    assert_eq!(listener.timeout().expect("get timeout"), Some(timeout));
+    let before = Instant::now();
+    let result = listener.accept_unix_addr();
+    let after = Instant::now();
+    assert_eq!(result.expect_err("recv() timed out").kind(), WouldBlock);
+    let elapsed = after - before;
+    assert!(elapsed >= timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
+    assert!(elapsed < 2*timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
 }
 
 #[cfg(feature="tokio")]

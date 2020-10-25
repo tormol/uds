@@ -306,6 +306,10 @@ fn stream_fd_order() {
     )),
     test
 )]
+#[cfg_attr(
+    any(target_vendor="apple", target_os="illumos", target_os="solaris"),
+    allow(unused)
+)]
 fn closed_before_received() {
     let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
     a.send_fds(&[], &[a.as_raw_fd()]).expect("send fd");

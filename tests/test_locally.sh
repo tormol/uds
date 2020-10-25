@@ -54,4 +54,4 @@ rm Cargo.lock
 echo
 
 echo "report OS and std characteristics"
-exec cargo run --bin characteristics
+exec cargo run --target x86_64-unknown-linux-gnu --bin characteristics

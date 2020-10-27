@@ -11,10 +11,10 @@ use crate::credentials::*;
 
 pub trait UnixStreamExt: AsRawFd + FromRawFd + Sized {
     fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        local_addr(self.as_raw_fd())
+        get_unix_addr(self.as_raw_fd(), GetAddr::LOCAL)
     }
     fn peer_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        peer_addr(self.as_raw_fd())
+        get_unix_addr(self.as_raw_fd(), GetAddr::PEER)
     }
 
     fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error>;
@@ -37,14 +37,14 @@ pub trait UnixStreamExt: AsRawFd + FromRawFd + Sized {
 impl UnixStreamExt for UnixStream {
     fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_STREAM, false)?;
-        connect_to(socket.as_raw_fd(), addr)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, addr)?;
         Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
     }
     fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
     -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_STREAM, false)?;
-        bind_to(socket.as_raw_fd(), from)?;
-        connect_to(socket.as_raw_fd(), to)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, from)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, to)?;
         Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
     }
 }
@@ -53,14 +53,14 @@ impl UnixStreamExt for UnixStream {
 impl UnixStreamExt for mio_uds::UnixStream {
     fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_STREAM, true)?;
-        connect_to(socket.as_raw_fd(), addr)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, addr)?;
         Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
     }
     fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
     -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_STREAM, true)?;
-        bind_to(socket.as_raw_fd(), from)?;
-        connect_to(socket.as_raw_fd(), to)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, from)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, to)?;
         Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
     }
 }
@@ -69,14 +69,14 @@ impl UnixStreamExt for mio_uds::UnixStream {
 impl UnixStreamExt for mio_07::net::UnixStream {
     fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_STREAM, true)?;
-        connect_to(socket.as_raw_fd(), addr)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, addr)?;
         Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
     }
     fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
     -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_STREAM, true)?;
-        bind_to(socket.as_raw_fd(), from)?;
-        connect_to(socket.as_raw_fd(), to)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, from)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, to)?;
         Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
     }
 }
@@ -92,7 +92,7 @@ pub trait UnixListenerExt: AsRawFd + FromRawFd + Sized {
 
     /// Get the address this socket is listening on.
     fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        local_addr(self.as_raw_fd())
+        get_unix_addr(self.as_raw_fd(), GetAddr::LOCAL)
     }
 
     /// Accept a connection and return the client's address as
@@ -105,7 +105,7 @@ impl UnixListenerExt for UnixListener {
 
     fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_STREAM, false)?;
-        bind_to(socket.as_raw_fd(), on)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, on)?;
         socket.start_listening()?;
         Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
     }
@@ -123,7 +123,7 @@ impl UnixListenerExt for mio_uds::UnixListener {
 
     fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_STREAM, true)?;
-        bind_to(socket.as_raw_fd(), on)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, on)?;
         socket.start_listening()?;
         Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
     }
@@ -141,7 +141,7 @@ impl UnixListenerExt for mio_07::net::UnixListener {
 
     fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_STREAM, true)?;
-        bind_to(socket.as_raw_fd(), on)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, on)?;
         socket.start_listening()?;
         Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
     }
@@ -157,17 +157,17 @@ impl UnixListenerExt for mio_07::net::UnixListener {
 
 pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
     fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        local_addr(self.as_raw_fd())
+        get_unix_addr(self.as_raw_fd(), GetAddr::LOCAL)
     }
     fn peer_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        peer_addr(self.as_raw_fd())
+        get_unix_addr(self.as_raw_fd(), GetAddr::PEER)
     }
 
     fn bind_to_unix_addr(&self,  addr: &UnixSocketAddr) -> Result<(), io::Error> {
-        bind_to(self.as_raw_fd(), addr)
+        set_unix_addr(self.as_raw_fd(), SetAddr::LOCAL, addr)
     }
     fn connect_to_unix_addr(&self,  addr: &UnixSocketAddr) -> Result<(), io::Error> {
-        connect_to(self.as_raw_fd(), addr)
+        set_unix_addr(self.as_raw_fd(), SetAddr::PEER, addr)
     }
 
     fn send_fds_to(&self,  datagram: &[u8],  fds: &[RawFd],  addr: &UnixSocketAddr)

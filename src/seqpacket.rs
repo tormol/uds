@@ -190,15 +190,15 @@ impl UnixSeqpacketConn {
     /// Connect to an unix seqpacket server listening at `addr`.
     pub fn connect_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_SEQPACKET, false)?;
-        connect_to(socket.as_raw_fd(), addr)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER,  addr)?;
         Ok(UnixSeqpacketConn { fd: socket.into_raw_fd() })
     }
     /// Bind to an address before connecting to a listening sequplacet socket.
     pub fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
     -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_SEQPACKET, false)?;
-        bind_to(socket.as_raw_fd(), from)?;
-        connect_to(socket.as_raw_fd(), to)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, from)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, to)?;
         Ok(UnixSeqpacketConn { fd: socket.into_raw_fd() })
     }
 
@@ -224,11 +224,11 @@ impl UnixSeqpacketConn {
 
     /// Get the address of this side of the connection.
     pub fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        local_addr(self.fd)
+        get_unix_addr(self.fd, GetAddr::LOCAL)
     }
     /// Get the address of the other side of the connection.
     pub fn peer_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        peer_addr(self.fd)
+        get_unix_addr(self.fd, GetAddr::PEER)
     }
     /// Get information about the process of the peer when the connection was established.
     ///
@@ -400,7 +400,7 @@ impl UnixSeqpacketConn {
     /// ```
     pub fn set_read_timeout(&self,  timeout: Option<Duration>)
     -> Result<(), io::Error> {
-        set_timeout(self.fd, Shutdown::Read, timeout)
+        set_timeout(self.fd, TimeoutDirection::READ, timeout)
     }
     /// Get the read timeout of this socket.
     ///
@@ -419,7 +419,7 @@ impl UnixSeqpacketConn {
     /// assert_eq!(conn.read_timeout().unwrap(), timeout);
     /// ```
     pub fn read_timeout(&self) -> Result<Option<Duration>, io::Error> {
-        get_timeout(self.fd, Shutdown::Read)
+        get_timeout(self.fd, TimeoutDirection::READ)
     }
     /// Sets the write timeout to the timeout specified.
     ///
@@ -446,7 +446,7 @@ impl UnixSeqpacketConn {
     /// ```
     pub fn set_write_timeout(&self,  timeout: Option<Duration>)
     -> Result<(), io::Error> {
-        set_timeout(self.fd, Shutdown::Write, timeout)
+        set_timeout(self.fd, TimeoutDirection::WRITE, timeout)
     }
     /// Get the write timeout of this socket.
     ///
@@ -460,7 +460,7 @@ impl UnixSeqpacketConn {
     /// assert!(conn.write_timeout().unwrap().is_none());
     /// ```
     pub fn write_timeout(&self) -> Result<Option<Duration>, io::Error> {
-        get_timeout(self.fd, Shutdown::Write)
+        get_timeout(self.fd, TimeoutDirection::WRITE)
     }
 
     /// Enable or disable nonblocking mode.
@@ -544,13 +544,13 @@ impl UnixSeqpacketListener {
     }
     pub fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_SEQPACKET, false)?;
-        bind_to(socket.as_raw_fd(), addr)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, addr)?;
         socket.start_listening()?;
         Ok(UnixSeqpacketListener { fd: socket.into_raw_fd() })
     }
 
     pub fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        local_addr(self.fd)
+        get_unix_addr(self.fd, GetAddr::LOCAL)
     }
 
     pub fn accept_unix_addr(&self)
@@ -596,7 +596,7 @@ impl UnixSeqpacketListener {
     /// ```
     pub fn set_timeout(&self,  timeout: Option<Duration>)
     -> Result<(), io::Error> {
-        set_timeout(self.fd, Shutdown::Read, timeout)
+        set_timeout(self.fd, TimeoutDirection::READ, timeout)
     }
     /// Get the timeout for `accept()` on this socket.
     ///
@@ -617,7 +617,7 @@ impl UnixSeqpacketListener {
     /// assert_eq!(listener.timeout().unwrap(), timeout);
     /// ```
     pub fn timeout(&self) -> Result<Option<Duration>, io::Error> {
-        get_timeout(self.fd, Shutdown::Read)
+        get_timeout(self.fd, TimeoutDirection::READ)
     }
 
     /// Enable or disable nonblocking-ness of [`accept_unix_addr()`](#method.accept_unix addr).
@@ -741,15 +741,15 @@ impl NonblockingUnixSeqpacketConn {
     /// Connect to an unix seqpacket server listening at `addr`.
     pub fn connect_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_SEQPACKET, true)?;
-        connect_to(socket.as_raw_fd(), addr)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, addr)?;
         Ok(NonblockingUnixSeqpacketConn { fd: socket.into_raw_fd() })
     }
     /// Bind to an address before connecting to a listening seqpacket socket.
     pub fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
     -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_SEQPACKET, true)?;
-        bind_to(socket.as_raw_fd(), from)?;
-        connect_to(socket.as_raw_fd(), to)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, from)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, to)?;
         Ok(NonblockingUnixSeqpacketConn { fd: socket.into_raw_fd() })
     }
 
@@ -775,11 +775,11 @@ impl NonblockingUnixSeqpacketConn {
 
     /// Get the address of this side of the connection.
     pub fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        local_addr(self.fd)
+        get_unix_addr(self.fd, GetAddr::LOCAL)
     }
     /// Get the address of the other side of the connection.
     pub fn peer_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        peer_addr(self.fd)
+        get_unix_addr(self.fd, GetAddr::PEER)
     }
     /// Get information about the process of the peer when the connection was established.
     ///
@@ -991,14 +991,14 @@ impl NonblockingUnixSeqpacketListener {
     /// ```
     pub fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_SEQPACKET, true)?;
-        bind_to(socket.as_raw_fd(), addr)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, addr)?;
         socket.start_listening()?;
         Ok(NonblockingUnixSeqpacketListener { fd: socket.into_raw_fd() })
     }
 
     /// Get the address this listener was bound to.
     pub fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        local_addr(self.fd)
+        get_unix_addr(self.fd, GetAddr::LOCAL)
     }
 
     /// Accept a non-blocking connection, non-blockingly.

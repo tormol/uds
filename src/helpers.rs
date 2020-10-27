@@ -7,7 +7,6 @@ use std::convert::TryInto;
 use std::os::unix::io::{RawFd, AsRawFd, IntoRawFd};
 use std::io::{self, ErrorKind};
 use std::mem;
-use std::net::Shutdown;
 use std::time::Duration;
 
 use libc::{c_int, sockaddr, socklen_t, AF_UNIX};
@@ -66,47 +65,45 @@ pub fn set_nonblocking(fd: RawFd,  nonblocking: bool) -> Result<(), io::Error> {
 
 
 
-type SetSide = unsafe extern "C" fn(RawFd, *const sockaddr, socklen_t) -> c_int;
-unsafe fn set_unix_addr(socket: RawFd,  set_side: SetSide,  addr: &UnixSocketAddr)
+pub struct SetAddr(unsafe extern "C" fn(RawFd, *const sockaddr, socklen_t) -> c_int);
+impl SetAddr {
+    pub const LOCAL: Self = SetAddr(bind);
+    pub const PEER: Self = SetAddr(connect);
+}
+/// Safe wrapper around `bind()` or `connect()`, that retries on EINTR.
+pub fn set_unix_addr(socket: RawFd,  set_side: SetAddr,  addr: &UnixSocketAddr)
 -> Result<(), io::Error> {
-    let (addr, len) = addr.as_raw_general();
-    // check for EINTR just in case. If the file system is slow or somethhing.
-    loop {
-        if set_side(socket, addr, len) != -1 {
-            break Ok(());
-        }
-        let err = io::Error::last_os_error();
-        if err.kind() != ErrorKind::Interrupted {
-            break Err(err);
+    unsafe {
+        let (addr, len) = addr.as_raw_general();
+        // check for EINTR just in case. If the file system is slow or somethhing.
+        loop {
+            if (set_side.0)(socket, addr, len) != -1 {
+                break Ok(());
+            }
+            let err = io::Error::last_os_error();
+            if err.kind() != ErrorKind::Interrupted {
+                break Err(err);
+            }
         }
     }
 }
-/// Safe wrapper around `bind()`, that retries on EINTR.
-pub fn bind_to(socket: RawFd,  addr: &UnixSocketAddr) -> Result<(), io::Error> {
-    unsafe { set_unix_addr(socket, bind, addr) }
-}
-/// Safe wrapper around `connect()`, that retries on EINTR.
-pub fn connect_to(socket: RawFd,  addr: &UnixSocketAddr) -> Result<(), io::Error> {
-    unsafe { set_unix_addr(socket, connect, addr) }
-}
 
-type GetSide = unsafe extern "C" fn(RawFd, *mut sockaddr, *mut socklen_t) -> c_int;
-unsafe fn get_unix_addr(socket: RawFd,  get_side: GetSide)
+pub struct GetAddr(unsafe extern "C" fn(RawFd, *mut sockaddr, *mut socklen_t) -> c_int);
+impl GetAddr {
+    pub const LOCAL: Self = GetAddr(getsockname);
+    pub const PEER: Self = GetAddr(getpeername);
+}
+/// Safe wrapper around `getsockname()` or `getpeername()`.
+pub fn get_unix_addr(socket: RawFd,  get_side: GetAddr)
 -> Result<UnixSocketAddr, io::Error> {
-    UnixSocketAddr::new_from_ffi(|addr_ptr, addr_len| {
-        match get_side(socket, addr_ptr, addr_len) {
-            -1 => Err(io::Error::last_os_error()),
-            _ => Ok(()),
-        }
-    }).map(|((), addr)| addr )
-}
-/// Safe wrapper around `getsockname()`.
-pub fn local_addr(socket: RawFd) -> Result<UnixSocketAddr, io::Error> {
-    unsafe { get_unix_addr(socket, getsockname) }
-}
-/// Safe wrapper around `getpeername()`.
-pub fn peer_addr(socket: RawFd) -> Result<UnixSocketAddr, io::Error> {
-    unsafe { get_unix_addr(socket, getpeername) }
+    unsafe {
+        UnixSocketAddr::new_from_ffi(|addr_ptr, addr_len| {
+            match (get_side.0)(socket, addr_ptr, addr_len) {
+                -1 => Err(io::Error::last_os_error()),
+                _ => Ok(()),
+            }
+        }).map(|((), addr)| addr )
+    }
 }
 
 /// Safe wrapper around `getsockopt(SO_ERROR)`.
@@ -131,8 +128,14 @@ pub fn take_error(socket: RawFd) -> Result<Option<io::Error>, io::Error> {
     }
 }
 
+#[repr(C)]
+pub struct TimeoutDirection(c_int);
+impl TimeoutDirection {
+    pub const READ: Self = TimeoutDirection(SO_RCVTIMEO);
+    pub const WRITE: Self = TimeoutDirection(SO_SNDTIMEO);
+}
 /// Safe wrapper around `setsockopt(SO_RCVTIMEO)` or `setsockopt(SO_SNDTIMEO)`.
-pub fn set_timeout(socket: RawFd,  direction: Shutdown,  timeout: Option<Duration>)
+pub fn set_timeout(socket: RawFd,  direction: TimeoutDirection,  timeout: Option<Duration>)
 -> Result<(), io::Error> {
     let mut time = unsafe { mem::zeroed::<timeval>() };
     if let Some(duration) = timeout {
@@ -151,28 +154,19 @@ pub fn set_timeout(socket: RawFd,  direction: Shutdown,  timeout: Option<Duratio
         }
     }
 
-    let option = match direction {
-        Shutdown::Read => SO_RCVTIMEO,
-        Shutdown::Write => SO_SNDTIMEO,
-        Shutdown::Both => unreachable!()
-    };
-
     unsafe {
         let time_ptr = &time as *const timeval as *const c_void;
         let time_size = mem::size_of::<timeval>() as socklen_t;
+        let option = direction.0;
         cvt!(setsockopt(socket, SOL_SOCKET, option, time_ptr, time_size))?;
     }
     Ok(())
 }
 /// Safe wrapper around `getsockopt(SO_RCVTIMEO)` or `getsockopt(SO_SNDTIMEO)`.
-pub fn get_timeout(socket: RawFd,  direction: Shutdown)
+pub fn get_timeout(socket: RawFd,  direction: TimeoutDirection)
 -> Result<Option<Duration>, io::Error> {
     let timeout = unsafe {
-        let option = match direction {
-            Shutdown::Read => SO_RCVTIMEO,
-            Shutdown::Write => SO_SNDTIMEO,
-            Shutdown::Both => unreachable!()
-        };
+        let option = direction.0;
         let mut time = mem::zeroed::<timeval>();
         let time_ptr = &mut time as *mut timeval as *mut c_void;
         let mut time_size = mem::size_of::<timeval>() as socklen_t;

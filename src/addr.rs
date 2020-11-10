@@ -11,8 +11,8 @@ use libc::{sockaddr, sa_family_t, AF_UNIX, socklen_t, sockaddr_un, c_char};
 
 /// Offset of `.sun_path` in `sockaddr_un`.
 ///
-/// This is not always identical to `mem::size_of::<sa_family_t>()`, as there
-/// be other fields before or after `.sun_family`.
+/// This is not always identical to `mem::size_of::<sa_family_t>()`,
+/// as there can be other fields before or after `.sun_family`.
 fn path_offset() -> socklen_t {
     unsafe {
         let total_size = mem::size_of::<sockaddr_un>();
@@ -106,9 +106,9 @@ impl<'a> From<&'a UnixSocketAddr> for UnixSocketAddrRef<'a> {
             UnixSocketAddrRef::Abstract(as_u8(slice))
         } else {
             let mut slice = &addr.addr.sun_path[..name_len as usize];
-            // remove trailing NUL if present (and multiple NULs just in case)
-            while slice.last() == Some(&0) {
-                slice = &slice[..name_len as usize-1];
+            // remove trailing NUL if present (and multiple NULs on OpenBSD)
+            while let Some(&0) = slice.last() {
+                slice = &slice[..slice.len()-1];
             }
             UnixSocketAddrRef::Path(Path::new(OsStr::from_bytes(as_u8(slice))))
         }
@@ -237,12 +237,13 @@ impl UnixSocketAddr {
         }
     }
 
-    /// The maximum size of pathname addesses supported by `UnixSocketAddr`.
+    /// The maximum size of pathname addresses supported by `UnixSocketAddr`.
     ///
     /// Returns the size of the underlying `sun_path` field,
     /// minus 1 if the OS is known to require a trailing NUL (`'\0'`) byte.
     pub fn max_path_len() -> usize {
         mem::size_of_val(&Self::new_unspecified().addr.sun_path)
+            - if cfg!(target_os="openbsd") {1} else {0}
     }
 
     /// Create a pathname unix socket address.
@@ -254,7 +255,7 @@ impl UnixSocketAddr {
     pub fn from_path<P: AsRef<Path>+?Sized>(path: &P) -> Result<Self, io::Error> {
         fn from_path_inner(path: &[u8]) -> Result<UnixSocketAddr, io::Error> {
             let mut addr = UnixSocketAddr::new_unspecified();
-            let capacity = mem::size_of_val(&addr.addr.sun_path);
+            let capacity = UnixSocketAddr::max_path_len();
             if path.is_empty() {
                 Err(io::Error::new(ErrorKind::NotFound, "path is empty"))
             } else if path.len() > capacity {

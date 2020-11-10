@@ -2,7 +2,7 @@
 
 A unix domain sockets Rust library that supports abstract addresses, fd-passing, SOCK_SEQPACKET sockets and more.
 
-[![crates.io page](https://img.shields.io/crates/v/uds.svg)](https://crates.io/crates/uds) ![License: Apache v2 / MIT](https://img.shields.io/crates/l/uds.svg) [![Documentation](https://docs.rs/uds/badge.svg)](https://docs.rs/uds/) [![cirrus-ci build status](https://api.cirrus-ci.com/github/tormol/uds.svg)](https://cirrus-ci.com/github/tormol/uds) [![travis build status](https://travis-ci.com/tormol/uds.svg?branch=master)](https://travis-ci.com/tormol/uds)
+[![crates.io page](https://img.shields.io/crates/v/uds.svg)](https://crates.io/crates/uds) ![License: Apache v2 / MIT](https://img.shields.io/crates/l/uds.svg) [![Documentation](https://docs.rs/uds/badge.svg)](https://docs.rs/uds/) [![cirrus-ci build status](https://api.cirrus-ci.com/github/tormol/uds.svg)](https://cirrus-ci.com/github/tormol/uds) [![travis build status](https://travis-ci.com/tormol/uds.svg?branch=master)](https://travis-ci.com/tormol/uds) [![sourcehut build status](https://builds.sr.ht/~torbmol/uds.svg)](https://builds.sr.ht/~sircmpwn/builds.sr.ht?)
 
 When possible, features are implemented via extension traits for [`std::os::unix::net`](https://doc.rust-lang.org/std/os/unix/net/index.html) types (and optionally [mio-uds](https://crates.io/crates/mio-uds) types) instead of exposing new structs.
 The only new socket structs this crate exposes are those for seqpacket sockets.
@@ -52,22 +52,21 @@ Even when all operating systems you care about supports something, they might be
 On Linux file descriptors are cloned when they are sent, but macOS and the BSDs first clones them when they are received. This means that if a FD is closed before the peer receives it you have a problem.  
 Also, some OSes might return the original file descriptor without cloning it if it's received within the same process as it was sent from. (DragonFly BSD, possibly macOS and maybe FreeBSD).
 
-| | Linux | macOS | FreeBSD | NetBSD | Illumos |
+| | Linux | macOS | FreeBSD | OpenBSD | NetBSD | Illumos |
 |-|-|-|-|-|-|
-| **Seqpacket** | Yes | N/A | Yes | Yes | N/A |
-| **peer credentials** | Yes | Yes | Yes | No | Yes |
-| **fd-passing** | Yes | Yes | Yes | Yes | No |
-| **abstract addresses** | Yes | N/A | N/A | N/A | N/A |
-| **mio (0.6 & 0.7 & uds)** | Yes | Yes | Yes | Yes | Yes |
-| **tokio** | Yes | Yes | Yes | Yes | Didn't run |
-| **Tested?** | Locally + CI | CI | CI + Manually | Manually | Manually |
+| **Seqpacket** | Yes | N/A | Yes | Yes | Yes | N/A |
+| **peer credentials** | Yes | Yes | Yes | No | No | Yes |
+| **fd-passing** | Yes | Yes | Yes | Yes | Yes | No |
+| **abstract addresses** | Yes | N/A | N/A | N/A | N/A | N/A |
+| **mio (0.6 & 0.7 & uds)** | Yes | Yes | Yes | ? | Yes | Yes |
+| **tokio** | Yes | Yes | Yes | Yes | Yes | Didn't run |
+| **Tested?** | Locally + CI | CI | CI + Manually | CI | Manually | Manually |
 
 ### Other OSes
 
 * Android: I haven't tested on it, but I assume there are no differences from regular Linux.
 * Windows 10: While it added some unix socket features, Windows support is not a priority. (PRs are welcome though).
 * DragonFly BSD: Basic features should work, but tests fail. I plan to support it.
-* OpenBSD: Not tested yet. I plan to support it.
 * Solaris: Treated identically as Illumos.
 
 ## mio integration

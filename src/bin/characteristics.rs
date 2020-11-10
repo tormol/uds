@@ -219,6 +219,71 @@ fn longer_paths() {
     println!("100+");
 }
 
+fn std_includes_nuls_normal() {
+    print!("std_includes_nuls_normal ");
+    let regular_path = "normal.sock";
+    let regular_addr = UnixSocketAddr::from_path(regular_path)
+        .expect("create path address with max regular length");
+
+    let _ = remove_file(regular_path);
+
+    let listener = UnixListener::bind_unix_addr(&regular_addr)
+        .expect("create socket with max regular path length");
+    let std_addr = listener.local_addr().expect("std get local max length path");
+    match std_addr.as_pathname() {
+        Some(std_path) if std_path == Path::new(regular_path) => println!("no"),
+        Some(std_path) => {
+            let std_path = std_path.to_str().expect("convert Path that should be ASCII to str");
+            if std_path.len() > regular_path.len()
+            &&  &std_path[..regular_path.len()] == regular_path
+            &&  std_path[regular_path.len()..].chars().all(|c| c == '\0' ) {
+                println!("yes ({})", std_path.len() - regular_path.len());
+            } else {
+                println!(
+                    "buggy (returned path differs in a different way: {:?} vs {:?} ({} bytes vs {}))",
+                    std_path, regular_path, std_path.len(), regular_path.len()
+                );
+            }
+        },
+        None => println!("buggy (as_pathname() returned None)"),
+    }
+
+    remove_file(regular_path).expect("delete socket file");
+}
+
+fn std_includes_nuls_long() {
+    print!("std_includes_nuls_long ");
+    let max_regular_len = UnixSocketAddr::max_path_len()-1;
+    let max_regular_path = std::iter::repeat('n').take(max_regular_len).collect::<String>();
+    let max_regular_addr = UnixSocketAddr::from_path(&max_regular_path)
+        .expect("create path address with max regular length");
+
+    let _ = remove_file(&max_regular_path);
+
+    let listener = UnixListener::bind_unix_addr(&max_regular_addr)
+        .expect("create socket with max regular path length");
+    let std_addr = listener.local_addr().expect("std get local max length path");
+    match std_addr.as_pathname() {
+        Some(std_path) if std_path == Path::new(&max_regular_path) => println!("no"),
+        Some(std_path) => {
+            let std_path = std_path.to_str().expect("convert Path that should be ASCII to str");
+            if std_path.len() > max_regular_len
+            &&  std_path[..max_regular_len] == max_regular_path
+            &&  std_path[max_regular_len..].chars().all(|c| c == '\0' ) {
+                println!("yes ({})", std_path.len() - max_regular_len);
+            } else {
+                println!(
+                    "buggy (returned path differs in a different way: {:?} vs {:?} ({} bytes vs {}))",
+                    std_path, max_regular_path, std_path.len(), max_regular_path.len()
+                );
+            }
+        },
+        None => println!("buggy (as_pathname() returned None)"),
+    }
+
+    remove_file(&max_regular_path).expect("delete socket file");
+}
+
 fn std_checks_family() {
     print!("std_checks_family ");
     let ip_listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
@@ -424,6 +489,8 @@ fn main() {
     std_get_local_max_len_path();
     std_reply_max_len_path();
     longer_paths();
+    std_includes_nuls_normal();
+    std_includes_nuls_long();
     std_checks_family();
     fd_must_remain_open_until_received();
     fd_might_not_be_cloned();

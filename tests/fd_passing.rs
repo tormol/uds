@@ -79,6 +79,8 @@ fn datagram_truncate_fds() {
             }
         }
         Ok((3, 0)) => assert_eq!(fd_buf, [-1; 2]),
+        // OpenBSD is sensical.
+        Err(ref e) if e.raw_os_error() == Some(libc::EMSGSIZE) => assert_eq!(fd_buf, [-1; 2]),
         Ok((bytes, fds)) => {
             panic!("received {} bytes and {} fds but expected 3 bytes and 2 or 0 fds", bytes, fds);
         }
@@ -179,6 +181,8 @@ fn stream_truncate_fds() {
                 panic!("all FDs were dropped, which is unexpected for {}", OS);
             }
         }
+        // OpenBSD is sensical.
+        Err(ref e) if e.raw_os_error() == Some(libc::EMSGSIZE) => assert_eq!(fd_buf, [-1; 2]),
         Ok((bytes, fds)) => {
             panic!("received {} bytes and {} fds but expected 5 bytes and 2 or 0 fds", bytes, fds);
         }

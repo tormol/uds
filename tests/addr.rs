@@ -109,7 +109,9 @@ fn max_regular_path_addr() {
     assert_eq!(&addr_from_os, max_regular_path.as_bytes());
 
     let std_addr = listener.local_addr().expect("std get local max regular length path");
-    assert_eq!(std_addr.as_pathname(), Some(max_regular_path.as_ref()));
+    if cfg!(not(target_os="openbsd")) {
+        assert_eq!(std_addr.as_pathname(), Some(max_regular_path.as_ref()));
+    }
     let conn = UnixStream::connect(&max_regular_path)
         .expect("std connect to max regular length path");
     assert_eq!(
@@ -178,7 +180,7 @@ fn path_from_ffi() {
             *len += 1;
         }
         Ok(())
-    }).expect("return address with path");
+    }).expect("return address with normal path");
     assert!(addr.is_path());
     assert_eq!(addr.as_ref(), UnixSocketAddrRef::Path(Path::new("FFIIIII!!")));
     assert_eq!(format!("{:?}", addr), "UnixSocketAddr(Path(\"FFIIIII!!\"))");
@@ -189,10 +191,21 @@ fn path_from_ffi() {
         addr.sun_path[0] = b'1' as _;
         *len += 2;
         Ok(())
-    }).expect("return address with path");
+    }).expect("return address with path with a trailing NUL");
     assert!(addr.is_path());
     assert_eq!(addr.as_ref(), UnixSocketAddrRef::Path(Path::new("1")));
     assert_eq!(format!("{:?}", addr), "UnixSocketAddr(Path(\"1\"))");
+
+    let ((), addr) = UnixSocketAddr::new_from_ffi(|addr, len| {
+        let addr = unsafe { &mut*(addr as *mut sockaddr as *mut sockaddr_un)};
+        *len = (&addr.sun_path as *const _ as usize - addr as *const _ as usize) as socklen_t;
+        addr.sun_path[0] = b'2' as _;
+        *len += 3;
+        Ok(())
+    }).expect("return address with path with two trailing NULs");
+    assert!(addr.is_path());
+    assert_eq!(addr.as_ref(), UnixSocketAddrRef::Path(Path::new("2")));
+    assert_eq!(format!("{:?}", addr), "UnixSocketAddr(Path(\"2\"))");
 
     let (len, addr) = UnixSocketAddr::new_from_ffi(|addr, len| {
         let addr = unsafe { &mut*(addr as *mut sockaddr as *mut sockaddr_un)};
@@ -201,7 +214,7 @@ fn path_from_ffi() {
             *dst = b'b' as _;
         }
         Ok(addr.sun_path[..].len())
-    }).expect("return address with path");
+    }).expect("return address with max length path");
     assert!(addr.is_path());
     let path = String::from_utf8(vec![b'b'; len]).unwrap();
     assert_eq!(addr.as_ref(), UnixSocketAddrRef::Path(Path::new(&path)));

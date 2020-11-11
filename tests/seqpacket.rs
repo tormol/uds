@@ -32,8 +32,8 @@ fn truncated_packets_are_not_resumed() {
     assert_eq!(&buf[..3], b"hel");
 }
 
-#[cfg(not(any(target_os="illumos", target_os="solaris")))]
-#[test]
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
+#[cfg_attr(any(target_os="illumos", target_os="solaris"), allow(unused))]
 fn zero_length_packet_sort_of_works() {
     let (a, b) = NonblockingUnixSeqpacketConn::pair().unwrap();
     assert_eq!(a.send(&[]).expect("send zero-length packet"), 0);
@@ -193,29 +193,64 @@ fn shutdown() {
     }
 }
 
-#[test]
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
+#[cfg_attr(any(target_os="illumos", target_os="solaris"), allow(unused))]
 fn read_timeout() {
     let (conn, _other) = UnixSeqpacketConn::pair().expect("create seqpacket pair");
     let timeout = Duration::new(0, 200_000_000);
     assert_eq!(conn.read_timeout().expect("get default read timeout"), None);
+
     conn.set_read_timeout(Some(timeout)).expect("set read timeout to 200ms");
-    assert_eq!(conn.read_timeout().expect("get read timeout"), Some(timeout));
+    let returned = conn.read_timeout()
+        .expect("get read timeout")
+        .expect("timeout was set");
+    // OSes converts the set timeout to a number of internal ticks,
+    // which means that one might not get back the exact duration.
+    // Tnd the tick resolution varies from OS to OS and host to host:
+    // * Linux on Travis returns a ttimeout several miliseconds too high.
+    // * FreeBSD returns a duration one microsecond smaller than set.
+    assert!(
+        returned <= timeout + timeout / 25,
+        "returned timeout {:?} exceeds the tolerance of {:?} + {:?}",
+        returned, timeout, timeout / 25
+    );
+    assert!(
+        returned >= timeout - timeout/100,
+        "returned timeout {:?} is lower than the tolerance of {:?} - {:?}",
+        returned, timeout, timeout / 100
+    );
+
     let before = Instant::now();
     let result = conn.recv(&mut[0]);
     let after = Instant::now();
     assert_eq!(result.expect_err("recv() timed out").kind(), WouldBlock);
     let elapsed = after - before;
-    assert!(elapsed >= timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
+    assert!(elapsed > (timeout*4)/5, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
     assert!(elapsed < 2*timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
 }
 
-#[test]
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
+#[cfg_attr(any(target_os="illumos", target_os="solaris"), allow(unused))]
 fn write_timeout() {
     let (conn, _other) = UnixSeqpacketConn::pair().expect("create seqpacket pair");
     let timeout = Duration::new(0, 150_000_000);
     assert_eq!(conn.write_timeout().expect("get default write timeout"), None);
+
     conn.set_write_timeout(Some(timeout)).expect("set write timeout to 200ms");
-    assert_eq!(conn.write_timeout().expect("get write timeout"), Some(timeout));
+    let returned = conn.write_timeout()
+        .expect("get write timeout")
+        .expect("timeout was set");
+    assert!(
+        returned <= timeout + timeout / 25,
+        "returned timeout {:?} exceeds the tolerance of {:?} + {:?}",
+        returned, timeout, timeout / 25
+    );
+    assert!(
+        returned >= timeout - timeout/100,
+        "returned timeout {:?} is lower than the tolerance of {:?} - {:?}",
+        returned, timeout, timeout / 100
+    );
+
     let elapsed = loop {
         let before = Instant::now();
         let result = conn.send(&[123; 456]);
@@ -225,7 +260,7 @@ fn write_timeout() {
             break after - before;
         }
     };
-    assert!(elapsed >= timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
+    assert!(elapsed > (timeout*4)/5, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
     assert!(elapsed < 2*timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
 }
 
@@ -239,15 +274,22 @@ fn accept_timeout() {
     std::fs::remove_file(addr).expect("delete created socket file");
 
     assert_eq!(listener.timeout().expect("get default timeout"), None);
-    listener.set_timeout(Some(timeout)).expect("set timeout to 200ms");
-    assert_eq!(listener.timeout().expect("get timeout"), Some(timeout));
-    let before = Instant::now();
-    let result = listener.accept_unix_addr();
-    let after = Instant::now();
-    assert_eq!(result.expect_err("recv() timed out").kind(), WouldBlock);
-    let elapsed = after - before;
-    assert!(elapsed >= timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
-    assert!(elapsed < 2*timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
+    listener.set_timeout(None).expect("disable timeout");
+
+    if cfg!(any(target_os="linux", target_os="android")) {
+        listener.set_timeout(Some(timeout)).expect("set timeout to 200ms");
+        let returned = listener.timeout().expect("get timeout").expect("timeout was set");
+        // Linux on Travis returns a ttimeout several miliseconds too high.
+        assert!(returned - timeout < timeout / 25);
+
+        let before = Instant::now();
+        let result = listener.accept_unix_addr();
+        let after = Instant::now();
+        assert_eq!(result.expect_err("recv() timed out").kind(), WouldBlock);
+        let elapsed = after - before;
+        assert!(elapsed >= timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
+        assert!(elapsed < 2*timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
+    }
 }
 
 #[cfg(feature="tokio")]

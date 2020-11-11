@@ -15,7 +15,7 @@ use libc::{socket, accept, close, listen, socketpair};
 use libc::{ioctl, FIONBIO, FIOCLEX, FIONCLEX};
 use libc::{fcntl, F_DUPFD_CLOEXEC, EINVAL, dup};
 use libc::{getsockopt, SOL_SOCKET, SO_ERROR, c_void};
-use libc::{setsockopt, SO_RCVTIMEO, SO_SNDTIMEO, timeval};
+use libc::{setsockopt, SO_RCVTIMEO, SO_SNDTIMEO, timeval, time_t};
 #[cfg(any(target_os="illumos", target_os="solaris"))]
 use libc::{F_GETFD, F_SETFD, FD_CLOEXEC};
 #[cfg(not(target_vendor="apple"))]
@@ -141,15 +141,18 @@ pub fn set_timeout(socket: RawFd,  direction: TimeoutDirection,  timeout: Option
     if let Some(duration) = timeout {
         time.tv_sec = match duration.as_secs().try_into() {
             Ok(seconds) => seconds,
-            Err(_) => {
-                return Err(io::Error::new(ErrorKind::InvalidInput, "timeout is too long"));
-            }
+            // Setting it to the max value is what std does.
+            // tv_sec is time_t on all unices supported by libc.
+            // (there is no polymorphic way to get the max value of a signed type.)
+            // TODO change to ::MAX after MSRV is bumped to 1.43.
+            Err(_) => time_t::max_value() as _,
         };
         time.tv_usec = duration.subsec_micros() as _;
+
         if time.tv_sec == 0  &&  time.tv_usec == 0 {
             return Err(io::Error::new(
                 ErrorKind::InvalidInput,
-                "zero-length timeouts are not supported"
+                "cannot set a 0 duration timeout"
             ));
         }
     }

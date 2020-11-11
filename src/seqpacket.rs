@@ -379,16 +379,24 @@ impl UnixSeqpacketConn {
         Ok(UnixSeqpacketConn { fd: cloned.into_raw_fd() })
     }
 
-    /// Sets the read timeout to the timeout specified.
+    /// Sets the read timeout to the duration specified.
     ///
-    /// If the value specified is `None`, then `recv()` and it variants will
-    /// block indefinitely.
-    /// An `Err` is returned if the zero Duration is passed to this method.
+    /// If the value specified is `None`, then `recv()` and its variants will
+    /// block indefinitely.  
+    /// An error is returned if the duration is zero.
+    ///
+    /// The duration is rounded to microsecond precission.
+    /// Currently it's rounded down except if that would make it all zero.
+    ///
+    /// # Operating System Support
+    ///
+    /// On Illumos (and pressumably also Solaris) timeouts appears not to work
+    /// for unix domain sockets.
     ///
     /// # Examples
     ///
-    #[cfg_attr(not(target_vendor="apple"), doc="```")]
-    #[cfg_attr(target_vendor="apple", doc="```no_run")]
+    #[cfg_attr(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")), doc="```")]
+    #[cfg_attr(any(target_vendor="apple", target_os="illumos", target_os="solaris"), doc="```no_run")]
     /// use std::io::ErrorKind;
     /// use std::time::Duration;
     /// use uds::UnixSeqpacketConn;
@@ -406,10 +414,13 @@ impl UnixSeqpacketConn {
     ///
     /// `None` is returned if there is no timeout.
     ///
+    /// Note that subsecond parts might have been be rounded by the OS
+    /// (in addition to the rounding to microsecond in `set_read_timeout()`).
+    ///
     /// # Examples
     ///
-    #[cfg_attr(not(target_vendor="apple"), doc="```")]
-    #[cfg_attr(target_vendor="apple", doc="```no_run")]
+    #[cfg_attr(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")), doc="```")]
+    #[cfg_attr(any(target_vendor="apple", target_os="illumos", target_os="solaris"), doc="```no_run")]
     /// use uds::UnixSeqpacketConn;
     /// use std::time::Duration;
     ///
@@ -421,16 +432,21 @@ impl UnixSeqpacketConn {
     pub fn read_timeout(&self) -> Result<Option<Duration>, io::Error> {
         get_timeout(self.fd, TimeoutDirection::READ)
     }
-    /// Sets the write timeout to the timeout specified.
+    /// Sets the write timeout to the duration specified.
     ///
-    /// If the value specified is `None`, then `send()` and it variants will
-    /// block indefinitely.
-    /// An `Err` is returned if the zero Duration is passed to this method.
+    /// If the value specified is `None`, then `send()` and its variants will
+    /// block indefinitely.  
+    /// An error is returned if the duration is zero.
+    ///
+    /// # Operating System Support
+    ///
+    /// On Illumos (and pressumably also Solaris) timeouts appears not to work
+    /// for unix domain sockets.
     ///
     /// # Examples
     ///
-    #[cfg_attr(not(target_vendor="apple"), doc="```")]
-    #[cfg_attr(target_vendor="apple", doc="```no_run")]
+    #[cfg_attr(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")), doc="```")]
+    #[cfg_attr(any(target_vendor="apple", target_os="illumos", target_os="solaris"), doc="```no_run")]
     /// # use std::io::ErrorKind;
     /// # use std::time::Duration;
     /// # use uds::UnixSeqpacketConn;
@@ -438,8 +454,8 @@ impl UnixSeqpacketConn {
     /// let (conn, _other) = UnixSeqpacketConn::pair().unwrap();
     /// conn.set_write_timeout(Some(Duration::new(0, 500 * 1000))).unwrap();
     /// loop {
-    ///     if let Err(e) = conn.send(&[0; 4096]) {
-    ///         assert_eq!(e.kind(), ErrorKind::WouldBlock);
+    ///     if let Err(e) = conn.send(&[0; 1000]) {
+    ///         assert_eq!(e.kind(), ErrorKind::WouldBlock, "{}", e);
     ///         break
     ///     }
     /// }
@@ -578,7 +594,16 @@ impl UnixSeqpacketListener {
     /// Set a maximum duration to wait in a single `accept()` on this socket.
     ///
     /// `None` disables a previously set timeout.
-    /// An error is returnedd if the duration is zero.
+    /// An error is returned if the duration is zero.
+    ///
+    /// # Operating System Support
+    ///
+    /// Only Linux appers to apply timeouts to `accept()`.  
+    /// On macOS, FreeBSD and NetBSD, timeouts are silently ignored.  
+    /// On Illumos setting timeouts for all unix domain sockets silently fails.
+    ///
+    /// On OSes where timeouts are known to not work, this function will
+    /// return an error even if setting the timeout didn't fail.
     ///
     /// # Examples
     ///
@@ -596,11 +621,25 @@ impl UnixSeqpacketListener {
     /// ```
     pub fn set_timeout(&self,  timeout: Option<Duration>)
     -> Result<(), io::Error> {
-        set_timeout(self.fd, TimeoutDirection::READ, timeout)
+        match set_timeout(self.fd, TimeoutDirection::READ, timeout) {
+            #[cfg(any(
+                target_vendor="apple", target_os="freebsd",
+                target_os="netbsd",
+                target_os="illumos", target_os="solaris",
+            ))]
+            Ok(()) if timeout.is_some() => Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                "listener timeouts are not supported on this OS"
+            )),
+            result => result
+        }
     }
     /// Get the timeout for `accept()` on this socket.
     ///
     /// `None` is returned if there is no timeout.
+    ///
+    /// Even if a timeout has is set, it is ignored by `accept()` on
+    /// most operating systems except Linux.
     ///
     /// # Examples
     ///

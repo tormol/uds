@@ -3,6 +3,7 @@ use std::mem;
 use std::net::Shutdown;
 use std::os::unix::io::{RawFd, FromRawFd, AsRawFd, IntoRawFd};
 use std::path::Path;
+use std::time::Duration;
 
 use libc::{SOCK_SEQPACKET, MSG_EOR, MSG_PEEK, c_void, close, send};
 
@@ -189,15 +190,15 @@ impl UnixSeqpacketConn {
     /// Connect to an unix seqpacket server listening at `addr`.
     pub fn connect_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_SEQPACKET, false)?;
-        connect_to(socket.as_raw_fd(), addr)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER,  addr)?;
         Ok(UnixSeqpacketConn { fd: socket.into_raw_fd() })
     }
     /// Bind to an address before connecting to a listening sequplacet socket.
     pub fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
     -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_SEQPACKET, false)?;
-        bind_to(socket.as_raw_fd(), from)?;
-        connect_to(socket.as_raw_fd(), to)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, from)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, to)?;
         Ok(UnixSeqpacketConn { fd: socket.into_raw_fd() })
     }
 
@@ -223,11 +224,11 @@ impl UnixSeqpacketConn {
 
     /// Get the address of this side of the connection.
     pub fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        local_addr(self.fd)
+        get_unix_addr(self.fd, GetAddr::LOCAL)
     }
     /// Get the address of the other side of the connection.
     pub fn peer_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        peer_addr(self.fd)
+        get_unix_addr(self.fd, GetAddr::PEER)
     }
     /// Get information about the process of the peer when the connection was established.
     ///
@@ -378,6 +379,106 @@ impl UnixSeqpacketConn {
         Ok(UnixSeqpacketConn { fd: cloned.into_raw_fd() })
     }
 
+    /// Sets the read timeout to the duration specified.
+    ///
+    /// If the value specified is `None`, then `recv()` and its variants will
+    /// block indefinitely.  
+    /// An error is returned if the duration is zero.
+    ///
+    /// The duration is rounded to microsecond precission.
+    /// Currently it's rounded down except if that would make it all zero.
+    ///
+    /// # Operating System Support
+    ///
+    /// On Illumos (and pressumably also Solaris) timeouts appears not to work
+    /// for unix domain sockets.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")), doc="```")]
+    #[cfg_attr(any(target_vendor="apple", target_os="illumos", target_os="solaris"), doc="```no_run")]
+    /// use std::io::ErrorKind;
+    /// use std::time::Duration;
+    /// use uds::UnixSeqpacketConn;
+    ///
+    /// let (a, b) = UnixSeqpacketConn::pair().unwrap();
+    /// a.set_read_timeout(Some(Duration::new(0, 2_000_000))).unwrap();
+    /// let error = a.recv(&mut[0; 1024]).unwrap_err();
+    /// assert_eq!(error.kind(), ErrorKind::WouldBlock);
+    /// ```
+    pub fn set_read_timeout(&self,  timeout: Option<Duration>)
+    -> Result<(), io::Error> {
+        set_timeout(self.fd, TimeoutDirection::READ, timeout)
+    }
+    /// Get the read timeout of this socket.
+    ///
+    /// `None` is returned if there is no timeout.
+    ///
+    /// Note that subsecond parts might have been be rounded by the OS
+    /// (in addition to the rounding to microsecond in `set_read_timeout()`).
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")), doc="```")]
+    #[cfg_attr(any(target_vendor="apple", target_os="illumos", target_os="solaris"), doc="```no_run")]
+    /// use uds::UnixSeqpacketConn;
+    /// use std::time::Duration;
+    ///
+    /// let timeout = Some(Duration::new(2, 0));
+    /// let conn = UnixSeqpacketConn::pair().unwrap().0;
+    /// conn.set_read_timeout(timeout).unwrap();
+    /// assert_eq!(conn.read_timeout().unwrap(), timeout);
+    /// ```
+    pub fn read_timeout(&self) -> Result<Option<Duration>, io::Error> {
+        get_timeout(self.fd, TimeoutDirection::READ)
+    }
+    /// Sets the write timeout to the duration specified.
+    ///
+    /// If the value specified is `None`, then `send()` and its variants will
+    /// block indefinitely.  
+    /// An error is returned if the duration is zero.
+    ///
+    /// # Operating System Support
+    ///
+    /// On Illumos (and pressumably also Solaris) timeouts appears not to work
+    /// for unix domain sockets.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")), doc="```")]
+    #[cfg_attr(any(target_vendor="apple", target_os="illumos", target_os="solaris"), doc="```no_run")]
+    /// # use std::io::ErrorKind;
+    /// # use std::time::Duration;
+    /// # use uds::UnixSeqpacketConn;
+    /// #
+    /// let (conn, _other) = UnixSeqpacketConn::pair().unwrap();
+    /// conn.set_write_timeout(Some(Duration::new(0, 500 * 1000))).unwrap();
+    /// loop {
+    ///     if let Err(e) = conn.send(&[0; 1000]) {
+    ///         assert_eq!(e.kind(), ErrorKind::WouldBlock, "{}", e);
+    ///         break
+    ///     }
+    /// }
+    /// ```
+    pub fn set_write_timeout(&self,  timeout: Option<Duration>)
+    -> Result<(), io::Error> {
+        set_timeout(self.fd, TimeoutDirection::WRITE, timeout)
+    }
+    /// Get the write timeout of this socket.
+    ///
+    /// `None` is returned if there is no timeout.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
+    /// let conn = uds::UnixSeqpacketConn::pair().unwrap().0;
+    /// assert!(conn.write_timeout().unwrap().is_none());
+    /// ```
+    pub fn write_timeout(&self) -> Result<Option<Duration>, io::Error> {
+        get_timeout(self.fd, TimeoutDirection::WRITE)
+    }
+
     /// Enable or disable nonblocking mode.
     ///
     /// Consider using the nonblocking variant of this type instead.
@@ -459,13 +560,13 @@ impl UnixSeqpacketListener {
     }
     pub fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_SEQPACKET, false)?;
-        bind_to(socket.as_raw_fd(), addr)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, addr)?;
         socket.start_listening()?;
         Ok(UnixSeqpacketListener { fd: socket.into_raw_fd() })
     }
 
     pub fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        local_addr(self.fd)
+        get_unix_addr(self.fd, GetAddr::LOCAL)
     }
 
     pub fn accept_unix_addr(&self)
@@ -489,6 +590,75 @@ impl UnixSeqpacketListener {
         let cloned = Socket::try_clone_from(self.fd)?;
         Ok(UnixSeqpacketListener { fd: cloned.into_raw_fd() })
     }
+
+    /// Set a maximum duration to wait in a single `accept()` on this socket.
+    ///
+    /// `None` disables a previously set timeout.
+    /// An error is returned if the duration is zero.
+    ///
+    /// # Operating System Support
+    ///
+    /// Only Linux appers to apply timeouts to `accept()`.  
+    /// On macOS, FreeBSD and NetBSD, timeouts are silently ignored.  
+    /// On Illumos setting timeouts for all unix domain sockets silently fails.
+    ///
+    /// On OSes where timeouts are known to not work, this function will
+    /// return an error even if setting the timeout didn't fail.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(any(target_os="linux", target_os="android"), doc="```")]
+    #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
+    /// # use uds::{UnixSeqpacketListener, UnixSocketAddr};
+    /// # use std::io::ErrorKind;
+    /// # use std::time::Duration;
+    /// #
+    /// # let addr = UnixSocketAddr::new("@set_timeout").unwrap();
+    /// let listener = UnixSeqpacketListener::bind_unix_addr(&addr).unwrap();
+    /// listener.set_timeout(Some(Duration::new(0, 200_000_000))).unwrap();
+    /// let err = listener.accept_unix_addr().unwrap_err();
+    /// assert_eq!(err.kind(), ErrorKind::WouldBlock);
+    /// ```
+    pub fn set_timeout(&self,  timeout: Option<Duration>)
+    -> Result<(), io::Error> {
+        match set_timeout(self.fd, TimeoutDirection::READ, timeout) {
+            #[cfg(any(
+                target_vendor="apple", target_os="freebsd",
+                target_os="netbsd",
+                target_os="illumos", target_os="solaris",
+            ))]
+            Ok(()) if timeout.is_some() => Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                "listener timeouts are not supported on this OS"
+            )),
+            result => result
+        }
+    }
+    /// Get the timeout for `accept()` on this socket.
+    ///
+    /// `None` is returned if there is no timeout.
+    ///
+    /// Even if a timeout has is set, it is ignored by `accept()` on
+    /// most operating systems except Linux.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(any(target_os="linux", target_os="android"), doc="```")]
+    #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
+    /// # use uds::{UnixSeqpacketListener, UnixSocketAddr};
+    /// # use std::time::Duration;
+    /// #
+    /// # let addr = UnixSocketAddr::new("@timeout").unwrap();
+    /// let listener = UnixSeqpacketListener::bind_unix_addr(&addr).unwrap();
+    /// assert_eq!(listener.timeout().unwrap(), None);
+    /// let timeout = Some(Duration::new(2, 0));
+    /// listener.set_timeout(timeout).unwrap();
+    /// assert_eq!(listener.timeout().unwrap(), timeout);
+    /// ```
+    pub fn timeout(&self) -> Result<Option<Duration>, io::Error> {
+        get_timeout(self.fd, TimeoutDirection::READ)
+    }
+
     /// Enable or disable nonblocking-ness of [`accept_unix_addr()`](#method.accept_unix addr).
     ///
     /// The returned connnections will still be in blocking mode regardsless.
@@ -610,15 +780,15 @@ impl NonblockingUnixSeqpacketConn {
     /// Connect to an unix seqpacket server listening at `addr`.
     pub fn connect_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_SEQPACKET, true)?;
-        connect_to(socket.as_raw_fd(), addr)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, addr)?;
         Ok(NonblockingUnixSeqpacketConn { fd: socket.into_raw_fd() })
     }
     /// Bind to an address before connecting to a listening seqpacket socket.
     pub fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
     -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_SEQPACKET, true)?;
-        bind_to(socket.as_raw_fd(), from)?;
-        connect_to(socket.as_raw_fd(), to)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, from)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, to)?;
         Ok(NonblockingUnixSeqpacketConn { fd: socket.into_raw_fd() })
     }
 
@@ -644,11 +814,11 @@ impl NonblockingUnixSeqpacketConn {
 
     /// Get the address of this side of the connection.
     pub fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        local_addr(self.fd)
+        get_unix_addr(self.fd, GetAddr::LOCAL)
     }
     /// Get the address of the other side of the connection.
     pub fn peer_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        peer_addr(self.fd)
+        get_unix_addr(self.fd, GetAddr::PEER)
     }
     /// Get information about the process of the peer when the connection was established.
     ///
@@ -860,14 +1030,14 @@ impl NonblockingUnixSeqpacketListener {
     /// ```
     pub fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_SEQPACKET, true)?;
-        bind_to(socket.as_raw_fd(), addr)?;
+        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, addr)?;
         socket.start_listening()?;
         Ok(NonblockingUnixSeqpacketListener { fd: socket.into_raw_fd() })
     }
 
     /// Get the address this listener was bound to.
     pub fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        local_addr(self.fd)
+        get_unix_addr(self.fd, GetAddr::LOCAL)
     }
 
     /// Accept a non-blocking connection, non-blockingly.

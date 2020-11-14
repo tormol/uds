@@ -10,6 +10,9 @@ use std::path::Path;
 use std::io::{self, ErrorKind::*, Write};
 use std::net::{TcpListener, TcpStream};
 use std::mem::{self, ManuallyDrop};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 extern crate libc;
 
@@ -367,6 +370,45 @@ fn seqpacket_recv_empty() {
     // TODO test receiving with ancillary
 }
 
+fn accept_timeout() {
+    print!("accept_timeout ");
+
+    let name = "accept_timeout.sock";
+    let _ = remove_file(name);
+    let listener = UnixListener::bind(name).expect("create stream listener");
+
+    unsafe {
+        let timeout = libc::timeval {
+            tv_sec: 0,
+            tv_usec: 10,
+        };
+        let status = libc::setsockopt(
+            listener.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_RCVTIMEO,
+            &timeout as *const _ as *const _,
+            mem::size_of_val(&timeout) as libc::socklen_t,
+        );
+        if status == -1 {
+            print!("No (setting timeout failed: {})", io::Error::last_os_error());
+            return;
+        }
+    }
+
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move|| tx.send(listener.accept()) );
+    match rx.recv_timeout(Duration::new(0, 10_000_000)) {
+        Ok(Err(e)) if e.kind() == WouldBlock => println!("yes"),
+        Ok(Err(e)) => println!("Buggy (accept() failed with unexpected error {})", e),
+        Ok(Ok(_)) => println!("Buggy (accept() unexpectedly succeeded)"),
+        Err(mpsc::RecvTimeoutError::Timeout) => println!("No"),
+        Err(mpsc::RecvTimeoutError::Disconnected) => println!("Buggy (thread exited without sending!)"),
+    }
+    // don't try to join a hung thread
+
+    remove_file(name).expect("delete socket file");
+}
+
 fn print_credentials() {
     print!("credentials ");
     let (a, _b) = UnixStream::pair().expect("create stream socket pair");
@@ -387,5 +429,6 @@ fn main() {
     fd_might_not_be_cloned();
     stream_ancillary_payloads_not_merged();
     seqpacket_recv_empty();
+    accept_timeout();
     print_credentials();
 }

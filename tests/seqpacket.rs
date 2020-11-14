@@ -50,32 +50,48 @@ fn zero_length_packet_sort_of_works() {
     assert_eq!(b.recv(&mut[0u8; 8]).expect("receive end-of-connection packet"), (0, false));
 }
 
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
+#[cfg_attr(any(target_os="illumos", target_os="solaris"), allow(unused))]
+fn zero_length_vectored_sort_of_works() {
+    let (a, b) = NonblockingUnixSeqpacketConn::pair().unwrap();
+    let mut buf = [0; 25];
+
+    assert_eq!(a.send_vectored(&[]).unwrap(), 0);
+    assert_eq!(a.send_vectored(&[IoSlice::new(&[])]).unwrap(), 0);
+    assert_eq!(b.recv(&mut buf).unwrap(), (0, false));
+    assert_eq!(b.recv(&mut buf).unwrap(), (0, false));
+
+    a.send(b"ignore me").unwrap();
+    a.send(b"ignore me").unwrap();
+    assert_eq!(b.recv_vectored(&mut[]).unwrap(), (0, true));
+    assert_eq!(b.recv_vectored(&mut[IoSliceMut::new(&mut[])]).unwrap(), (0, true));
+}
+
 #[test]
 fn no_sigpipe() {
     let (a, _) = UnixSeqpacketConn::pair().expect("create seqpacket socket pair");
     assert_eq!(a.send(b"Hello?").unwrap_err().kind(), BrokenPipe);
     assert_eq!(a.send_vectored(&[IoSlice::new(b"Anyone there?")]).unwrap_err().kind(), BrokenPipe);
-    assert_eq!(a.send_fds(b"HELOOO??", &[a.as_raw_fd()]).unwrap_err().kind(), BrokenPipe);
+    if cfg!(not(any(target_os="illumos", target_os="solaris"))) {
+        assert_eq!(a.send_fds(b"HELOOO??", &[a.as_raw_fd()]).unwrap_err().kind(), BrokenPipe);
+    }
 
     let (a, _) = NonblockingUnixSeqpacketConn::pair().expect("create nonblocking seqpacket pair");
     assert_eq!(a.send(b"Hello?").unwrap_err().kind(), BrokenPipe);
     assert_eq!(a.send_vectored(&[IoSlice::new(b"Anyone there?")]).unwrap_err().kind(), BrokenPipe);
-    assert_eq!(a.send_fds(b"HELOOO??", &[a.as_raw_fd()]).unwrap_err().kind(), BrokenPipe);
+    if cfg!(not(any(target_os="illumos", target_os="solaris"))) {
+        assert_eq!(a.send_fds(b"HELOOO??", &[a.as_raw_fd()]).unwrap_err().kind(), BrokenPipe);
+    }
 }
 
 #[test]
-fn send_vectored() {
+fn recv_vectored() {
     let (a, b) = UnixSeqpacketConn::pair().expect("create seqpacket socket pair");
 
     a.send(b"undivided").unwrap();
     let mut array = [b'-'; 10];
     assert_eq!(b.recv_vectored(&mut[IoSliceMut::new(&mut array)]).unwrap(), (9, false));
     assert_eq!(&array, b"undivided-");
-
-    a.send(b"ignore me").unwrap();
-    a.send(b"ignore me").unwrap();
-    assert_eq!(b.recv_vectored(&mut[]).unwrap(), (0, true));
-    assert_eq!(b.recv_vectored(&mut[IoSliceMut::new(&mut[])]).unwrap(), (0, true));
 
     a.send(b"split me").unwrap();
     let (mut array_1, mut array_2) = ([4; 4], [4; 4]);
@@ -104,20 +120,13 @@ fn send_vectored() {
 }
 
 #[test]
-fn recv_vectored() {
+fn send_vectored() {
     let (a, b) = UnixSeqpacketConn::pair().expect("create seqpacket socket pair");
 
     assert_eq!(a.send_vectored(&[IoSlice::new(b"undivided")]).unwrap(), 9);
     let mut buf = [b'-'; 10];
     assert_eq!(b.recv(&mut buf).unwrap(), (9, false));
     assert_eq!(&buf, b"undivided-");
-
-    assert_eq!(a.send_vectored(&[]).unwrap(), 0);
-    assert_eq!(a.send_vectored(&[IoSlice::new(&[])]).unwrap(), 0);
-    if cfg!(not(any(target_os="illumos", target_os="solaris"))) {
-        assert_eq!(b.recv(&mut buf).unwrap(), (0, false));
-        assert_eq!(b.recv(&mut buf).unwrap(), (0, false));
-    }
 
     a.send_vectored(&[IoSlice::new(b"merge"), IoSlice::new(b" me")]).unwrap();
     assert_eq!(b.recv(&mut buf).unwrap(), (8, false));
@@ -188,7 +197,10 @@ fn shutdown() {
         let (sock_tx, sock_rx) = NonblockingUnixSeqpacketConn::pair().unwrap();
         sock_tx.shutdown(Shutdown::Both).unwrap();
         assert!(sock_tx.send(&[b'h', b'i', b'0']).is_err());
-        assert_eq!(sock_rx.recv(&mut [0u8; 3]).unwrap(), (0, false));
+        if cfg!(not(any(target_os="illumos", target_os="solaris"))) {
+            // sometimes returns WouldBlock on illumos
+            assert_eq!(sock_rx.recv(&mut [0u8; 3]).unwrap(), (0, false));
+        }
     }
 }
 

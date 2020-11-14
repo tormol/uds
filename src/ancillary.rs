@@ -79,7 +79,7 @@ pub fn send_ancillary(
             #[cfg(any(target_os="illumos", target_os="solaris"))] {
                 return Err(io::Error::new(
                     ErrorKind::Other,
-                    "ancillary data support is not implemented yet on Illumos or Solaris, sorry"
+                    "ancillary data support is not implemented yet for Illumos or Solaris"
                 ))
             }
         }

@@ -329,13 +329,11 @@ fn errors_on_solarish() {
     let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
     a.send_fds(b"0", &[]).expect("send empty fd slice");
     let err = a.send_fds(b"1", &[a.as_raw_fd()]).expect_err("send fd");
-    assert!(format!("{}", err).contains("available"));
+    assert!(format!("{}", err).contains("not implemented"));
 
     b.set_nonblocking(true).expect("make nonblocking");
-    let err = b.recv_fds(&mut[0; 16], &mut[])
-        .expect_err("receive with empty fd buffer");
-    assert!(format!("{}", err).contains("available"));
+    b.recv_fds(&mut[0; 16], &mut[]).expect("receive with empty fd buffer");
     let err = b.recv_fds(&mut[0; 16], &mut[-1; 4])
         .expect_err("receive with fd capacity");
-    assert!(format!("{}", err).contains("available"));
+    assert!(format!("{}", err).contains("not implemented"));
 }

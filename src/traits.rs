@@ -1,8 +1,8 @@
 use std::os::unix::io::{RawFd, AsRawFd, FromRawFd, IntoRawFd};
 use std::os::unix::net::{UnixStream, UnixListener, UnixDatagram};
-use std::io::{self, IoSlice, IoSliceMut};
+use std::io::{self, IoSlice, IoSliceMut, ErrorKind};
 
-use libc::SOCK_STREAM;
+use libc::{SOCK_STREAM, MSG_PEEK, c_void, recvfrom, sendto};
 
 use crate::addr::UnixSocketAddr;
 use crate::helpers::*;
@@ -184,6 +184,241 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
     /// Connect the socket to a path-based or abstract named socket.
     fn connect_to_unix_addr(&self,  addr: &UnixSocketAddr) -> Result<(), io::Error> {
         set_unix_addr(self.as_raw_fd(), SetAddr::PEER, addr)
+    }
+
+    /// Send to the specified address, using an address type that
+    /// supports abstract addresses.
+    ///
+    /// # Examples
+    ///
+    /// Send to an abstract address:
+    ///
+    #[cfg_attr(any(target_os="linux", target_os="android"), doc="```")]
+    #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
+    /// # use std::os::unix::net::UnixDatagram;
+    /// # use uds::{UnixDatagramExt, UnixSocketAddr};
+    /// #
+    /// let socket = UnixDatagram::unbound().expect("create datagram socket");
+    /// let _ = socket.send_to_unix_addr(
+    ///     b"Is there anyone there?",
+    ///     &UnixSocketAddr::from_abstract("somewhere").expect("OS supports abstract addresses"),
+    /// );
+    /// ```
+    fn send_to_unix_addr(&self,  datagram: &[u8],  addr: &UnixSocketAddr)
+    -> Result<usize, io::Error> {
+        unsafe {
+            let (sockaddr, socklen) = addr.as_raw_general();
+            cvt_r!(sendto(
+                self.as_raw_fd(),
+                datagram.as_ptr() as *const c_void,
+                datagram.len(),
+                MSG_NOSIGNAL,
+                sockaddr,
+                socklen,
+            )).map(|signed| signed as usize )
+        }
+    }
+    /// Send a datagram created from multiple segments to the specified address,
+    /// using an address type that supports abstract addresses.
+    ///
+    /// # Examples
+    ///
+    /// Send a datagram with a fixed header:
+    ///
+    /// ```
+    /// # use std::os::unix::net::UnixDatagram;
+    /// # use std::io::IoSlice;
+    /// # use uds::{UnixDatagramExt, UnixSocketAddr};
+    /// #
+    /// let socket = UnixDatagram::unbound().expect("create datagram socket");
+    /// let to = UnixSocketAddr::new("/var/run/someone.sock").unwrap();
+    /// let msg = [
+    ///     IoSlice::new(b"hello "),
+    ///     IoSlice::new(to.as_pathname().unwrap().to_str().unwrap().as_bytes()),
+    /// ];
+    /// let _ = socket.send_vectored_to_unix_addr(&msg, &to);
+    /// ```
+    fn send_vectored_to_unix_addr(&self,  datagram: &[IoSlice],  addr: &UnixSocketAddr)
+    -> Result<usize, io::Error> {
+        send_ancillary(self.as_raw_fd(), Some(addr), 0, datagram, &[], None)
+    }
+    /// Receive from any peer, storing its address in a type that exposes
+    /// abstract addresses.
+    ///
+    /// # Examples
+    ///
+    /// Respond to the received datagram, regardsless of where it was sent from:
+    ///
+    /// ```
+    /// use std::os::unix::net::UnixDatagram;
+    /// use uds::{UnixSocketAddr, UnixDatagramExt};
+    ///
+    /// let server = UnixDatagram::bind("echo.sock").expect("create server socket");
+    ///
+    /// let client_addr = UnixSocketAddr::new("@echo_client")
+    ///     .or(UnixSocketAddr::new("echo_client.sock"))
+    ///     .unwrap();
+    /// let client = UnixDatagram::unbound().expect("create client ocket");
+    /// client.bind_to_unix_addr(&client_addr).expect("create client socket");
+    /// client.connect_to_unix_addr(&UnixSocketAddr::new("echo.sock").unwrap())
+    ///     .expect("connect to server");
+    /// client.send(b"hello").expect("send");
+    ///
+    /// let mut buf = [0; 1024];
+    /// let (len, from) = server.recv_from_unix_addr(&mut buf).expect("receive");
+    /// server.send_to_unix_addr(&buf[..len], &from).expect("respond");
+    ///
+    /// let len = client.recv(&mut buf).expect("receive response");
+    /// assert_eq!(&buf[..len], "hello".as_bytes());
+    ///
+    /// let _ = std::fs::remove_file("echo.sock");
+    /// if let Some(client_path) = client_addr.as_pathname() {
+    ///     let _ = std::fs::remove_file(client_path);
+    /// }
+    /// ```
+    fn recv_from_unix_addr(&self,  buf: &mut[u8]) -> Result<(usize, UnixSocketAddr), io::Error> {
+        UnixSocketAddr::new_from_ffi(|addr, len| {
+            unsafe {
+                cvt_r!(recvfrom(
+                    self.as_raw_fd(),
+                    buf.as_ptr() as *mut c_void,
+                    buf.len(),
+                    MSG_NOSIGNAL,
+                    addr,
+                    len,
+                )).map(|signed| signed as usize )
+            }
+        })
+    }
+    /// Use multiple buffers to receive from any peer, storing its address in
+    /// a type that exposes abstract addresses.
+    ///
+    /// # Examples
+    ///
+    /// Read content into a separate buffer than header:
+    ///
+    #[cfg_attr(feature="mio_07", doc="```")]
+    #[cfg_attr(not(feature="mio_07"), doc="```no_compile")]
+    /// use mio_07::net::UnixDatagram;
+    /// use uds::UnixDatagramExt;
+    /// use std::io::IoSliceMut;
+    ///
+    /// let server = UnixDatagram::bind("cat.sock").expect("create cat.sock");
+    /// let mut received = Vec::new();
+    ///
+    /// let client = UnixDatagram::unbound().expect("create client socket");
+    /// client.send_to(b"cat\x01one", "cat.sock").expect("send");
+    /// client.send_to(b"cat\x01two", "cat.sock").expect("send");
+    /// client.send_to(b"cat\x01three", "cat.sock").expect("send");
+    ///
+    /// let mut header = [0; 4];
+    /// loop {
+    ///     let current_len = received.len();
+    ///     received.resize(current_len+1024, 0);
+    ///     let mut bufs = [
+    ///         IoSliceMut::new(&mut header),
+    ///         IoSliceMut::new(&mut received[current_len..]),
+    ///     ];
+    ///     match server.recv_vectored_from_unix_addr(&mut bufs) {
+    ///         Ok((len, _addr)) if len > 4  &&  header == *b"cat\x01" => {
+    ///             received.truncate(current_len+len-4); // keep it
+    ///         },
+    ///         Ok((_, _)) => received.truncate(current_len), // discard it
+    ///         Err(_) => {
+    ///             received.truncate(current_len); // discard it
+    ///             break;
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// assert_eq!(&received, &b"onetwothree");
+    /// # let _ = std::fs::remove_file("cat.sock");
+    /// ```
+    fn recv_vectored_from_unix_addr(&self,  bufs: &mut[IoSliceMut])
+    -> Result<(usize, UnixSocketAddr), io::Error> {
+        let mut addr = UnixSocketAddr::default();
+        recv_fds(self.as_raw_fd(), Some(&mut addr), bufs, &mut[])
+            .map(|(bytes, _, _)| (bytes, addr) )
+    }
+    /// Read the next datagram without removing it from the queue.
+    ///
+    /// # Examples
+    ///
+    /// Discard datagram if it's the wrong protocol:
+    ///
+    /// ```
+    /// # use std::os::unix::net::UnixDatagram;
+    /// # use uds::{UnixSocketAddr, UnixDatagramExt};
+    /// #
+    /// let checker = UnixDatagram::bind("checker.sock").expect("create receiver socket");
+    ///
+    /// let client = UnixDatagram::unbound().expect("create client ocket");
+    /// client.send_to(b"hello", "checker.sock").expect("send");
+    ///
+    /// let mut header = [0; 4];
+    /// let (len, _from) = checker.peek_from_unix_addr(&mut header).expect("receive");
+    /// if len != 4  ||  header != *b"WTFP" {
+    ///     let _ = checker.recv(&mut header); // discard
+    /// } else {
+    ///     // call function that receives and processes it
+    /// }
+    /// #
+    /// # let _ = std::fs::remove_file("checker.sock");
+    /// ```
+    fn peek_from_unix_addr(&self,  buf: &mut[u8]) -> Result<(usize, UnixSocketAddr), io::Error> {
+        UnixSocketAddr::new_from_ffi(|addr, len| {
+            unsafe {
+                cvt_r!(recvfrom(
+                    self.as_raw_fd(),
+                    buf.as_ptr() as *mut c_void,
+                    buf.len(),
+                    MSG_PEEK | MSG_NOSIGNAL,
+                    addr,
+                    len,
+                )).map(|signed| signed as usize )
+            }
+        })
+    }
+    /// Use multiple buffers to read the next datagram without removing it
+    /// from the queue.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(any(target_os="linux", target_os="android"), doc="```")]
+    #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
+    /// use std::os::unix::net::UnixDatagram;
+    /// use std::io::IoSliceMut;
+    /// use uds::{UnixDatagramExt, UnixSocketAddr};
+    ///
+    /// # let _ = std::fs::remove_file("datagram_server.sock");
+    /// let server = UnixDatagram::bind("datagram_server.sock").unwrap();
+    ///
+    /// // get a random abstract address on Linux
+    /// let client = UnixDatagram::unbound().unwrap();
+    /// client.bind_to_unix_addr(&UnixSocketAddr::new_unspecified()).unwrap();
+    /// client.connect("datagram_server.sock").unwrap();
+    /// client.send(b"headerbodybody").unwrap();
+    ///
+    /// let (mut buf_a, mut buf_b) = ([0; 6], [0; 12]);
+    /// let mut vector = [IoSliceMut::new(&mut buf_a), IoSliceMut::new(&mut buf_b)];
+    /// let (bytes, addr) = server.peek_vectored_from_unix_addr(&mut vector).unwrap();
+    /// assert_eq!(addr, client.local_unix_addr().unwrap());
+    /// assert_eq!(bytes, 14);
+    /// assert_eq!(&buf_a, b"header");
+    /// assert_eq!(&buf_b[..8], b"bodybody");
+    /// #
+    /// # std::fs::remove_file("datagram_server.sock").unwrap();
+    /// ```
+    fn peek_vectored_from_unix_addr(&self,  bufs: &mut[IoSliceMut])
+    -> Result<(usize, UnixSocketAddr), io::Error> {
+        let mut addr = UnixSocketAddr::default();
+        recv_ancillary(
+            self.as_raw_fd(),
+            Some(&mut addr),
+            MSG_PEEK | MSG_NOSIGNAL,
+            bufs,
+            &mut[]
+        ).map(|(bytes, _)| (bytes, addr) )
     }
 
     /// Send file descriptors along with the datagram, on an unconnected socket.

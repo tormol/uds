@@ -1,8 +1,9 @@
 extern crate uds;
 extern crate libc;
 
-use std::os::unix::net::{UnixListener, UnixStream};
+use std::os::unix::net::{UnixListener, UnixStream, UnixDatagram};
 use std::io::ErrorKind::*;
+use std::io::{IoSlice, IoSliceMut};
 use std::fs::remove_file;
 use std::path::Path;
 use std::mem::size_of;
@@ -10,7 +11,7 @@ use std::mem::size_of;
 use libc::{sockaddr, sockaddr_un, socklen_t};
 
 use uds::{UnixSocketAddr, UnixSocketAddrRef};
-use uds::{UnixListenerExt, UnixStreamExt};
+use uds::{UnixListenerExt, UnixStreamExt, UnixDatagramExt};
 
 #[cfg(any(target_os="linux", target_os="android"))]
 #[test]
@@ -264,4 +265,78 @@ fn abstract_from_ffi() {
         assert_eq!(addr.as_ref(), UnixSocketAddrRef::Abstract(b"\x00\x07"));
         assert_eq!(format!("{:?}", addr), "UnixSocketAddr(Abstract(\"\\u{0}\\u{7}\"))");
     }
+}
+
+#[test]
+fn unconnected_datagrams() {
+    let _ = remove_file("corner a.sock");
+    let _ = remove_file("corner b.sock");
+    let _ = remove_file("corner c.sock");
+    let a = UnixDatagram::bind("corner a.sock").expect("create 1st datagram socket");
+    let b = UnixDatagram::bind("corner b.sock").expect("create 2nd datagram socket");
+    let c = UnixDatagram::bind("corner c.sock").expect("create 3rd datagram socket");
+
+    let addr_a = UnixSocketAddr::new("corner a.sock").unwrap();
+    let addr_b = UnixSocketAddr::new("corner b.sock").unwrap();
+    let addr_c = UnixSocketAddr::new("corner c.sock").unwrap();
+    let mut buf = [0; 10];
+
+    a.send_to_unix_addr(b"red", &addr_b).expect("send datagram to b");
+    assert_eq!(b.recv_from_unix_addr(&mut buf).expect("receive with addr"), (3, addr_a));
+    assert_eq!(&buf, b"red\0\0\0\0\0\0\0");
+
+    b.send_to_unix_addr(b"green", &addr_c).expect("send datagram to c");
+
+    b.send_vectored_to_unix_addr(
+        &[IoSlice::new(b"cy"), IoSlice::new(b"an")],
+        &addr_a
+    ).expect("send vectored datagram to a");
+    assert_eq!(a.peek_from_unix_addr(&mut buf).expect("peek from b"), (4, addr_b));
+    assert_eq!(&buf, b"cyan\0\0\0\0\0\0");
+    let (len, std_addr) = a.recv_from(&mut buf).expect("receive what was peeked");
+    assert_eq!(std_addr.as_pathname(), Some(Path::new("corner b.sock")));
+    assert_eq!(&buf[..len], b"cyan");
+
+    c.send_to(b"blue", "corner a.sock").expect("send datagram to a");
+    c.send_to_unix_addr(b"alpha", &addr_a).expect("send datagram to a");
+    let (buf_a, buf_b) = buf.split_at_mut(2);
+    let (len, addr) = c.recv_vectored_from_unix_addr(&mut[
+        IoSliceMut::new(&mut buf_b[..3]), IoSliceMut::new(buf_a)
+    ]).expect("receive from b");
+    assert_eq!(addr.as_pathname(), Some(Path::new("corner b.sock")));
+    assert_eq!(len, 5);
+    assert_eq!(&buf, b"engre\0\0\0\0\0");
+
+    let _ = remove_file("corner a.sock");
+    let _ = remove_file("corner b.sock");
+    let _ = remove_file("corner c.sock");
+}
+
+#[test]
+fn datagram_peek_vectored() {
+    let _ = std::fs::remove_file("datagram_server.sock");
+    let server = UnixDatagram::bind("datagram_server.sock").unwrap();
+
+    let client = UnixDatagram::unbound().unwrap();
+    if cfg!(any(target_os="linux", target_os="android")) {
+        // get a random abstract address
+        client.bind_to_unix_addr(&UnixSocketAddr::new_unspecified()).unwrap();
+    } else {
+        let _ = std::fs::remove_file("datagram_client.sock");
+        client.bind_to_unix_addr(&UnixSocketAddr::new("datagram_client.sock").unwrap()).unwrap();
+    }
+    client.connect("datagram_server.sock").unwrap();
+    client.send(b"headerbodybody").unwrap();
+
+    let (mut buf_a, mut buf_b) = ([0; 6], [0; 12]);
+    let mut vector = [IoSliceMut::new(&mut buf_a), IoSliceMut::new(&mut buf_b)];
+    let (bytes, addr) = server.peek_vectored_from_unix_addr(&mut vector)
+        .expect("peek with vector");
+    assert_eq!(addr, client.local_unix_addr().unwrap());
+    assert_eq!(bytes, 14);
+    assert_eq!(&buf_a, b"header");
+    assert_eq!(&buf_b[..8], b"bodybody");
+
+    std::fs::remove_file("datagram_server.sock").unwrap();
+    let _ = std::fs::remove_file("datagram_client.sock");
 }

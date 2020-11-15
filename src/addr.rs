@@ -466,6 +466,29 @@ impl UnixSocketAddr {
 
     /// Get a view that can be pattern matched to the differnt types of
     /// addresses.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use uds::{UnixDatagramExt, UnixSocketAddr, UnixSocketAddrRef};
+    /// use std::os::unix::net::UnixDatagram;
+    /// use std::path::Path;
+    ///
+    /// # let _ = std::fs::remove_file("dgram.socket");
+    /// let receiver = UnixDatagram::bind("dgram.socket").expect("create datagram socket");
+    /// assert_eq!(
+    ///     receiver.local_unix_addr().unwrap().as_ref(),
+    ///     UnixSocketAddrRef::Path(Path::new("dgram.socket"))
+    /// );
+    ///
+    /// let sender = UnixDatagram::unbound().expect("create unbound datagram socket");
+    /// sender.send_to(b"I can't hear you", "dgram.socket").expect("send");
+    ///
+    /// let mut buf = [0; 100];
+    /// let (len, addr) = receiver.recv_from_unix_addr(&mut buf).unwrap();
+    /// assert_eq!(addr.as_ref(), UnixSocketAddrRef::Unnamed);
+    /// # std::fs::remove_file("dgram.socket").expect("clean up socket file");
+    /// ```
     pub fn as_ref(&self) -> UnixSocketAddrRef {
         UnixSocketAddrRef::from(self)
     }

@@ -8,7 +8,7 @@ use std::{mem, ptr, slice};
 use std::marker::PhantomData;
 
 use libc::{c_int, c_uint, c_void};
-use libc::{socklen_t, msghdr, iovec, sockaddr_un, cmsghdr};
+use libc::{msghdr, iovec, cmsghdr, sockaddr, sockaddr_un};
 use libc::{sendmsg, recvmsg, close};
 //#[cfg(not(any(target_os="illumos", target_os="solaris")))]
 use libc::{MSG_TRUNC, MSG_CTRUNC};
@@ -402,12 +402,6 @@ pub fn recv_ancillary<'ancillary_buf>(
         msg.msg_control = ptr::null_mut();
         msg.msg_controllen = 0;
 
-        if let Some(addr) = from {
-            let (addr, _) = addr.as_raw_mut();
-            msg.msg_name = addr as *mut sockaddr_un as *mut c_void;
-            msg.msg_namelen = mem::size_of::<sockaddr_un>() as socklen_t;
-        }
-
         if ancillary_buf.len() > 0 {
             #[cfg(any(target_os="illumos", target_os="solaris"))] {
                 return Err(io::Error::new(
@@ -430,7 +424,22 @@ pub fn recv_ancillary<'ancillary_buf>(
         #[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")))] {
             flags |= MSG_CMSG_CLOEXEC;
         }
-        let received = cvt_r!(recvmsg(socket, &mut msg, flags))? as usize;
+
+        let received = match from {
+            Some(addrbuf) => {
+                let (received, addr) = UnixSocketAddr::new_from_ffi(|addr, len| {
+                    msg.msg_name = addr as *mut sockaddr as *mut c_void;
+                    msg.msg_namelen = *len;
+                    let received = cvt_r!(recvmsg(socket, &mut msg, flags))? as usize;
+                    *len = msg.msg_namelen;
+                    Ok(received)
+                })?;
+                *addrbuf = addr;
+                received
+            }
+            None => cvt_r!(recvmsg(socket, &mut msg, flags))? as usize
+        };
+
         let ancillary_iterator = Ancillary {
             msg,
             _ancillary_buf: PhantomData,

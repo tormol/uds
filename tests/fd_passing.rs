@@ -5,10 +5,11 @@ extern crate uds;
 use std::io::{ErrorKind::*, Read, Write};
 use std::os::unix::io::{AsRawFd, FromRawFd};
 use std::os::unix::net::{UnixDatagram, UnixStream};
+use std::fs::remove_file;
 use std::env::consts::*;
 use std::mem::ManuallyDrop;
 
-use uds::{UnixDatagramExt, UnixStreamExt};
+use uds::{UnixDatagramExt, UnixStreamExt, UnixSocketAddr};
 
 #[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
 fn datagram_send_no_fds() {
@@ -271,6 +272,52 @@ fn datagram_separate_payloads() {
             let _ = unsafe { UnixStream::from_raw_fd(fd_buf[1]) };
         }
     }
+}
+
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
+fn unconnected_datagrams() {
+    let _ = remove_file("unconnected send.sock");
+    let _ = remove_file("unconnected recv.sock");
+    let send = UnixDatagram::bind("unconnected send.sock").expect("create first datagram socket");
+    let recv = UnixDatagram::bind("unconnected recv.sock").expect("create second datagram socket");
+    let unbound = UnixDatagram::unbound().expect("create unbound datagram socket");
+
+    let addr_send = UnixSocketAddr::new("unconnected send.sock").unwrap();
+    let addr_recv = UnixSocketAddr::new("unconnected recv.sock").unwrap();
+    let addr_unbound = UnixSocketAddr::new_unspecified();
+
+    let mut byte_buf = [0; 20];
+    let mut fd_buf = [-1; 20];
+
+    send.send_fds_to(b"next from this", &[unbound.as_raw_fd()], &addr_recv)
+        .expect("send datagram to address");
+    assert_eq!(
+        recv.recv_fds_from(&mut byte_buf, &mut fd_buf).expect("receive with addr"),
+        (14, 1, addr_send)
+    );
+    assert_eq!(&byte_buf, b"next from this\0\0\0\0\0\0");
+    assert!(fd_buf[0] > 2);
+    assert_eq!(&fd_buf[1..], &[-1; 19]);
+    let received = unsafe { UnixDatagram::from_raw_fd(fd_buf[0]) };
+    assert_eq!(
+        received.local_addr().expect("get unix domain address of received socket").as_pathname(),
+        None
+    );
+
+    received.send_fds_to(
+        b"where I came from",
+        &[send.as_raw_fd(), recv.as_raw_fd()],
+        &addr_recv
+    ).expect("send datagram from unbound to bound");
+    assert_eq!(
+        recv.recv_fds_from(&mut byte_buf, &mut fd_buf).expect("receive from unbound"),
+        (17, 2, addr_unbound)
+    );
+    assert_eq!(&byte_buf, b"where I came from\0\0\0");
+    assert_eq!(&fd_buf[2..], &[-1; 18]);
+
+    let _ = remove_file("unnconnected send.sock");
+    let _ = remove_file("unnconnected recv.sock");
 }
 
 #[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]

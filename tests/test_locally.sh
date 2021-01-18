@@ -6,7 +6,8 @@ export RUST_BACKTRACE=1
 
 check_targets="x86_64-unknown-freebsd x86_64-unknown-netbsd \
                x86_64-apple-darwin x86_64-sun-solaris \
-               aarch64-unknown-linux-gnu arm-unknown-linux-gnueabi"
+               aarch64-unknown-linux-gnu arm-unknown-linux-gnueabi \
+               aarch64-linux-android"
 # not available: dragonfly, openbsd and illumos
 for target in $check_targets; do
     echo "checking $target"

@@ -119,6 +119,7 @@ task:
     - rustup target add x86_64-sun-solaris
     - rustup target add x86_64-unknown-linux-gnux32
     - rustup target add aarch64-unknown-linux-gnu
+    - rustup target add aarch64-linux-android
     - rustup target add x86_64-pc-windows-msvc
   cargo_cache:
     folder: $HOME/.cargo/registry
@@ -128,6 +129,7 @@ task:
     - cargo check --target x86_64-sun-solaris --tests
     - cargo check --target x86_64-unknown-linux-gnux32 --all-features --tests
     - cargo check --target aarch64-unknown-linux-gnu --all-features --tests
+    - cargo check --target aarch64-linux-android --all-features --tests
     - cargo check --target x86_64-pc-windows-msvc --all-features --lib
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index

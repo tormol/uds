@@ -27,9 +27,22 @@ use crate::credentials::{SendCredentials, ReceivedCredentials};
 #[cfg(any(target_os="linux", target_os="android"))]
 use crate::credentials::RawReceivedCredentials;
 
-#[cfg(all(target_os="linux", target_env="gnu"))]
+// Type of cmsghdr.cmsg_len, which varies between OSes and C libraries
+// (can't get away with using ` as _` because we use the max value in some places.)
+// cfg based on libc 0.2.82 source code.
+#[cfg(any(
+    all(target_os="linux", not(target_env="musl")),
+    target_os="android",
+    target_env="uclibc",
+    target_os="haiku"
+))]
 type ControlLen = usize;
-#[cfg(not(all(target_os="linux", target_env="gnu")))]
+#[cfg(not(any(
+    all(target_os="linux", not(target_env="musl")),
+    target_os="android",
+    target_env="uclibc",
+    target_os="haiku"
+)))]
 type ControlLen = libc::socklen_t;
 
 /// Safe wrapper around `sendmsg()`.

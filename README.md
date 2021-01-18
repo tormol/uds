@@ -64,7 +64,7 @@ Also, some OSes might return the original file descriptor without cloning it if 
 
 ### Other OSes
 
-* Android: I haven't tested or cross-checked for it, but I assume there are no differences from regular Linux.
+* Android: I haven't tested on it, but I assume there are no differences from regular Linux.
 * Windows 10: While it added some unix socket features, Windows support is not a priority. (PRs are welcome though).
 * DragonFly BSD: Basic features should work, but tests fail. I plan to support it.
 * OpenBSD: Not tested yet. I plan to support it.

@@ -155,34 +155,43 @@ impl UnixListenerExt for mio_07::net::UnixListener {
 
 
 
+/// Extension trait for `std::os::unix::net::UnixDatagram` and nonblocking equivalents.
 pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
+    /// Get the address of this socket, as a type that fully supports abstract addresses.
     fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
         get_unix_addr(self.as_raw_fd(), GetAddr::LOCAL)
     }
+    /// Get the address of the connected socket, as a type that fully supports abstract addresses.
     fn peer_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
         get_unix_addr(self.as_raw_fd(), GetAddr::PEER)
     }
 
+    /// Create a path or abstract name for the socket.
     fn bind_to_unix_addr(&self,  addr: &UnixSocketAddr) -> Result<(), io::Error> {
         set_unix_addr(self.as_raw_fd(), SetAddr::LOCAL, addr)
     }
+    /// Connect the socket to a path-based or abstract named socket.
     fn connect_to_unix_addr(&self,  addr: &UnixSocketAddr) -> Result<(), io::Error> {
         set_unix_addr(self.as_raw_fd(), SetAddr::PEER, addr)
     }
 
+    /// Send file descriptors along with the datagram, on an unconnected socket.
     fn send_fds_to(&self,  datagram: &[u8],  fds: &[RawFd],  addr: &UnixSocketAddr)
     -> Result<usize, io::Error> {
         send_ancillary(self.as_raw_fd(), Some(addr), 0, &[IoSlice::new(datagram)], fds, None)
     }
+    /// Send file descriptors along with the datagram, on a connected socket.
     fn send_fds(&self,  datagram: &[u8],  fds: &[RawFd]) -> Result<usize, io::Error> {
         send_ancillary(self.as_raw_fd(), None, 0, &[IoSlice::new(datagram)], fds, None)
     }
+    /// Receive file descriptors along with the datagram, on an unconnected socket
     fn recv_fds_from(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd])
     -> Result<(usize, usize, UnixSocketAddr), io::Error> {
         let mut addr = UnixSocketAddr::default();
         recv_fds(self.as_raw_fd(), Some(&mut addr), &mut[IoSliceMut::new(buf)], fd_buf)
             .map(|(bytes, _, fds)| (bytes, fds, addr) )
     }
+    /// Receive file descriptors along with the datagram, on a connected socket
     fn recv_fds(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd]) -> Result<(usize, usize), io::Error> {
         recv_fds(self.as_raw_fd(), None, &mut[IoSliceMut::new(buf)], fd_buf)
             .map(|(bytes, _, fds)| (bytes, fds) )

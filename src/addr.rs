@@ -99,15 +99,15 @@ pub enum UnixSocketAddrRef<'a> {
 impl<'a> From<&'a UnixSocketAddr> for UnixSocketAddrRef<'a> {
     fn from(addr: &'a UnixSocketAddr) -> UnixSocketAddrRef<'a> {
         let name_len = addr.len as isize - path_offset() as isize;
-        if name_len <= 0 {
+        if addr.is_unnamed() {
             UnixSocketAddrRef::Unnamed
-        } else if addr.addr.sun_path[0] == b'\0' as c_char {
+        } else if addr.is_abstract() {
             let slice = &addr.addr.sun_path[1..name_len as usize];
             UnixSocketAddrRef::Abstract(as_u8(slice))
         } else {
             let mut slice = &addr.addr.sun_path[..name_len as usize];
-            // remove trailing NUL if present
-            if slice.last() == Some(&0) {
+            // remove trailing NUL if present (and multiple NULs just in case)
+            while slice.last() == Some(&0) {
                 slice = &slice[..name_len as usize-1];
             }
             UnixSocketAddrRef::Path(Path::new(OsStr::from_bytes(as_u8(slice))))

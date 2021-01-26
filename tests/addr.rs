@@ -4,6 +4,10 @@ extern crate libc;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::io::ErrorKind::*;
 use std::fs::remove_file;
+use std::path::Path;
+use std::mem::size_of;
+
+use libc::{sockaddr, sockaddr_un, socklen_t};
 
 use uds::{UnixSocketAddr, UnixSocketAddrRef};
 use uds::{UnixListenerExt, UnixStreamExt};
@@ -162,4 +166,89 @@ fn too_long_path() {
         UnixListener::bind(&path).expect_err("bind std socket to too long path").kind(),
         InvalidInput
     );
+}
+
+#[test]
+fn path_from_ffi() {
+    let ((), addr) = UnixSocketAddr::new_from_ffi(|addr, len| {
+        let addr = unsafe { &mut*(addr as *mut sockaddr as *mut sockaddr_un)};
+        *len = (&addr.sun_path as *const _ as usize - addr as *const _ as usize) as socklen_t;
+        for (src, dst) in b"FFIIIII!!".iter().zip(&mut addr.sun_path[..]) {
+            *dst = *src as _;
+            *len += 1;
+        }
+        Ok(())
+    }).expect("return address with path");
+    assert!(addr.is_path());
+    assert_eq!(addr.as_ref(), UnixSocketAddrRef::Path(Path::new("FFIIIII!!")));
+    assert_eq!(format!("{:?}", addr), "UnixSocketAddr(Path(\"FFIIIII!!\"))");
+
+    let ((), addr) = UnixSocketAddr::new_from_ffi(|addr, len| {
+        let addr = unsafe { &mut*(addr as *mut sockaddr as *mut sockaddr_un)};
+        *len = (&addr.sun_path as *const _ as usize - addr as *const _ as usize) as socklen_t;
+        addr.sun_path[0] = b'1' as _;
+        *len += 2;
+        Ok(())
+    }).expect("return address with path");
+    assert!(addr.is_path());
+    assert_eq!(addr.as_ref(), UnixSocketAddrRef::Path(Path::new("1")));
+    assert_eq!(format!("{:?}", addr), "UnixSocketAddr(Path(\"1\"))");
+
+    let (len, addr) = UnixSocketAddr::new_from_ffi(|addr, len| {
+        let addr = unsafe { &mut*(addr as *mut sockaddr as *mut sockaddr_un)};
+        *len = size_of::<sockaddr_un>() as socklen_t;
+        for dst in &mut addr.sun_path[..] {
+            *dst = b'b' as _;
+        }
+        Ok(addr.sun_path[..].len())
+    }).expect("return address with path");
+    assert!(addr.is_path());
+    let path = String::from_utf8(vec![b'b'; len]).unwrap();
+    assert_eq!(addr.as_ref(), UnixSocketAddrRef::Path(Path::new(&path)));
+    assert_eq!(format!("{:?}", addr), format!("UnixSocketAddr(Path(\"{}\"))", path));
+}
+
+#[test]
+fn unnamed_from_ffi() {
+    let ((), addr) = UnixSocketAddr::new_from_ffi(|addr, len| {
+        let addr = unsafe { &mut*(addr as *mut sockaddr as *mut sockaddr_un)};
+        *len = (&addr.sun_path as *const _ as usize - addr as *const _ as usize) as socklen_t;
+        Ok(())
+    }).expect("return address with zero path length");
+    assert!(addr.is_unnamed());
+    assert_eq!(addr.as_ref(), UnixSocketAddrRef::Unnamed);
+    assert_eq!(format!("{:?}", addr), "UnixSocketAddr(\"Unnamed\")");
+
+    if !UnixSocketAddr::has_abstract_addresses() {
+        let ((), addr) = UnixSocketAddr::new_from_ffi(|addr, len| {
+            let addr = unsafe { &mut*(addr as *mut sockaddr as *mut sockaddr_un)};
+            *len = (&addr.sun_path as *const _ as usize - &addr as *const _ as usize) as socklen_t;
+            addr.sun_path[0] = 0;
+            addr.sun_path[1] = 0;
+            addr.sun_path[2] = 0;
+            *len += 3;
+            Ok(())
+        }).expect("return address with zero path");
+        assert!(addr.is_unnamed());
+        assert_eq!(addr.as_ref(), UnixSocketAddrRef::Unnamed);
+        assert_eq!(format!("{:?}", addr), "UnixSocketAddr(\"Unnamed\")");
+    }
+}
+
+#[test]
+fn abstract_from_ffi() {
+    if UnixSocketAddr::has_abstract_addresses() {
+        let ((), addr) = UnixSocketAddr::new_from_ffi(|addr, len| {
+            let addr = unsafe { &mut*(addr as *mut sockaddr as *mut sockaddr_un)};
+            *len = (&addr.sun_path as *const _ as usize - addr as *const _ as usize) as socklen_t;
+            addr.sun_path[0] = 0;
+            addr.sun_path[1] = 0;
+            addr.sun_path[2] = 7;
+            *len += 3;
+            Ok(())
+        }).expect("return abstract address");
+        assert!(addr.is_abstract());
+        assert_eq!(addr.as_ref(), UnixSocketAddrRef::Abstract(b"\x00\x07"));
+        assert_eq!(format!("{:?}", addr), "UnixSocketAddr(Abstract(\"\\u{0}\\u{7}\"))");
+    }
 }

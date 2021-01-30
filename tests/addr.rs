@@ -232,7 +232,7 @@ fn unnamed_from_ffi() {
     }).expect("return address with zero path length");
     assert!(addr.is_unnamed());
     assert_eq!(addr.as_ref(), UnixSocketAddrRef::Unnamed);
-    assert_eq!(format!("{:?}", addr), "UnixSocketAddr(\"Unnamed\")");
+    assert_eq!(format!("{:?}", addr), "UnixSocketAddr(Unnamed)");
 
     if !UnixSocketAddr::has_abstract_addresses() {
         let ((), addr) = UnixSocketAddr::new_from_ffi(|addr, len| {
@@ -246,7 +246,7 @@ fn unnamed_from_ffi() {
         }).expect("return address with zero path");
         assert!(addr.is_unnamed());
         assert_eq!(addr.as_ref(), UnixSocketAddrRef::Unnamed);
-        assert_eq!(format!("{:?}", addr), "UnixSocketAddr(\"Unnamed\")");
+        assert_eq!(format!("{:?}", addr), "UnixSocketAddr(Unnamed)");
     }
 }
 

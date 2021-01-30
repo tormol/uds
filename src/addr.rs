@@ -122,6 +122,8 @@ pub type UnixSocketAddrRef<'a> = AddrName<'a>;
 impl Debug for UnixSocketAddr {
     fn fmt(&self,  fmtr: &mut fmt::Formatter) -> fmt::Result {
         #[derive(Debug)]
+        struct Unnamed;
+        #[derive(Debug)]
         struct Path<'a>(&'a std::path::Path);
         #[derive(Debug)]
         struct Abstract<'a>(&'a OsStr);
@@ -131,7 +133,7 @@ impl Debug for UnixSocketAddr {
         let mut abstract_type = Abstract(OsStr::new(""));
 
         let variant: &dyn Debug = match self.into() {
-            UnixSocketAddrRef::Unnamed => &"Unnamed",
+            UnixSocketAddrRef::Unnamed => &Unnamed,
             UnixSocketAddrRef::Path(path) => {
                 path_type.0 = path;
                 &path_type

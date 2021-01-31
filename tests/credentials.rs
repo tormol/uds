@@ -14,6 +14,7 @@ use libc::{getpid, geteuid, getegid, getgid, getgroups};
     not(any(
         target_os="linux", target_os="android",
         target_os="freebsd", target_vendor="apple",
+        target_os="openbsd",
         target_os="illumos", target_os="solaris"
     )),
     test
@@ -86,6 +87,7 @@ fn assert_credentials_matches_current_process(creds: &ConnCredentials,  socket_t
     any(
         target_os="linux", target_os="android",
         target_os="freebsd", target_vendor="apple",
+        target_os="openbsd",
         target_os="illumos", target_os="solaris"
     ),
     test
@@ -100,7 +102,8 @@ fn peer_credentials_of_stream_conn() {
 
 #[cfg_attr(
     any(
-        target_os="linux", target_os="android", target_os="freebsd",
+        target_os="linux", target_os="android",
+        target_os="freebsd", target_os="openbsd",
         target_os="illumos", target_os="solaris"
     ),
     test
@@ -116,6 +119,7 @@ fn peer_credentials_of_seqpacket_conn() {
     any(
         target_os="linux", target_os="android",
         target_os="freebsd", target_vendor="apple",
+        target_os="openbsd",
         target_os="illumos", target_os="solaris"
     ),
     test
@@ -142,6 +146,7 @@ fn pair_credentials_of_datagram_socketpair() {
     any(
         target_os="linux", target_os="android",
         target_os="freebsd", target_vendor="apple",
+        target_os="openbsd",
         target_os="illumos", target_os="solaris"
     ),
     test
@@ -164,6 +169,7 @@ fn no_peer_credentials_of_unconnected_datagram_socket() {
     any(
         target_os="linux", target_os="android",
         target_os="freebsd", target_vendor="apple",
+        target_os="openbsd",
         target_os="illumos", target_os="solaris"
     ),
     test

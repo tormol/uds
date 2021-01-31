@@ -2,12 +2,20 @@ use std::os::unix::io::RawFd;
 use std::{io, fmt};
 use std::num::NonZeroU32;
 use std::io::ErrorKind::*;
-#[cfg(any(target_os="linux", target_os="android", target_os="freebsd", target_vendor="apple"))]
+#[cfg(any(
+    target_os="linux", target_os="android",
+    target_os="freebsd", target_vendor="apple",
+    target_os="openbsd"
+))]
 use std::mem;
 #[cfg(any(target_os="illumos", target_os="solaris"))]
 use std::ptr;
 
-#[cfg(any(target_os="linux", target_os="android", target_os="freebsd", target_vendor="apple"))]
+#[cfg(any(
+    target_os="linux", target_os="android",
+    target_os="freebsd", target_vendor="apple",
+    target_os="openbsd"
+))]
 use libc::{getsockopt, c_void, socklen_t};
 #[cfg(any(target_os="linux", target_os="android"))]
 use libc::{pid_t, uid_t, gid_t, getpid, getuid, geteuid, getgid, getegid};
@@ -17,6 +25,8 @@ use libc::{ucred, SOL_SOCKET, SO_PEERCRED};
 use libc::{xucred, XUCRED_VERSION, LOCAL_PEERCRED};
 #[cfg(target_vendor="apple")]
 use libc::SOL_LOCAL; // Apple is for once the one that does the right thing!
+#[cfg(target_os="openbsd")]
+use libc::{sockpeercred, SOL_SOCKET, SO_PEERCRED};
 #[cfg(any(target_os="illumos", target_os="solaris"))]
 use libc::{getpeerucred, ucred_free, ucred_t};
 #[cfg(any(target_os="illumos", target_os="solaris"))]
@@ -71,7 +81,7 @@ impl SendCredentials {
 ///
 /// Current limitations of this crate:
 ///
-/// * NetBSD, OpenBSD and DragonFly BSD are not supported.
+/// * NetBSD and DragonFly BSD are not supported.
 ///   On these OSes, functions that can return this type
 ///   will return an error instead.
 /// * Illumos and Solaris provides enough information to fill out
@@ -105,7 +115,7 @@ impl ConnCredentials {
     }
     /// Get the effective group ID of the initial peer of a connection.
     ///
-    /// * On Linux, Android and in the future OpenBSD and NetBSD,
+    /// * On Linux, Android, OpenBSD and in the future NetBSD,
     ///   `egid` from the `LinuxLike` variant is returned.
     /// * On FreeBSD, macOS and in the future DragonFly BSD,
     ///   `groups[0]` from the `MacOsLike` variant is returned
@@ -214,6 +224,26 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
     }
 }
 
+#[cfg(target_os="openbsd")]
+pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
+    let mut sockpeercred: sockpeercred = unsafe { mem::zeroed() };
+    unsafe {
+        let ptr = &mut sockpeercred as *mut sockpeercred as *mut c_void;
+        let mut size = mem::size_of::<sockpeercred>() as socklen_t;
+        if getsockopt(conn, SOL_SOCKET, SO_PEERCRED, ptr, &mut size) == -1 {
+            Err(io::Error::last_os_error())
+        } else if let Some(pid) = NonZeroU32::new(sockpeercred.pid as u32) {
+            Ok(ConnCredentials::LinuxLike {
+                pid,
+                euid: sockpeercred.uid as u32,
+                egid: sockpeercred.gid as u32,
+            })
+        } else {
+            Err(io::Error::new(NotConnected, "socket is not a connection"))
+        }
+    }
+}
+
 #[cfg(any(target_os="illumos", target_os="solaris"))]
 pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
     struct UcredAlloc(*mut ucred_t);
@@ -276,7 +306,7 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
     }
 }
 
-#[cfg(any(target_os="openbsd", target_os="dragonfly", target_os="netbsd"))]
+#[cfg(any(target_os="dragonfly", target_os="netbsd"))]
 pub fn peer_credentials(_: RawFd) -> Result<ConnCredentials, io::Error> {
     Err(io::Error::new(Other, "Not yet supported"))
 }

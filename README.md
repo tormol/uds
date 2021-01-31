@@ -55,7 +55,7 @@ Also, some OSes might return the original file descriptor without cloning it if 
 | | Linux | macOS | FreeBSD | OpenBSD | NetBSD | Illumos |
 |-|-|-|-|-|-|
 | **Seqpacket** | Yes | N/A | Yes | Yes | Yes | N/A |
-| **peer credentials** | Yes | Yes | Yes | No | No | Yes |
+| **peer credentials** | Yes | Yes | Yes | Yes | No | Yes |
 | **fd-passing** | Yes | Yes | Yes | Yes | Yes | No |
 | **abstract addresses** | Yes | N/A | N/A | N/A | N/A | N/A |
 | **mio (0.6 & 0.7 & uds)** | Yes | Yes | Yes | ? | Yes | Yes |

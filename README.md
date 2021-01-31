@@ -53,7 +53,7 @@ On Linux file descriptors are cloned when they are sent, but macOS and the BSDs 
 Also, some OSes might return the original file descriptor without cloning it if it's received within the same process as it was sent from. (DragonFly BSD, possibly macOS and maybe FreeBSD).
 
 | | Linux | macOS | FreeBSD | OpenBSD | NetBSD | Illumos |
-|-|-|-|-|-|-|
+|-|-|-|-|-|-|-|
 | **Seqpacket** | Yes | N/A | Yes | Yes | Yes | N/A |
 | **peer credentials** | Yes | Yes | Yes | Yes | No | Yes |
 | **fd-passing** | Yes | Yes | Yes | Yes | Yes | No |
@@ -157,4 +157,12 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 
 ### Version 0.1.0 (2029-02-15)
 
-(initial release)
+* Rename `UnixSocketAddr::unspecified()` to `new_unspecified()`.
+* Add `peer_credentials()`.
+* Support macOS and FreeBSD.
+
+### Version 0.0.0 (2019-11-23)
+
+* Add `UnixSocketAddr` to support abstract addresses.
+* Add seqpacket types.
+* Add extension traits to support FD passing (and to create and accept `UnixSocketAddr`)

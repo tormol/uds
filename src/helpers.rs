@@ -19,7 +19,9 @@ use libc::{setsockopt, SO_RCVTIMEO, SO_SNDTIMEO, timeval, time_t};
 #[cfg(any(target_os="illumos", target_os="solaris"))]
 use libc::{F_GETFD, F_SETFD, FD_CLOEXEC};
 #[cfg(not(target_vendor="apple"))]
-use libc::{SOCK_CLOEXEC, SOCK_NONBLOCK, accept4, ENOSYS};
+use libc::{SOCK_CLOEXEC, SOCK_NONBLOCK};
+#[cfg(not(any(target_vendor="apple", all(target_os="android", target_arch="x86"))))]
+use libc::{accept4, ENOSYS};
 #[cfg(target_vendor="apple")]
 use libc::SO_NOSIGPIPE;
 
@@ -265,10 +267,15 @@ impl Socket {
     -> Result<(Self, UnixSocketAddr), io::Error> {
         unsafe { UnixSocketAddr::new_from_ffi(|addr_ptr, len_ptr| {
             // Use accept4() to set close-on-exec atomically if possible.
+            // (macOS and iOS doesn't have accept4(),
+            //  and the Android emulator prohibits it: https://github.com/tokio-rs/mio/issues/1445)
             // ENOSYS is handled for compatibility with Linux < 2.6.28,
             // because Rust std still supports Linux 2.6.18.
-            // (used by RHEL 5 which doesn't reach EOL until November 2020).
-            #[cfg(not(target_vendor="apple"))] {
+            // (used by RHEL 5 which didn't reach EOL until November 2020).
+            #[cfg(not(any(
+                target_vendor="apple",
+                all(target_os="android", target_arch="x86")
+            )))] {
                 let flags = SOCK_CLOEXEC | if nonblocking {SOCK_NONBLOCK} else {0};
                 match cvt_r!(accept4(fd, addr_ptr, len_ptr, flags)) {
                     Ok(fd) => return Ok(Socket(fd)),

@@ -747,15 +747,16 @@ impl UnixSeqpacketListener {
 ///
 /// let poll = Poll::new().expect("create mio poll");
 /// let mut events = Events::with_capacity(10);
-/// poll.register(&a, Token(0), Ready::all(),  PollOpt::edge())
+/// poll.register(&a, Token(1), Ready::all(),  PollOpt::edge())
 ///     .expect("register unix seqpacket connection with mio");
 ///
-/// b.send(&[]).expect("send seqpacket");
+/// b.send(b"this is it").expect("send seqpacket");
 ///
 /// poll.poll(&mut events, None).expect("receive mio notifications");
 /// let current_events = events.iter().collect::<Vec<_>>();
 /// assert!(current_events.len() > 0);
-/// assert_eq!(current_events[0].token(), Token(0));
+/// assert_eq!(current_events[0].token(), Token(1));
+/// assert_eq!(a.recv(&mut [0; 8]).expect("receive packet"), (8, true/*truncated*/));
 /// ```
 #[derive(Debug)]
 #[repr(transparent)]
@@ -996,6 +997,35 @@ impl NonblockingUnixSeqpacketConn {
 /// assert_eq!(conn.recv(&mut[0u8; 20]).unwrap_err().kind(), ErrorKind::WouldBlock);
 /// #
 /// # std::fs::remove_file("nonblocking_seqpacket_listener.socket").unwrap();
+/// ```
+///
+/// Registering with mio (v0.7):
+///
+#[cfg_attr(all(feature="mio_07", not(target_vendor="apple")), doc="```")]
+#[cfg_attr(all(feature="mio_07", target_vendor="apple"), doc="```no_run")]
+#[cfg_attr(not(feature="mio_07"), doc="```no_compile")]
+/// use uds::nonblocking::{UnixSeqpacketListener, UnixSeqpacketConn};
+/// use mio_07::{Poll, Events, Token, Interest};
+/// use std::io::ErrorKind;
+///
+/// # let _ = std::fs::remove_file("seqpacket.sock");
+/// let listener = UnixSeqpacketListener::bind("seqpacket.sock")
+///     .expect("create nonblocking seqpacket listener");
+///
+/// let mut poll = Poll::new().expect("create mio poll");
+/// let mut events = Events::with_capacity(10);
+/// poll.registry()
+///     .register(&mut &listener, Token(0), Interest::READABLE)
+///     .expect("register unix seqpacket listener with mio");
+///
+/// let _conn = UnixSeqpacketConn::connect("seqpacket.sock")
+///     .expect("create nonblocking seqpacket socket and connect to listener");
+///
+/// poll.poll(&mut events, None).expect("receive mio notifications");
+/// let current_events = events.iter().collect::<Vec<_>>();
+/// assert!(current_events.len() > 0);
+/// assert_eq!(current_events[0].token(), Token(0));
+/// let (_, _addr) = listener.accept_unix_addr().expect("accept connection");
 /// ```
 #[derive(Debug)]
 #[repr(transparent)]

@@ -9,7 +9,7 @@ script:
   - cargo check --features mio-uds
   - cargo check --features mio_07
   - cargo check --features tokio
-  - export RUSTFLAGS='--cfg features="os-poll"'
+  - export RUSTFLAGS='--cfg feature="os-poll"'
   - cargo test --all-features --no-fail-fast
 
 jobs:

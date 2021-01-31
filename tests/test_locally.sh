@@ -19,9 +19,9 @@ for target in $check_targets; do
     cargo check $CAFLAGS --target "$target" --features mio_07
     cargo check $CAFLAGS --target "$target" --features tokio
     cargo check $CAFLAGS --target "$target" --all-features
-    RUSTFLAGS='--cfg features="os-poll"' cargo check $CAFLAGS --target "$target" --tests --examples --features mio_07
-    RUSTFLAGS='--cfg features="os-poll"' cargo check $CAFLAGS --target "$target" --tests --examples --features tokio
-    RUSTFLAGS='--cfg features="os-poll"' cargo check $CAFLAGS --target "$target" --tests --examples --all-features
+    RUSTFLAGS='--cfg feature="os-poll"' cargo check $CAFLAGS --target "$target" --tests --examples --features mio_07
+    RUSTFLAGS='--cfg feature="os-poll"' cargo check $CAFLAGS --target "$target" --tests --examples --features tokio
+    RUSTFLAGS='--cfg feature="os-poll"' cargo check $CAFLAGS --target "$target" --tests --examples --all-features
     echo
 done
 
@@ -30,11 +30,11 @@ test_targets="x86_64-unknown-linux-gnu x86_64-unknown-linux-musl \
 for target in $test_targets; do
     echo "testing $target"
     cargo check $CAFLAGS --target "$target" --all-features
-    RUSTFLAGS='--cfg features="os-poll"' cargo $CAFLAGS test --target "$target" --all-features -- --quiet
+    RUSTFLAGS='--cfg feature="os-poll"' cargo $CAFLAGS test --target "$target" --all-features -- --quiet
     echo
 done
 
-export RUSTFLAGS='--cfg features="os-poll"'
+export RUSTFLAGS='--cfg feature="os-poll"'
 
 #test_release_target="x86_64-unknown-linux-gnux32" # segfaults in debug mode (and release mode too now)
 #echo "testing $test_release_target (in release mode)"

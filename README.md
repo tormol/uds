@@ -58,7 +58,7 @@ Also, some OSes might return the original file descriptor without cloning it if 
 | **peer credentials** | Yes | Yes | Yes | Yes | No | Yes |
 | **fd-passing** | Yes | Yes | Yes | Yes | Yes | No |
 | **abstract addresses** | Yes | N/A | N/A | N/A | N/A | N/A |
-| **mio (0.6 & 0.7 & uds)** | Yes | Yes | Yes | ? | Yes | Yes |
+| **mio (0.6 & 0.7 & uds)** | Yes | Yes | Yes | Yes | Yes | Yes |
 | **tokio** | Yes | Yes | Yes | Yes | Yes | Yes |
 | **Tested?** | Locally + CI | CI | CI + Manually | CI | Manually | Manually |
 

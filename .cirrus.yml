@@ -6,7 +6,7 @@ task:
     memory: 1 # GB
   env:
     RUST_BACKTRACE: 1
-    RUSTFLAGS: --cfg features="os-poll"
+    RUSTFLAGS: --cfg feature="os-poll"
   setup_script:
     - pkg install -y curl
     - curl https://sh.rustup.rs -sSf --output rustup.sh
@@ -47,7 +47,7 @@ task:
     - cargo build --all-features
   test_script:
     - cargo run --bin characteristics
-    - export RUSTFLAGS='--cfg features="os-poll"'
+    - export RUSTFLAGS='--cfg feature="os-poll"'
     - cargo test --all-features --no-fail-fast -- --test-threads=1
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
@@ -71,7 +71,7 @@ task:
   test_script:
     - RUST_BACKTRACE=1
     - cargo test -Z minimal-versions --features mio --no-fail-fast -- --test-threads=1
-    - export RUSTFLAGS='--cfg features="os-poll"'
+    - export RUSTFLAGS='--cfg feature="os-poll"'
     - cargo test -Z minimal-versions --features mio_07 --no-fail-fast -- --test-threads=1
     - cargo test -Z minimal-versions --features tokio --no-fail-fast -- --test-threads=1
   before_cache_script:
@@ -86,7 +86,7 @@ task:
   allow_failures: false
   env:
     RUST_BACKTRACE: 1
-    RUSTFLAGS: --cfg features="os-poll"
+    RUSTFLAGS: --cfg feature="os-poll"
   setup_script:
     - apt-get update
     - apt-get install -yqq gcc gcc-multilib linux-libc-dev
@@ -99,7 +99,7 @@ task:
     - cargo build --target i686-unknown-linux-gnu --all-features
     - cargo build --target i686-unknown-linux-musl --all-features
   test_script:
-    - export RUSTFLAGS='--cfg features="os-poll"'
+    - export RUSTFLAGS='--cfg feature="os-poll"'
     - cargo test --target i686-unknown-linux-gnu --all-features --no-fail-fast -- --test-threads=1
     - cargo test --target i686-unknown-linux-musl --all-features --no-fail-fast -- --test-threads=1
   before_cache_script:
@@ -113,7 +113,7 @@ task:
     memory: 1
   allow_failures: false
   env:
-    RUSTFLAGS: --cfg features="os-poll"
+    RUSTFLAGS: --cfg feature="os-poll"
   setup_script:
     - rustup target add x86_64-unknown-netbsd
     - rustup target add x86_64-sun-solaris

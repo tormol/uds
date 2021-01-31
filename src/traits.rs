@@ -9,26 +9,36 @@ use crate::helpers::*;
 use crate::ancillary::*;
 use crate::credentials::*;
 
+/// Extension trait for `std::os::unix::net::UnixDatagram` and nonblocking equivalents.
 pub trait UnixStreamExt: AsRawFd + FromRawFd + Sized {
+    /// Get the address of this socket, as a type that fully supports abstract addresses.
     fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
         get_unix_addr(self.as_raw_fd(), GetAddr::LOCAL)
     }
+    /// Get the address of the other end of this stream,
+    /// as a type that fully supports abstract addresses.
     fn peer_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
         get_unix_addr(self.as_raw_fd(), GetAddr::PEER)
     }
 
+    /// Create a connection to a listening path-based or abstract named socket.
     fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error>;
+
+    /// Create a path-based or abstract-named socket and connect to a listening socket.
     fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
     -> Result<Self, io::Error>;
 
+    /// Send file descriptors in addition to bytes.
     fn send_fds(&self,  bytes: &[u8],  fds: &[RawFd]) -> Result<usize, io::Error> {
         send_ancillary(self.as_raw_fd(), None, 0, &[IoSlice::new(bytes)], fds, None)
     }
+    /// Receive file descriptors in addition to bytes.
     fn recv_fds(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd]) -> Result<(usize, usize), io::Error> {
         recv_fds(self.as_raw_fd(), None, &mut[IoSliceMut::new(buf)], fd_buf)
             .map(|(bytes, _, fds)| (bytes, fds) )
     }
 
+    /// Get the credentials of the process that created the other end of this stream.
     fn initial_peer_credentials(&self) -> Result<ConnCredentials, io::Error> {
         peer_credentials(self.as_raw_fd())
     }
@@ -85,6 +95,7 @@ impl UnixStreamExt for mio_07::net::UnixStream {
 
 /// Extension trait for using [`UnixSocketAddr`](struct.UnixSocketAddr.html) with `UnixListener` types.
 pub trait UnixListenerExt: AsRawFd + FromRawFd + Sized {
+    /// The type represeting the stream connection returned by `accept_unix_addr()`.
     type Conn: FromRawFd;
 
     /// Create a socket bound to a `UnixSocketAddr` and start listening on it.

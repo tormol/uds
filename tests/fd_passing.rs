@@ -320,8 +320,8 @@ fn unconnected_datagrams() {
     assert_eq!(&byte_buf, b"where I came from\0\0\0");
     assert_eq!(&fd_buf[2..], &[-1; 18]);
 
-    let _ = remove_file("unnconnected send.sock");
-    let _ = remove_file("unnconnected recv.sock");
+    let _ = remove_file("unconnected send.sock");
+    let _ = remove_file("unconnected recv.sock");
 }
 
 #[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]

@@ -78,7 +78,7 @@ To enable it, add this to Cargo.toml:
 
 ```toml
 [dependencies]
-uds = {version="0.2.1", features=["mio"]}
+uds = {version="0.2.2", features=["mio"]}
 ```
 
 The extension traits can also be implement for [mio-uds](https://github.com/alexcrichton/mio-uds) types:
@@ -87,14 +87,14 @@ To enable them, add this to Cargo.toml:
 
 ```toml
 [dependencies]
-uds = {version="0.2.1", features=["mio-uds"]}
+uds = {version="0.2.2", features=["mio-uds"]}
 ```
 
 Mio 0.7 is also supported:
 
 ```toml
 [dependencies]
-uds = {version="0.2.1", features=["mio_07"]}
+uds = {version="0.2.2", features=["mio_07"]}
 ```
 
 ## tokio integration
@@ -106,7 +106,7 @@ To enable it, add this to Cargo.toml:
 
 ```toml
 [dependencies]
-uds = {version="0.2.1", features=["tokio"]}
+uds = {version="0.2.2", features=["tokio"]}
 ```
 
 ## Minimum Rust version
@@ -132,6 +132,17 @@ at your option.
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
 ## Release History
+
+### Version 0.2.2 (2021-01-31)
+
+* Compile on 64-bit Android (#4).
+* Support OpenBSD (including peer credentials).
+* Fix `UnixDatagramExt::recv_fds_from()` always returning unnamed adress.
+* Fix `UnixSocketAddr::as_ref()` and its `Debug` impl misrepresenting some unnamed addresses
+  as abstract on operating systems that don't have abstract addresses.
+* Fix `UnixSocketAddr::as_ref()` and its `Debug` impl having trailing NULs in paths in rare cases.
+  (this has only happened on OpenBSD so far).
+* Avoid invoking `accept4()` on x86 Android (based on [mio #1445](https://github.com/tokio-rs/mio/issues/1445)).
 
 ### Version 0.2.1 (2020-11-15)
 

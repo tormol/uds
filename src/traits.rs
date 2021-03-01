@@ -2,7 +2,7 @@ use std::os::unix::io::{RawFd, AsRawFd, FromRawFd, IntoRawFd};
 use std::os::unix::net::{UnixStream, UnixListener, UnixDatagram};
 use std::io::{self, IoSlice, IoSliceMut, ErrorKind};
 
-use libc::{SOCK_STREAM, MSG_PEEK, c_void, recvfrom, sendto};
+use libc::{SOCK_DGRAM, SOCK_STREAM, MSG_PEEK, c_void, recvfrom, sendto};
 
 use crate::addr::UnixSocketAddr;
 use crate::helpers::*;
@@ -168,6 +168,44 @@ impl UnixListenerExt for mio_07::net::UnixListener {
 
 /// Extension trait for `std::os::unix::net::UnixDatagram` and nonblocking equivalents.
 pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
+    /// Create a socket bound to a path or abstract name.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(any(target_os="linux", target_os="android"), doc="```")]
+    #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
+    /// # use std::os::unix::net::UnixDatagram;
+    /// # use uds::{UnixDatagramExt, UnixSocketAddr};
+    /// #
+    /// # fn main() -> Result<(), std::io::Error> {
+    /// let addr = UnixSocketAddr::new("@abstract")?;
+    /// let socket = UnixDatagram::bind_unix_addr(&addr)?;
+    /// # let _ = socket.send_to_unix_addr(b"where are you", &addr);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// This is equivalent of:
+    ///
+    /// ```
+    /// # use std::os::unix::net::UnixDatagram;
+    /// # use uds::{UnixDatagramExt, UnixSocketAddr};
+    /// #
+    /// # fn main() -> Result<(), std::io::Error> {
+    /// # let addr = UnixSocketAddr::new("me")?;
+    /// let socket = UnixDatagram::unbound()?;
+    /// socket.bind_to_unix_addr(&addr)?;
+    /// # let _ = std::fs::remove_file("me");
+    /// # Ok(())
+    /// # }
+    /// ```
+    fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
+        let socket = Socket::new(SOCK_DGRAM, true)?;
+        let socket = unsafe { Self::from_raw_fd(socket.into_raw_fd()) };
+        socket.bind_to_unix_addr(addr)?;
+        Ok(socket)
+    }
+
     /// Get the address of this socket, as a type that fully supports abstract addresses.
     fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
         get_unix_addr(self.as_raw_fd(), GetAddr::LOCAL)
@@ -469,10 +507,40 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
     }
 }
 
-impl UnixDatagramExt for UnixDatagram {}
+impl UnixDatagramExt for UnixDatagram {
+    fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
+        match UnixDatagram::unbound() {
+            Ok(socket) => match socket.bind_to_unix_addr(addr) {
+                Ok(()) => Ok(socket),
+                Err(e) => Err(e),
+            }
+            Err(e) => Err(e)
+        }
+    }
+}
 
 #[cfg(feature="mio-uds")]
-impl UnixDatagramExt for mio_uds::UnixDatagram {}
+impl UnixDatagramExt for mio_uds::UnixDatagram {
+    fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
+        match mio_uds::UnixDatagram::unbound() {
+            Ok(socket) => match socket.bind_to_unix_addr(addr) {
+                Ok(()) => Ok(socket),
+                Err(e) => Err(e),
+            }
+            Err(e) => Err(e)
+        }
+    }
+}
 
 #[cfg(feature="mio_07")]
-impl UnixDatagramExt for mio_07::net::UnixDatagram {}
+impl UnixDatagramExt for mio_07::net::UnixDatagram {
+    fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
+        match mio_07::net::UnixDatagram::unbound() {
+            Ok(socket) => match socket.bind_to_unix_addr(addr) {
+                Ok(()) => Ok(socket),
+                Err(e) => Err(e),
+            }
+            Err(e) => Err(e)
+        }
+    }
+}

@@ -380,6 +380,7 @@ impl UnixSocketAddr {
         }
     }
 
+    /// Check whether the address is unnamed.
     pub fn is_unnamed(&self) -> bool {
         if Self::has_abstract_addresses() {
             self.len <= path_offset()
@@ -389,6 +390,10 @@ impl UnixSocketAddr {
             self.len <= path_offset()  ||  self.addr.sun_path[0] as u8 == b'\0'
         }
     }
+    /// Check whether the address is a name in the abstract namespace.
+    ///
+    /// Always returns `false` on operating systems that don't support abstract
+    /// addresses.
     pub fn is_abstract(&self) -> bool {
         if Self::has_abstract_addresses() {
             self.len > path_offset()  &&  self.addr.sun_path[0] as u8 == b'\0'
@@ -396,16 +401,41 @@ impl UnixSocketAddr {
             false
         }
     }
+    /// Check whether the address is a path that begins with '/'.
     pub fn is_absolute_path(&self) -> bool {
         self.len > path_offset()  &&  self.addr.sun_path[0] as u8 == b'/'
     }
+    /// Check whether the address is a path that doesn't begin with '/'.
     pub fn is_relative_path(&self) -> bool {
         self.len > path_offset()
             &&  self.addr.sun_path[0] as u8 != b'\0'
             &&  self.addr.sun_path[0] as u8 != b'/'
     }
+    /// Check whether the address is a path.
     pub fn is_path(&self) -> bool {
         self.len > path_offset()  &&  self.addr.sun_path[0] as u8 != b'\0'
+    }
+
+    /// Get a view of the address that can be pattern matched
+    /// to the differnt types of addresses.
+    pub fn as_enum(&self) -> UnixSocketAddrRef {
+        UnixSocketAddrRef::from(self)
+    }
+
+    /// Get the path of a path-based address.
+    pub fn as_pathname(&self) -> Option<&Path> {
+        match UnixSocketAddrRef::from(self) {
+            UnixSocketAddrRef::Path(path) => Some(path),
+            _ => None
+        }
+    }
+
+    /// Get the name of an address which is in the abstract namespace.
+    pub fn as_abstract(&self) -> Option<&[u8]> {
+        match UnixSocketAddrRef::from(self) {
+            UnixSocketAddrRef::Abstract(name) => Some(name),
+            _ => None
+        }
     }
 
     /// Get a view that can be pattern matched to the differnt types of

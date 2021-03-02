@@ -30,7 +30,7 @@ test_targets="x86_64-unknown-linux-gnu x86_64-unknown-linux-musl \
 for target in $test_targets; do
     echo "testing $target"
     cargo check $CAFLAGS --target "$target" --all-features
-    RUSTFLAGS='--cfg feature="os-poll"' cargo $CAFLAGS test --target "$target" --all-features -- --quiet
+    RUSTFLAGS='--cfg feature="os-poll"' cargo test $CAFLAGS --target "$target" --all-features -- --quiet
     echo
 done
 

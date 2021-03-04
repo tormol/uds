@@ -25,6 +25,8 @@ fn as_u8(slice: &[c_char]) -> &[u8] {
     unsafe { &*(slice as *const[c_char] as *const[u8]) }
 }
 
+const TOO_LONG_DESC: &'static str = "address is too long";
+
 /// A unix domain socket address.
 ///
 /// # Differences from `std`'s `unix::net::SocketAddr`
@@ -416,12 +418,6 @@ impl UnixSocketAddr {
         self.len > path_offset()  &&  self.addr.sun_path[0] as u8 != b'\0'
     }
 
-    /// Get a view of the address that can be pattern matched
-    /// to the differnt types of addresses.
-    pub fn as_enum(&self) -> UnixSocketAddrRef {
-        UnixSocketAddrRef::from(self)
-    }
-
     /// Get the path of a path-based address.
     pub fn as_pathname(&self) -> Option<&Path> {
         match UnixSocketAddrRef::from(self) {
@@ -442,6 +438,123 @@ impl UnixSocketAddr {
     /// addresses.
     pub fn as_ref(&self) -> UnixSocketAddrRef {
         UnixSocketAddrRef::from(self)
+    }
+
+    /// Create an address from a slice of bytes to place in `sun_path`.
+    ///
+    /// This is a low-level but simple interface for creating addresses by
+    /// other unix socket wrappers without exposing any libc types.  
+    /// The meaning of a slice can vary between operating systems.
+    ///
+    /// `addr` should point to thes start of the "path" part of a socket
+    /// address, with length being the number of valid bytes of the path.
+    /// (Trailing NULs are not stripped by this function.)
+    ///
+    /// # Errors
+    ///
+    /// If the slice is longer than `sun_path`, an error of kind `Other` is
+    /// returned. No other validation of the bytes is performed.
+    ///
+    /// # Examples
+    ///
+    /// A normal path-based address
+    ///
+    /// ```
+    /// # use std::path::Path;
+    /// # use uds::UnixSocketAddr;
+    /// let addr = UnixSocketAddr::from_raw_bytes(b"/var/run/a.sock\0").unwrap();
+    /// assert_eq!(addr.as_pathname(), Some(Path::new("/var/run/a.sock")));
+    /// assert_eq!(addr.as_raw_bytes(), b"/var/run/a.sock\0");
+    /// ```
+    ///
+    /// On Linux:
+    ///
+    #[cfg_attr(any(target_os="linux", target_os="android"), doc="```")]
+    #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
+    /// # use uds::UnixSocketAddr;
+    /// let addr = UnixSocketAddr::from_raw_bytes(b"\0a").unwrap();
+    /// assert_eq!(addr.as_abstract(), Some(&b"a"[..]));
+    /// assert_eq!(addr.as_raw_bytes(), b"\0a");
+    /// ```
+    ///
+    /// Elsewhere:
+    ///
+    #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```")]
+    #[cfg_attr(any(target_os="linux", target_os="android"), doc="```no_run")]
+    /// # use uds::UnixSocketAddr;
+    /// let addr = UnixSocketAddr::from_raw_bytes(b"\0a").unwrap();
+    /// assert!(addr.is_unnamed());
+    /// assert_eq!(addr.as_raw_bytes().len(), 2);
+    /// ```
+    ///
+    /// A portable unnamed address:
+    ///
+    /// ```
+    /// # use uds::UnixSocketAddr;
+    /// let addr = UnixSocketAddr::from_raw_bytes(&[]).expect("not too long");
+    /// assert!(addr.is_unnamed());
+    /// assert!(addr.as_raw_bytes().is_empty());
+    /// ```
+    pub fn from_raw_bytes(addr: &[u8]) -> Result<Self, io::Error> {
+        if addr.len() <= Self::max_path_len() {
+            let name = addr;
+            let mut addr = Self::default();
+            for (src, dst) in name.iter().zip(&mut addr.addr.sun_path[..]) {
+                *dst = *src as c_char;
+            }
+            addr.len = path_offset() + name.len() as socklen_t;
+            Ok(addr)
+        } else {
+            Err(io::Error::new(ErrorKind::InvalidInput, TOO_LONG_DESC))
+        }
+    }
+    /// Get a low-level but view of the address without using any libc types.
+    ///
+    /// The returned slice points to the start of `sun_addr` of the contained
+    /// `sockaddr_un`, and the length is the number of bytes of `sun_addr`
+    /// that were filled out by the OS. Any trailing NUL(s) will be preserved.
+    ///
+    /// # Examples
+    ///
+    /// A normal path-based address
+    ///
+    /// ```
+    /// # use std::path::Path;
+    /// # use std::os::unix::net::UnixDatagram;
+    /// # use uds::{UnixSocketAddr, UnixDatagramExt};
+    /// let pathname = "a file";
+    /// let socket = UnixDatagram::bind(pathname).expect("create datagram socket");
+    /// # let _ = std::fs::remove_file(pathname);
+    /// let addr = socket.local_unix_addr().expect("get its address");
+    /// assert!(addr.as_raw_bytes().starts_with(pathname.as_bytes()));
+    /// assert!(addr.as_raw_bytes()[pathname.len()..].iter().all(|&b| b == b'\0' ));
+    /// assert_eq!(addr.as_pathname(), Some(Path::new(pathname)));
+    /// ```
+    ///
+    /// Abstract address:
+    ///
+    #[cfg_attr(any(target_os="linux", target_os="android"), doc="```")]
+    #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
+    /// # use uds::UnixSocketAddr;
+    /// let addr = UnixSocketAddr::new("@someone@").unwrap();
+    /// assert_eq!(addr.as_raw_bytes(), b"\0someone@");
+    /// ```
+    ///
+    /// Unnamed address on macOS, OpenBSD and maybe others:
+    ///
+    #[cfg_attr(any(target_vendor="apple", target_os="openbsd"), doc="```")]
+    #[cfg_attr(not(any(target_vendor="apple", target_os="openbsd")), doc="```no_run")]
+    /// # use std::os::unix::net::UnixDatagram;
+    /// # use uds::{UnixSocketAddr, UnixDatagramExt};
+    /// let socket = UnixDatagram::unbound().expect("create datagram socket");
+    /// let addr = socket.local_unix_addr().expect("get its unbound address");
+    /// let bytes = addr.as_raw_bytes();
+    /// assert!(bytes.len() > 0);
+    /// assert!(bytes.iter().all(|&b| b == b'\0' ));
+    /// assert!(addr.is_unnamed());
+    /// ```
+    pub fn as_raw_bytes(&self) -> &[u8] {
+        as_u8(&self.addr.sun_path[..(self.len-path_offset()) as usize])
     }
 
     /// Prepare a `struct sockaddr*` and `socklen_t*` for passing to FFI
@@ -512,7 +625,7 @@ impl UnixSocketAddr {
         } else if len < path_offset() {
             Err(io::Error::new(ErrorKind::InvalidInput, "address length is too low"))
         } else if len > path_offset() + mem::size_of_val(&copy.addr.sun_path) as socklen_t {
-            Err(io::Error::new(ErrorKind::InvalidInput, "address is too long"))
+            Err(io::Error::new(ErrorKind::InvalidInput, TOO_LONG_DESC))
         } else if (&*addr).sa_family != AF_UNIX as sa_family_t {
             Err(io::Error::new(ErrorKind::InvalidData, "not an unix socket address"))
         } else {

@@ -60,7 +60,7 @@ mod seqpacket;
 #[cfg(feature="tokio")]
 pub mod tokio;
 
-pub use addr::{UnixSocketAddr, UnixSocketAddrRef};
+pub use addr::{UnixSocketAddr, UnixSocketAddrRef, AddrName};
 pub use traits::{UnixListenerExt, UnixStreamExt, UnixDatagramExt};
 pub use seqpacket::{UnixSeqpacketListener, UnixSeqpacketConn};
 pub use credentials::ConnCredentials;

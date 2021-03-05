@@ -70,7 +70,7 @@ pub struct UnixSocketAddr {
 /// An enum representation of an unix socket address.
 ///
 /// Useful for pattern matching an [`UnixSocketAddr`](struct.UnixSocketAddr.html)
-/// via [`UnixSocketAddr.as_ref()`](struct.UnixSocketAddr.html#method.as_ref).
+/// via [`UnixSocketAddr.name()`](struct.UnixSocketAddr.html#method.name).
 ///
 /// It cannot be used to bind or connect a socket directly as it
 /// doesn't contain a `sockaddr_un`, but a `UnixSocketAddr` can be created
@@ -81,14 +81,14 @@ pub struct UnixSocketAddr {
 /// Cleaning up pathname socket files after ourselves:
 ///
 /// ```no_run
-/// # use uds::{UnixSocketAddr, UnixSocketAddrRef};
+/// # use uds::{UnixSocketAddr, AddrName};
 /// let addr = UnixSocketAddr::from_path("/var/run/socket.sock").unwrap();
-/// if let UnixSocketAddrRef::Path(path) = addr.as_ref() {
+/// if let AddrName::Path(path) = addr.name() {
 ///     let _ = std::fs::remove_file(path);
 /// }
 /// ```
 #[derive(Clone,Copy, PartialEq,Eq,Hash, Debug)]
-pub enum UnixSocketAddrRef<'a> {
+pub enum AddrName<'a> {
     /// Unnamed / anonymous address.
     Unnamed,
     /// Regular file path based address.
@@ -98,24 +98,26 @@ pub enum UnixSocketAddrRef<'a> {
     /// Address in the abstract namespace.
     Abstract(&'a [u8]),
 }
-impl<'a> From<&'a UnixSocketAddr> for UnixSocketAddrRef<'a> {
-    fn from(addr: &'a UnixSocketAddr) -> UnixSocketAddrRef<'a> {
+impl<'a> From<&'a UnixSocketAddr> for AddrName<'a> {
+    fn from(addr: &'a UnixSocketAddr) -> AddrName<'a> {
         let name_len = addr.len as isize - path_offset() as isize;
         if addr.is_unnamed() {
-            UnixSocketAddrRef::Unnamed
+            AddrName::Unnamed
         } else if addr.is_abstract() {
             let slice = &addr.addr.sun_path[1..name_len as usize];
-            UnixSocketAddrRef::Abstract(as_u8(slice))
+            AddrName::Abstract(as_u8(slice))
         } else {
             let mut slice = &addr.addr.sun_path[..name_len as usize];
             // remove trailing NUL if present (and multiple NULs on OpenBSD)
             while let Some(&0) = slice.last() {
                 slice = &slice[..slice.len()-1];
             }
-            UnixSocketAddrRef::Path(Path::new(OsStr::from_bytes(as_u8(slice))))
+            AddrName::Path(Path::new(OsStr::from_bytes(as_u8(slice))))
         }
     }
 }
+
+pub type UnixSocketAddrRef<'a> = AddrName<'a>;
 
 impl Debug for UnixSocketAddr {
     fn fmt(&self,  fmtr: &mut fmt::Formatter) -> fmt::Result {
@@ -416,6 +418,34 @@ impl UnixSocketAddr {
     /// Check whether the address is a path.
     pub fn is_path(&self) -> bool {
         self.len > path_offset()  &&  self.addr.sun_path[0] as u8 != b'\0'
+    }
+
+    /// Get a view of the address that can be pattern matched
+    /// to the differnt types of addresses.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use uds::{UnixSocketAddr, AddrName};
+    /// use std::path::Path;
+    ///
+    /// assert_eq!(
+    ///     UnixSocketAddr::new_unspecified().name(),
+    ///     AddrName::Unnamed
+    /// );
+    /// assert_eq!(
+    ///     UnixSocketAddr::from_path("/var/run/socket.sock").unwrap().name(),
+    ///     AddrName::Path(Path::new("/var/run/socket.sock"))
+    /// );
+    /// if UnixSocketAddr::has_abstract_addresses() {
+    ///     assert_eq!(
+    ///         UnixSocketAddr::from_abstract("tcartsba").unwrap().name(),
+    ///         AddrName::Abstract(b"tcartsba")
+    ///     );
+    /// }
+    /// ```
+    pub fn name(&self) -> AddrName {
+        AddrName::from(self)
     }
 
     /// Get the path of a path-based address.

@@ -2,7 +2,7 @@ use std::os::unix::io::{RawFd, AsRawFd, FromRawFd, IntoRawFd};
 use std::os::unix::net::{UnixStream, UnixListener, UnixDatagram};
 use std::io::{self, IoSlice, IoSliceMut, ErrorKind};
 
-use libc::{SOCK_DGRAM, SOCK_STREAM, MSG_PEEK, c_void, recvfrom, sendto};
+use libc::{SOCK_STREAM, MSG_PEEK, c_void, recvfrom, sendto};
 
 use crate::addr::UnixSocketAddr;
 use crate::helpers::*;
@@ -10,7 +10,7 @@ use crate::ancillary::*;
 use crate::credentials::*;
 
 /// Extension trait for `std::os::unix::net::UnixDatagram` and nonblocking equivalents.
-pub trait UnixStreamExt: AsRawFd + FromRawFd + Sized {
+pub trait UnixStreamExt: AsRawFd + FromRawFd {
     /// Get the address of this socket, as a type that fully supports abstract addresses.
     fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
         get_unix_addr(self.as_raw_fd(), GetAddr::LOCAL)
@@ -22,11 +22,11 @@ pub trait UnixStreamExt: AsRawFd + FromRawFd + Sized {
     }
 
     /// Creates a connection to a listening path-based or abstract named socket.
-    fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error>;
+    fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> where Self: Sized;
 
     /// Creates a path-based or abstract-named socket and connects to a listening socket.
     fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
-    -> Result<Self, io::Error>;
+    -> Result<Self, io::Error> where Self: Sized;
 
     /// Sends file descriptors in addition to bytes.
     fn send_fds(&self,  bytes: &[u8],  fds: &[RawFd]) -> Result<usize, io::Error> {
@@ -105,12 +105,12 @@ impl UnixStreamExt for mio_07::net::UnixStream {
 
 
 /// Extension trait for using [`UnixSocketAddr`](struct.UnixSocketAddr.html) with `UnixListener` types.
-pub trait UnixListenerExt: AsRawFd + FromRawFd + Sized {
+pub trait UnixListenerExt: AsRawFd + FromRawFd {
     /// The type represeting the stream connection returned by `accept_unix_addr()`.
     type Conn: FromRawFd;
 
     /// Creates a socket bound to a `UnixSocketAddr` and starts listening on it.
-    fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error>;
+    fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> where Self: Sized;
 
     /// Returns the address this socket is listening on.
     fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
@@ -178,7 +178,7 @@ impl UnixListenerExt for mio_07::net::UnixListener {
 
 
 /// Extension trait for `std::os::unix::net::UnixDatagram` and nonblocking equivalents.
-pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
+pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     /// Create a socket bound to a path or abstract name.
     ///
     /// # Examples
@@ -210,12 +210,7 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
     /// # Ok(())
     /// # }
     /// ```
-    fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_DGRAM, true)?;
-        let socket = unsafe { Self::from_raw_fd(socket.into_raw_fd()) };
-        socket.bind_to_unix_addr(addr)?;
-        Ok(socket)
-    }
+    fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> where Self: Sized;
 
     /// Returns the address of this socket, as a type that fully supports abstract addresses.
     fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {

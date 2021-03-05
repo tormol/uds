@@ -52,21 +52,20 @@ Even when all operating systems you care about supports something, they might be
 On Linux file descriptors are cloned when they are sent, but macOS and the BSDs first clones them when they are received. This means that if a FD is closed before the peer receives it you have a problem.  
 Also, some OSes might return the original file descriptor without cloning it if it's received within the same process as it was sent from. (DragonFly BSD, possibly macOS and maybe FreeBSD).
 
-| | Linux | macOS | FreeBSD | OpenBSD | NetBSD | Illumos |
-|-|-|-|-|-|-|-|
-| **Seqpacket** | Yes | N/A | Yes | Yes | Yes | N/A |
-| **peer credentials** | Yes | Yes | Yes | Yes | No | Yes |
-| **fd-passing** | Yes | Yes | Yes | Yes | Yes | No |
-| **abstract addresses** | Yes | N/A | N/A | N/A | N/A | N/A |
-| **mio (0.6 & 0.7 & uds)** | Yes | Yes | Yes | Yes | Yes | Yes |
-| **tokio** | Yes | Yes | Yes | Yes | Yes | Yes |
-| **Tested?** | Locally + CI | CI | CI + Manually | CI | Manually | Manually |
+| | Linux | macOS | FreeBSD | OpenBSD | DragonFly BSD | NetBSD | Illumos |
+|-|-|-|-|-|-|-|-|
+| **Seqpacket** | Yes | N/A | Yes | Yes | Yes | Yes | N/A |
+| **peer credentials** | Yes | Yes | Yes | Yes | No | No | Yes |
+| **fd-passing** | Yes | Yes | Yes | Yes | Yes | Yes | No |
+| **abstract addresses** | Yes | N/A | N/A | N/A | N/A | N/A | N/A |
+| **mio (0.6 & 0.7 & uds)** | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| **tokio** | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| **Tested?** | Locally + CI | CI | CI + Manually | CI | Manually | Manually | Manually |
 
 ### Other OSes
 
 * Android: I haven't tested on it, but I assume there are no differences from regular Linux.
 * Windows 10: While it added some unix socket features, Windows support is not a priority. (PRs are welcome though).
-* DragonFly BSD: Basic features should work, but tests fail. I plan to support it.
 * Solaris: Treated identically as Illumos.
 
 ## mio integration

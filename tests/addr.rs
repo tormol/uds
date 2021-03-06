@@ -322,6 +322,7 @@ fn unconnected_datagrams() {
     assert_eq!(a.peek_from_unix_addr(&mut buf).expect("peek from b"), (4, addr_b));
     assert_eq!(&buf, b"cyan\0\0\0\0\0\0");
     let (len, std_addr) = a.recv_from(&mut buf).expect("receive what was peeked");
+    #[cfg(not(target_os="openbsd"))]
     assert_eq!(std_addr.as_pathname(), Some(Path::new("corner b.sock")));
     assert_eq!(&buf[..len], b"cyan");
 

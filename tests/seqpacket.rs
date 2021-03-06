@@ -308,15 +308,14 @@ fn accept_timeout() {
 mod tokio {
     use std::io;
     use std::net::Shutdown;
-    use tempfile::tempdir;
     use uds::tokio::{UnixSeqpacketConn, UnixSeqpacketListener};
     use tokio_02 as tokio;
 
     #[tokio::test]
     async fn test_listener_accept() {
-        let tmp_dir = tempdir().unwrap();
-        let sock_path = tmp_dir.path().join("listener.socket");
-        let mut listener = UnixSeqpacketListener::bind(&sock_path).unwrap();
+        let sock_path = "listener.socket";
+        let _ = std::fs::remove_file(sock_path);
+        let mut listener = UnixSeqpacketListener::bind(sock_path).unwrap();
 
         let listener_handle = tokio::task::spawn(async move {
             for i in 1usize..=3 {
@@ -329,7 +328,7 @@ mod tokio {
         });
 
         for i in 1usize..=3 {
-            let mut socket = UnixSeqpacketConn::connect(&sock_path).await.unwrap();
+            let mut socket = UnixSeqpacketConn::connect(sock_path).await.unwrap();
             let mut buf = [0u8; 3];
             let read = socket.recv(&mut buf).await.unwrap();
             assert_eq!(read, 3);
@@ -337,6 +336,7 @@ mod tokio {
         }
 
         assert!(listener_handle.await.is_ok());
+        let _ = std::fs::remove_file(sock_path);
     }
 
     #[tokio::test]

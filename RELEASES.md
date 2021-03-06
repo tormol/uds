@@ -1,3 +1,14 @@
+Version 0.2.3 (2021-03-06)
+==========================
+* Add `send_to_unix_addr()`, `recv_from_unix_addr()`, `peek_from_unix_addr()` and vectored variants to `UnixDatagramExt`.
+* Add `UnixDatagramExt::bind_unix_addr()`.
+  (with a fallback default impl that creates a nonblocking socket)
+* Add `as_pathname()` and `as_abstract()` to `UnixSocketAddr`.
+* Add `name()` to `UnixSocketAddr` and rename `UnixSocketAddrRef` to `AddrName`,
+  with a type alias for backwards compatibility.
+* Add `from_raw_bytes()` and `as_raw_bytes()` to `UnixSocketAddr`.
+* List DragonFly BSD as supported after testing on it.
+
 Version 0.2.2 (2021-01-31)
 ==========================
 * Compile on 64-bit Android (#4).

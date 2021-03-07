@@ -24,7 +24,7 @@ use libc::{ucred, SOL_SOCKET, SO_PEERCRED, SO_PEERSEC};
 #[cfg(any(target_os="freebsd", target_os="dragonfly", target_vendor="apple"))]
 use libc::{xucred, XUCRED_VERSION, LOCAL_PEERCRED};
 #[cfg(target_vendor="apple")]
-use libc::SOL_LOCAL; // Apple is for once the one that does the right thing!
+use libc::{pid_t, SOL_LOCAL, LOCAL_PEERPID}; // Apple is for once the one that does the right thing!
 #[cfg(target_os="openbsd")]
 use libc::{sockpeercred, SOL_SOCKET, SO_PEERCRED};
 #[cfg(target_os="netbsd")]
@@ -235,6 +235,20 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
                 })
             }
             _ => {
+                #[cfg(target_vendor="apple")] {
+                    let mut pid: pid_t = 0;
+                    let ptr = &mut pid as *mut pid_t as *mut c_void;
+                    size = mem::size_of::<pid_t>() as socklen_t;
+                    getsockopt(conn, SOL_LOCAL, LOCAL_PEERPID, ptr, &mut size);
+                    if let Some(pid) = NonZeroU32::new(pid as u32) {
+                        return Ok(ConnCredentials::LinuxLike {
+                            pid,
+                            euid: xucred.cr_uid.into(),
+                            egid: xucred.cr_groups[0] as u32,
+                        });
+                    }
+                }
+
                 let mut groups = [u32::max_value(); 16]; // set all unused group slots to ~0
                 let filled_groups = xucred.cr_groups.iter().take(xucred.cr_ngroups as usize);
                 for (&src, dst) in filled_groups.zip(&mut groups) {

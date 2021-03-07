@@ -1,4 +1,4 @@
-use crate::{nonblocking, UnixSocketAddr};
+use crate::{nonblocking, UnixSocketAddr, ConnCredentials};
 use futures::{future::poll_fn, ready};
 use std::io;
 use std::net::Shutdown;
@@ -19,6 +19,24 @@ impl UnixSeqpacketConn {
     /// handle.
     pub async fn connect<P: AsRef<Path>>(path: P) -> io::Result<UnixSeqpacketConn> {
         let conn = nonblocking::UnixSeqpacketConn::connect(path)?;
+        let conn = UnixSeqpacketConn::from_nonblocking(conn)?;
+
+        poll_fn(|cx| conn.io.poll_write_ready(cx)).await?;
+        Ok(conn)
+    }
+
+    /// Connect to an unix seqpacket server listening at `addr`.
+    pub async fn connect_addr(addr: &UnixSocketAddr) -> io::Result<Self> {
+        let conn = nonblocking::UnixSeqpacketConn::connect_unix_addr(addr)?;
+        let conn = UnixSeqpacketConn::from_nonblocking(conn)?;
+
+        poll_fn(|cx| conn.io.poll_write_ready(cx)).await?;
+        Ok(conn)
+    }
+    /// Bind to an address before connecting to a listening seqpacet socket.
+    pub async fn connect_from_addr(from: &UnixSocketAddr, to: &UnixSocketAddr)
+    -> io::Result<Self> {
+        let conn = nonblocking::UnixSeqpacketConn::connect_from_to_unix_addr(from, to)?;
         let conn = UnixSeqpacketConn::from_nonblocking(conn)?;
 
         poll_fn(|cx| conn.io.poll_write_ready(cx)).await?;
@@ -47,6 +65,15 @@ impl UnixSeqpacketConn {
     /// Shuts down the read, write, or both halves of this connection.
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
         self.io.get_ref().shutdown(how)
+    }
+
+    /// Get the address of this side of the connection.
+    pub fn local_addr(&self) -> Result<UnixSocketAddr, io::Error> {
+        self.io.get_ref().local_unix_addr()
+    }
+    /// Get the address of the other side of the connection.
+    pub fn peer_addr(&self) -> Result<UnixSocketAddr, io::Error> {
+        self.io.get_ref().peer_unix_addr()
     }
 
     /// Get the SELinux security context of the process that created the other
@@ -114,9 +141,15 @@ pub struct UnixSeqpacketListener {
 }
 
 impl UnixSeqpacketListener {
-    /// Connects to an unix seqpacket server listening at `path`.
     pub fn bind<P: AsRef<Path>>(path: P) -> io::Result<UnixSeqpacketListener> {
         let listener = nonblocking::UnixSeqpacketListener::bind(path)?;
+        let listener = UnixSeqpacketListener::new(listener)?;
+
+        Ok(listener)
+    }
+
+    pub fn bind_addr(addr: &UnixSocketAddr) -> io::Result<Self> {
+        let listener = nonblocking::UnixSeqpacketListener::bind_unix_addr(addr)?;
         let listener = UnixSeqpacketListener::new(listener)?;
 
         Ok(listener)
@@ -158,5 +191,10 @@ impl UnixSeqpacketListener {
             }
             Err(err) => Err(err).into(),
         }
+    }
+
+    /// Get the address of this side of the connection.
+    pub fn local_addr(&self) -> Result<UnixSocketAddr, io::Error> {
+        self.io.get_ref().local_unix_addr()
     }
 }

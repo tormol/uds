@@ -193,7 +193,7 @@ impl UnixSeqpacketConn {
         set_unix_addr(socket.as_raw_fd(), SetAddr::PEER,  addr)?;
         Ok(UnixSeqpacketConn { fd: socket.into_raw_fd() })
     }
-    /// Bind to an address before connecting to a listening sequplacet socket.
+    /// Bind to an address before connecting to a listening seqpacet socket.
     pub fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
     -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_SEQPACKET, false)?;

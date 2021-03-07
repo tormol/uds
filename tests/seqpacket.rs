@@ -1,7 +1,5 @@
 #![cfg(not(target_vendor="apple"))]
 
-extern crate uds;
-
 use std::io::ErrorKind::*;
 use std::io::{IoSlice, IoSliceMut};
 use std::net::Shutdown;
@@ -301,64 +299,5 @@ fn accept_timeout() {
         let elapsed = after - before;
         assert!(elapsed >= timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
         assert!(elapsed < 2*timeout, "elapsed: {:?}, timeout: {:?}", elapsed, timeout);
-    }
-}
-
-#[cfg(feature="tokio")]
-mod tokio {
-    use std::io;
-    use std::net::Shutdown;
-    use uds::tokio::{UnixSeqpacketConn, UnixSeqpacketListener};
-    use tokio_02 as tokio;
-
-    #[tokio::test]
-    async fn test_listener_accept() {
-        let sock_path = "listener.socket";
-        let _ = std::fs::remove_file(sock_path);
-        let mut listener = UnixSeqpacketListener::bind(sock_path).unwrap();
-
-        let listener_handle = tokio::task::spawn(async move {
-            for i in 1usize..=3 {
-                let (mut socket, _) = listener.accept().await?;
-                tokio::task::spawn(async move {
-                    socket.send(&[b'h', b'i', b'0' + (i as u8)]).await.unwrap();
-                });
-            }
-            Ok::<(), io::Error>(())
-        });
-
-        for i in 1usize..=3 {
-            let mut socket = UnixSeqpacketConn::connect(sock_path).await.unwrap();
-            let mut buf = [0u8; 3];
-            let read = socket.recv(&mut buf).await.unwrap();
-            assert_eq!(read, 3);
-            assert_eq!(&buf, &[b'h', b'i', b'0' + (i as u8)]);
-        }
-
-        assert!(listener_handle.await.is_ok());
-        let _ = std::fs::remove_file(sock_path);
-    }
-
-    #[tokio::test]
-    async fn test_conn_pair() {
-        let (mut sock_tx, mut sock_rx) = UnixSeqpacketConn::pair().unwrap();
-
-        tokio::task::spawn(async move {
-            sock_tx.send(&[b'h', b'i', b'0']).await.unwrap();
-        });
-
-        let mut buf = [0u8; 3];
-        let read = sock_rx.recv(&mut buf).await.unwrap();
-        assert_eq!(read, 3);
-        assert_eq!(&buf, &[b'h', b'i', b'0']);
-    }
-
-    #[tokio::test]
-    async fn test_shutdown() {
-        let (mut sock_tx, mut sock_rx) = UnixSeqpacketConn::pair().unwrap();
-
-        sock_tx.shutdown(Shutdown::Both).unwrap();
-        assert!(sock_tx.send(&[b'h', b'i', b'0']).await.is_err());
-        assert_eq!(sock_rx.recv(&mut [0u8; 3]).await.unwrap(), 0);
     }
 }

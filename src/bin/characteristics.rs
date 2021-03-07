@@ -503,7 +503,7 @@ fn accept_timeout() {
             mem::size_of_val(&timeout) as libc::socklen_t,
         );
         if status == -1 {
-            print!("No (setting timeout failed: {})", io::Error::last_os_error());
+            println!("no (setting timeout failed: {})", io::Error::last_os_error());
             return;
         }
     }
@@ -512,10 +512,10 @@ fn accept_timeout() {
     thread::spawn(move|| tx.send(listener.accept()) );
     match rx.recv_timeout(Duration::new(0, 10_000_000)) {
         Ok(Err(e)) if e.kind() == WouldBlock => println!("yes"),
-        Ok(Err(e)) => println!("Buggy (accept() failed with unexpected error {})", e),
-        Ok(Ok(_)) => println!("Buggy (accept() unexpectedly succeeded)"),
-        Err(mpsc::RecvTimeoutError::Timeout) => println!("No"),
-        Err(mpsc::RecvTimeoutError::Disconnected) => println!("Buggy (thread exited without sending!)"),
+        Ok(Err(e)) => println!("buggy (accept() failed with unexpected error {})", e),
+        Ok(Ok(_)) => println!("buggy (accept() unexpectedly succeeded)"),
+        Err(mpsc::RecvTimeoutError::Timeout) => println!("no"),
+        Err(mpsc::RecvTimeoutError::Disconnected) => println!("buggy (thread exited without sending!)"),
     }
     // don't try to join a hung thread
 

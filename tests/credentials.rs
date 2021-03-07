@@ -50,7 +50,7 @@ fn assert_credentials_matches_current_process(creds: &ConnCredentials,  socket_t
             ) };
             let current_process_groups = match number_of_process_groups {
                 -1 => panic!("getgroups(100, <ptr>) failed with {}", io::Error::last_os_error()),
-                n => &current_process_groups[..(number_of_process_groups as usize)],
+                n => &current_process_groups[..(n as usize)],
             };
             for &peer_group in &groups[..(number_of_groups as usize)] {
                 assert!(
@@ -238,7 +238,7 @@ fn peer_selinux_context() {
                 panic!("unexpectedly succeeded on non-Linux OS");
             }
         }
-        Err(e) => {
+        Err(_) => {
             assert_eq!(&buf[..], &[0u8; 1024][..], "buffer is untouched on error");
             // fails on Linux on Cirrus, probably as a result of running inside a docker container
         }

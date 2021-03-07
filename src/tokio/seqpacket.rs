@@ -76,6 +76,12 @@ impl UnixSeqpacketConn {
         self.io.get_ref().peer_unix_addr()
     }
 
+    /// Get information about the process of the peer when the connection was established.
+    ///
+    /// See documentation of the returned type for details.
+    pub fn initial_peer_credentials(&self) -> Result<ConnCredentials, io::Error> {
+        self.io.get_ref().initial_peer_credentials()
+    }
     /// Get the SELinux security context of the process that created the other
     /// end of this connection.
     ///

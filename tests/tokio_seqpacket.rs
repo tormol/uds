@@ -3,6 +3,8 @@
 use std::io::{self, ErrorKind::*};
 use std::net::Shutdown;
 
+use libc::{getpid, geteuid, getegid};
+
 use tokio_02 as tokio;
 
 use uds::tokio::{UnixSeqpacketConn, UnixSeqpacketListener};
@@ -109,4 +111,37 @@ async fn test_shutdown() {
     sock_tx.shutdown(Shutdown::Both).unwrap();
     assert!(sock_tx.send(&[b'h', b'i', b'0']).await.is_err());
     assert_eq!(sock_rx.recv(&mut [0u8; 3]).await.unwrap(), 0);
+}
+
+#[tokio::test]
+async fn test_peer_credentials() {
+    let (a, _b) = UnixSeqpacketConn::pair().expect("create tokio seqpacket pair");
+    match a.initial_peer_credentials() {
+        Ok(creds) => {
+            if let Some(pid) = creds.pid() {
+                assert_eq!(pid.get(), unsafe { getpid() } as u32);
+            }
+            assert_eq!(creds.euid(), unsafe { geteuid() } as u32);
+            if let Some(egid) = creds.egid() {
+                assert_eq!(egid, unsafe { getegid() } as u32);
+            }
+        }
+        Err(e) => assert_ne!(e.kind(), WouldBlock)
+    }
+}
+
+#[tokio::test]
+async fn test_peer_selinux_context() {
+    let (a, _b) = UnixSeqpacketConn::pair().expect("create tokio seqpacket pair");
+    let mut buf = [0u8; 1024];
+    match a.initial_peer_selinux_context(&mut buf) {
+        Ok(len) => {
+            assert_ne!(len, 0, "context is not an empty string");
+            assert!(len <= buf.len(), "length is within bounds");
+        }
+        Err(e) => {
+            assert_ne!(e.kind(), WouldBlock);
+            // fails on Linux on Cirrus, probably as a result of running inside a docker container
+        }
+    }
 }

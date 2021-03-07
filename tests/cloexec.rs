@@ -23,7 +23,7 @@ fn is_cloexec(fd: RawFd) -> bool {
         .stdout(Stdio::null())
         .output().expect("run cloexec_tester program");
     if !output.stderr.is_empty() {
-        panic!(String::from_utf8_lossy(&output.stderr).into_owned());
+        panic!("{}", String::from_utf8_lossy(&output.stderr));
     }
     match output.status.code() {
         Some(0) => true,

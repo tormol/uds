@@ -226,6 +226,14 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
             _ if xucred.cr_version != XUCRED_VERSION => {
                 Err(io::Error::new(InvalidData, "unknown version of peer credentials"))
             },
+            #[cfg(target_os="freebsd")]
+            _ if xucred.cr_pid__c_anonymous_union.cr_pid != 0 => {
+                Ok(ConnCredentials::LinuxLike {
+                    pid: NonZeroU32::new(xucred.cr_pid__c_anonymous_union.cr_pid as u32).unwrap(),
+                    euid: xucred.cr_uid.into(),
+                    egid: xucred.cr_groups[0] as u32,
+                })
+            }
             _ => {
                 let mut groups = [u32::max_value(); 16]; // set all unused group slots to ~0
                 let filled_groups = xucred.cr_groups.iter().take(xucred.cr_ngroups as usize);

@@ -17,7 +17,7 @@ exclude = ["tests", "src/bin"]
 tokio = ["futures", "mio", "tokio_02"]
 
 [target."cfg(unix)".dependencies]
-libc = "0.2.75" # .75 added peer credentials functions and types for solarish
+libc = "0.2.90" # peer credentials for DragonFly BSD and NetBSD, SO_PEERSEC on all Linux architectures
 # enabling this feature implements the extension traits for mio-uds types
 mio-uds = {version="0.6", optional=true} # no patch release builds with -Z minimal-versions
 # enabling this feature implements Evented for this crate's non-blocking seqpacket types
@@ -25,10 +25,10 @@ mio = {version="0.6.14", optional=true} # .14 avoids dragging in libc 0.1 under 
 # enabling this feature implements the extension traits for mio 0.7's unix socket types
 # and Source for this crate's non-blocking seqpacket types.
 mio_07 = {package="mio", version="0.7.0", features=["os-util", "uds"], optional=true}
+futures = {version = "0.3", optional=true}
 # examples and tests for mio_07 also requires mio feature os-poll,
 # but adding it as a dev-dependency would also enable it in all cases (cargo bug #4866)
 # instead RUSTFLAGS='--cfg feature="os-poll"' must be used to build & run mio_07 tests
-futures = {version = "0.3", optional=true}
 tokio_02 = {package="tokio", version = "0.2", features = ["io-driver"], optional=true}
 
 [target."cfg(unix)".dev-dependencies]

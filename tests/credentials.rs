@@ -1,11 +1,12 @@
 #![allow(unused)] // when not applicable, tests should still compile
 
-use std::os::unix::net::{UnixStream, UnixDatagram};
+use std::os::unix::net::{UnixListener, UnixStream, UnixDatagram};
 use std::io::{self, ErrorKind::*};
 use std::fs::remove_file;
 
 extern crate uds;
-use uds::{ConnCredentials, UnixStreamExt, UnixSeqpacketConn, UnixDatagramExt};
+use uds::{ConnCredentials, UnixStreamExt, UnixDatagramExt};
+use uds::{UnixSeqpacketListener, UnixSeqpacketConn};
 
 extern crate libc;
 use libc::{getpid, geteuid, getegid, getgid, getgroups};
@@ -13,8 +14,8 @@ use libc::{getpid, geteuid, getegid, getgid, getgroups};
 #[cfg_attr(
     not(any(
         target_os="linux", target_os="android",
-        target_os="freebsd", target_vendor="apple",
-        target_os="openbsd",
+        target_os="freebsd", target_os="dragonfly", target_vendor="apple",
+        target_os="openbsd", target_os="netbsd",
         target_os="illumos", target_os="solaris"
     )),
     test
@@ -83,47 +84,81 @@ fn assert_credentials_matches_current_process(creds: &ConnCredentials,  socket_t
     }
 }
 
-#[cfg_attr(
-    any(
-        target_os="linux", target_os="android",
-        target_os="freebsd", target_vendor="apple",
-        target_os="openbsd",
-        target_os="illumos", target_os="solaris"
-    ),
-    test
-)]
+#[test]
 fn peer_credentials_of_stream_conn() {
-    let (a, b) = UnixStream::pair().expect("create unix stream pair");
-    let creds = a.initial_peer_credentials().expect("get credentials of peer");
+    let path = "stream_credentials.socket";
+    let _ = remove_file(path);
+    let listener = UnixListener::bind(path).expect("create socket file");
+    let client = UnixStream::connect(path).expect("connect");
+    remove_file(path).expect("delete socket file");
+    let creds = client.initial_peer_credentials().expect("get credentials of server");
     assert_credentials_matches_current_process(&creds, "stream conn");
-    assert_eq!(b.initial_peer_credentials().unwrap(), creds); // same process
-    assert_eq!(a.initial_peer_credentials().unwrap(), creds); // consistent
+    let (server, _) = listener.accept().expect("accept");
+    assert_eq!(server.initial_peer_credentials().unwrap(), creds); // same process
+    assert_eq!(client.initial_peer_credentials().unwrap(), creds); // consistent
+}
+
+#[test]
+fn peer_credentials_of_stream_pair() {
+    let (a, b) = UnixStream::pair().expect("create unix stream pair");
+    match a.initial_peer_credentials() {
+        Ok(creds) => {
+            assert_credentials_matches_current_process(&creds, "stream pair");
+            assert_eq!(b.initial_peer_credentials().unwrap(), creds); // same process
+            assert_eq!(a.initial_peer_credentials().unwrap(), creds); // consistent
+        }
+        Err(ref e) if e.kind() == NotConnected => {/*fails with this error on DragonFly BSD*/}
+        Err(ref e) if e.kind() == InvalidInput => {/*fails with this error on NetBSD*/}
+        Err(e) => panic!("failed with unexpected error {}", e)
+    }
 }
 
 #[cfg_attr(
     any(
         target_os="linux", target_os="android",
-        target_os="freebsd", target_os="openbsd",
+        target_os="freebsd", target_os="dragonfly",
+        target_os="openbsd", target_os="netbsd",
         target_os="illumos", target_os="solaris"
     ),
     test
 )]
 fn peer_credentials_of_seqpacket_conn() {
-    let (a, b) = UnixSeqpacketConn::pair().expect("create unix seqpacket pair");
-    let creds = a.initial_peer_credentials().expect("get credentials of peer");
-    assert_credentials_matches_current_process(&creds, "seqpacket conn");
-    assert_eq!(b.initial_peer_credentials().unwrap(), creds);
+    let path = "seqpacket_credentials.socket";
+    let _ = remove_file(path);
+    let listener = UnixSeqpacketListener::bind(path).expect("create socket file");
+    let client = UnixSeqpacketConn::connect(path).expect("connect");
+    remove_file(path).expect("delete socket file");
+    let creds = client.initial_peer_credentials().expect("get credentials of server");
+    assert_credentials_matches_current_process(&creds, "stream conn");
+    let (server, _) = listener.accept_unix_addr().expect("accept");
+    assert_eq!(server.initial_peer_credentials().unwrap(), creds); // same process
+    assert_eq!(client.initial_peer_credentials().unwrap(), creds); // consistent
 }
 
 #[cfg_attr(
     any(
         target_os="linux", target_os="android",
-        target_os="freebsd", target_vendor="apple",
-        target_os="openbsd",
+        target_os="freebsd", target_os="dragonfly",
+        target_os="openbsd", target_os="netbsd",
         target_os="illumos", target_os="solaris"
     ),
     test
 )]
+fn peer_credentials_of_seqpacket_pair() {
+    let (a, b) = UnixSeqpacketConn::pair().expect("create unix seqpacket pair");
+    match a.initial_peer_credentials() {
+        Ok(creds) => {
+            assert_credentials_matches_current_process(&creds, "seqpacket pair");
+            assert_eq!(b.initial_peer_credentials().unwrap(), creds); // same process
+            assert_eq!(a.initial_peer_credentials().unwrap(), creds); // consistent
+        }
+        Err(ref e) if e.kind() == NotConnected => {/*fails with this error on DragonFly BSD*/}
+        Err(ref e) if e.kind() == InvalidInput => {/*fails with this error on NetBSD*/}
+        Err(e) => panic!("failed with unexpected error {}", e)
+    }
+}
+
+#[test]
 fn pair_credentials_of_datagram_socketpair() {
     let (a, b) = UnixDatagram::pair().expect("create unix datagram socket pair");
     match a.initial_pair_credentials() {
@@ -131,26 +166,14 @@ fn pair_credentials_of_datagram_socketpair() {
             assert_credentials_matches_current_process(&creds, "datagram socketpair");
             assert_eq!(b.initial_pair_credentials().unwrap(), creds);
         }
-        Err(ref e) if e.kind() != InvalidInput  &&  !e.to_string().contains("not supported") => {
-            // fails with ENOTSUP on OmniOS, which becomes ErrorKind::Other
-            panic!("failed with unexpected error variant {:?}", e.kind());
+        Err(ref e) if e.kind() == InvalidInput  ||  e.to_string().contains("not supported") => {
+            // fails with ENOTSUP on OmniOS and DragonFly, which becomes ErrorKind::Other
         }
-        Err(_) if cfg!(any(target_os="linux", target_os="android")) => {
-            panic!("failed on Linux");
-        }
-        Err(_) => {}
+        Err(e) => panic!("failed with unexpected error variant {:?}", e.kind())
     }
 }
 
-#[cfg_attr(
-    any(
-        target_os="linux", target_os="android",
-        target_os="freebsd", target_vendor="apple",
-        target_os="openbsd",
-        target_os="illumos", target_os="solaris"
-    ),
-    test
-)]
+#[test]
 fn no_peer_credentials_of_unconnected_datagram_socket() {
     let _ = remove_file("datagram_credentials.socket");
     let socket = UnixDatagram::bind("datagram_credentials.socket")
@@ -165,15 +188,7 @@ fn no_peer_credentials_of_unconnected_datagram_socket() {
     );
 }
 
-#[cfg_attr(
-    any(
-        target_os="linux", target_os="android",
-        target_os="freebsd", target_vendor="apple",
-        target_os="openbsd",
-        target_os="illumos", target_os="solaris"
-    ),
-    test
-)]
+#[test]
 fn no_peer_credentials_of_regularly_connected_datagram_socket() {
     let a_pathname = "datagram_credentials_a.socket";
     let b_pathname = "datagram_credentials_b.socket";
@@ -201,4 +216,31 @@ fn no_peer_credentials_of_regularly_connected_datagram_socket() {
     
     remove_file(a_pathname).expect("delete socket file");
     remove_file(b_pathname).expect("delete socket file");
+}
+
+
+
+#[test]
+fn peer_selinux_context() {
+    let (a, _b) = UnixStream::pair().expect("create unix stream socket pair");
+    let mut buf = [0u8; 1024];
+    match a.initial_peer_selinux_context(&mut buf) {
+        Ok(len) => {
+            assert!(len <= buf.len(), "length is within bounds");
+            assert_ne!(len, 0, "context is not an empty string");
+            assert!(buf[..len].iter().all(|&b| b.is_ascii() && !b.is_ascii_control() ));
+            assert_eq!(
+                &buf[len..],
+                &vec![b'\0'; buf.len()-len][..],
+                "unused part of buffer is untouched"
+            );
+            if cfg!(not(any(target_os="linux", target_os="android"))) {
+                panic!("unexpectedly succeeded on non-Linux OS");
+            }
+        }
+        Err(e) => {
+            assert_eq!(&buf[..], &[0u8; 1024][..], "buffer is untouched on error");
+            // fails on Linux on Cirrus, probably as a result of running inside a docker container
+        }
+    }
 }

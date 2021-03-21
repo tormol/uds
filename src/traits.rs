@@ -42,6 +42,17 @@ pub trait UnixStreamExt: AsRawFd + FromRawFd + Sized {
     fn initial_peer_credentials(&self) -> Result<ConnCredentials, io::Error> {
         peer_credentials(self.as_raw_fd())
     }
+    /// Get the SELinux security context of the process that created the other end of this stream.
+    ///
+    /// Will return an error on other operating systems than Linux or Android,
+    /// and also if running under kubernetes.
+    /// On success the number of bytes used is returned. (like `Read`)
+    ///
+    /// The default security context is `unconfined`, without any trailing NUL.  
+    /// A buffor of 50 bytes is probably always big enough.
+    fn initial_peer_selinux_context(&self,  buf: &mut[u8]) -> Result<usize, io::Error> {
+        selinux_context(self.as_raw_fd(), buf)
+    }
 }
 
 impl UnixStreamExt for UnixStream {
@@ -504,6 +515,16 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd + Sized {
     /// (but not macOS or FreeBSD), so might as well expose it.
     fn initial_pair_credentials(&self) -> Result<ConnCredentials, io::Error> {
         peer_credentials(self.as_raw_fd())
+    }
+    /// Get the SELinux security context of the process that created a socket pair.
+    ///
+    /// Has the same limitations and gotchas as `initial_pair_credentials()`,
+    /// and will return an error on other OSes than Linux or Android
+    /// or if running under kubernetes.
+    ///
+    /// The default security context is the string `unconfined`.
+    fn initial_pair_selinux_context(&self,  buf: &mut[u8]) -> Result<usize, io::Error> {
+        selinux_context(self.as_raw_fd(), buf)
     }
 }
 

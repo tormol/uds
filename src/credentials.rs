@@ -4,8 +4,8 @@ use std::num::NonZeroU32;
 use std::io::ErrorKind::*;
 #[cfg(any(
     target_os="linux", target_os="android",
-    target_os="freebsd", target_vendor="apple",
-    target_os="openbsd"
+    target_os="freebsd", target_os="dragonfly", target_vendor="apple",
+    target_os="openbsd", target_os="netbsd"
 ))]
 use std::mem;
 #[cfg(any(target_os="illumos", target_os="solaris"))]
@@ -13,20 +13,22 @@ use std::ptr;
 
 #[cfg(any(
     target_os="linux", target_os="android",
-    target_os="freebsd", target_vendor="apple",
-    target_os="openbsd"
+    target_os="freebsd", target_os="dragonfly", target_vendor="apple",
+    target_os="openbsd", target_os="netbsd"
 ))]
 use libc::{getsockopt, c_void, socklen_t};
 #[cfg(any(target_os="linux", target_os="android"))]
 use libc::{pid_t, uid_t, gid_t, getpid, getuid, geteuid, getgid, getegid};
 #[cfg(any(target_os="linux", target_os="android"))]
-use libc::{ucred, SOL_SOCKET, SO_PEERCRED};
-#[cfg(any(target_os="freebsd", target_vendor="apple"))]
+use libc::{ucred, SOL_SOCKET, SO_PEERCRED, SO_PEERSEC};
+#[cfg(any(target_os="freebsd", target_os="dragonfly", target_vendor="apple"))]
 use libc::{xucred, XUCRED_VERSION, LOCAL_PEERCRED};
 #[cfg(target_vendor="apple")]
 use libc::SOL_LOCAL; // Apple is for once the one that does the right thing!
 #[cfg(target_os="openbsd")]
 use libc::{sockpeercred, SOL_SOCKET, SO_PEERCRED};
+#[cfg(target_os="netbsd")]
+use libc::{unpcbid, LOCAL_PEEREID};
 #[cfg(any(target_os="illumos", target_os="solaris"))]
 use libc::{getpeerucred, ucred_free, ucred_t};
 #[cfg(any(target_os="illumos", target_os="solaris"))]
@@ -61,6 +63,25 @@ impl SendCredentials {
 
 
 
+#[cfg(any(target_os="linux", target_os="android"))]
+pub fn selinux_context(fd: RawFd,  buffer: &mut[u8]) -> Result<usize, io::Error> {
+    unsafe {
+        let ptr = buffer.as_mut_ptr() as *mut c_void;
+        let mut capacity = buffer.len().min(socklen_t::max_value() as usize) as socklen_t;
+        match getsockopt(fd, SOL_SOCKET, SO_PEERSEC, ptr, &mut capacity) {
+            -1 => Err(io::Error::last_os_error()),
+            _ => Ok(capacity as usize),
+        }
+    }
+}
+
+#[cfg(not(any(target_os="linux", target_os="android")))]
+pub fn selinux_context(_fd: RawFd,  _buffer: &mut[u8]) -> Result<usize, io::Error> {
+    Err(io::Error::new(Other, "not available"))
+}
+
+
+
 /// Credentials of the peer process when it called `connect()`, `accept()` or `pair()`.
 ///
 /// User and group IDs can be misleading if the peer side of the socket
@@ -75,15 +96,12 @@ impl SendCredentials {
 ///   and effective group id.
 /// * macOS, FreeBSD and DragonFly BSD provides effective user ID
 ///   and group memberships. (The first group is also the effective group ID.)
-///   FreeBSD 13+ will also provide process ID.
-/// * Illumos and Solaris provide more than one could possibly want.
+///   [FreeBSD 13+ will also provide process ID](https://www.freebsd.org/cgi/man.cgi?query=unix&sektion=0&manpath=FreeBSD+13-current&format=html).
+/// * Illumos and Solaris provide [more than one could possibly want](https://illumos.org/man/3C/ucred)
 ///   (the `LinuxLike` variant is most likely returned).
 ///
 /// Current limitations of this crate:
 ///
-/// * NetBSD and DragonFly BSD are not supported.
-///   On these OSes, functions that can return this type
-///   will return an error instead.
 /// * Illumos and Solaris provides enough information to fill out
 ///   both variants, but obviously only one can be returned.
 /// * FreeBSD 13 will also provide pid, but this crate doesn't detect that.
@@ -115,9 +133,9 @@ impl ConnCredentials {
     }
     /// Get the effective group ID of the initial peer of a connection.
     ///
-    /// * On Linux, Android, OpenBSD and in the future NetBSD,
+    /// * On Linux, Android, OpenBSD and NetBSD,
     ///   `egid` from the `LinuxLike` variant is returned.
-    /// * On FreeBSD, macOS and in the future DragonFly BSD,
+    /// * On FreeBSD, DragonFly BSD, macOS & other Apple platforms,
     ///   `groups[0]` from the `MacOsLike` variant is returned
     ///   (except in the unlikely case that `number_of_groups` is zero).
     // Sources for that the first group is egid: `<sys/ucred.h>` for
@@ -186,7 +204,7 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
     }
 }
 
-#[cfg(any(target_os="freebsd", target_vendor="apple"))]
+#[cfg(any(target_os="freebsd", target_os="dragonfly", target_vendor="apple"))]
 pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
     let mut xucred: xucred = unsafe { mem::zeroed() };
     xucred.cr_version = XUCRED_VERSION;
@@ -196,7 +214,7 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
     for group_slot in &mut xucred.cr_groups {
         *group_slot = !0;
     }
-    #[cfg(target_os="freebsd")]
+    #[cfg(any(target_os="freebsd", target_os="dragonfly"))]
     const PEERCRED_SOCKET_LEVEL: i32 = 0; // yes literal zero: not SOL_SOCKET, and SOL_LOCAL is not a thing
     #[cfg(target_vendor="apple")]
     use SOL_LOCAL as PEERCRED_SOCKET_LEVEL;
@@ -239,7 +257,28 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
                 egid: sockpeercred.gid as u32,
             })
         } else {
-            Err(io::Error::new(NotConnected, "socket is not a connection"))
+            Err(io::Error::new(InvalidData, "the returned pid is zero"))
+        }
+    }
+}
+
+#[cfg(target_os="netbsd")]
+pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
+    let mut unpcbid: unpcbid = unsafe { mem::zeroed() };
+    unsafe {
+        let ptr = &mut unpcbid as *mut unpcbid as *mut c_void;
+        let mut size = mem::size_of::<unpcbid>() as socklen_t;
+        // `man unix` describes it as a socket-level option, but 0 is what works
+        if getsockopt(conn, 0, LOCAL_PEEREID, ptr, &mut size) == -1 {
+            Err(io::Error::last_os_error())
+        } else if let Some(pid) = NonZeroU32::new(unpcbid.unp_pid as u32) {
+            Ok(ConnCredentials::LinuxLike {
+                pid,
+                euid: unpcbid.unp_euid as u32,
+                egid: unpcbid.unp_egid as u32,
+            })
+        } else {
+            Err(io::Error::new(InvalidData, "the returned pid is zero"))
         }
     }
 }
@@ -306,14 +345,10 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
     }
 }
 
-#[cfg(any(target_os="dragonfly", target_os="netbsd"))]
-pub fn peer_credentials(_: RawFd) -> Result<ConnCredentials, io::Error> {
-    Err(io::Error::new(Other, "Not yet supported"))
-}
-
 #[cfg(not(any(
-    target_os="linux", target_os="android", target_os="openbsd", target_os="netbsd",
-    target_os="freebsd", target_os="dragonfly", target_os="netbsd", target_vendor="apple",
+    target_os="linux", target_os="android",
+    target_os="freebsd", target_os="dragonfly", target_vendor="apple",
+    target_os="openbsd", target_os="netbsd",
     target_os="illumos", target_os="solaris",
 )))]
 pub fn peer_credentials(_: RawFd) -> Result<ConnCredentials, io::Error> {

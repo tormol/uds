@@ -503,7 +503,7 @@ fn accept_timeout() {
             mem::size_of_val(&timeout) as libc::socklen_t,
         );
         if status == -1 {
-            print!("No (setting timeout failed: {})", io::Error::last_os_error());
+            println!("no (setting timeout failed: {})", io::Error::last_os_error());
             return;
         }
     }
@@ -512,10 +512,10 @@ fn accept_timeout() {
     thread::spawn(move|| tx.send(listener.accept()) );
     match rx.recv_timeout(Duration::new(0, 10_000_000)) {
         Ok(Err(e)) if e.kind() == WouldBlock => println!("yes"),
-        Ok(Err(e)) => println!("Buggy (accept() failed with unexpected error {})", e),
-        Ok(Ok(_)) => println!("Buggy (accept() unexpectedly succeeded)"),
-        Err(mpsc::RecvTimeoutError::Timeout) => println!("No"),
-        Err(mpsc::RecvTimeoutError::Disconnected) => println!("Buggy (thread exited without sending!)"),
+        Ok(Err(e)) => println!("buggy (accept() failed with unexpected error {})", e),
+        Ok(Ok(_)) => println!("buggy (accept() unexpectedly succeeded)"),
+        Err(mpsc::RecvTimeoutError::Timeout) => println!("no"),
+        Err(mpsc::RecvTimeoutError::Disconnected) => println!("buggy (thread exited without sending!)"),
     }
     // don't try to join a hung thread
 
@@ -523,11 +523,31 @@ fn accept_timeout() {
 }
 
 fn print_credentials() {
-    print!("credentials ");
+    print!("peer credentials ");
+    let _ = remove_file("conncreds.socket");
+    let _listener = UnixListener::bind("conncreds.socket")
+        .expect("create conncreds.socket and listen to it");
+    let client = UnixStream::connect("conncreds.socket")
+        .expect("connect to conncreds.socket");
+    remove_file("conncreds.socket").expect("delete created socket file");
+    match client.initial_peer_credentials() {
+        Ok(creds) => println!("yes ({:?})", creds),
+        Err(e) => println!("no ({})", e),
+    }
+    drop((client, _listener));
+
+    print!("pair credentials ");
     let (a, _b) = UnixStream::pair().expect("create stream socket pair");
     match a.initial_peer_credentials() {
-        Ok(creds) => println!("{:?}", creds),
-        Err(e) => println!("<{}>", e),
+        Ok(creds) => println!("yes ({:?})", creds),
+        Err(e) => println!("no ({})", e), // fails on DragonFly BSD and NetBSD
+    }
+
+    print!("SELinux_context ");
+    let mut buf = [0u8; 1024];
+    match a.initial_peer_selinux_context(&mut buf) {
+        Ok(len) => println!("yes ({:?} ({} bytes))", String::from_utf8_lossy(&buf[..len]), len),
+        Err(e) => println!("no ({})", e),
     }
 }
 

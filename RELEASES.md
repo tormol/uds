@@ -1,3 +1,12 @@
+Version 0.2.4 (2021-03-25)
+==========================
+* Implement peer credentials on NetBSD and DragonFly BSD.
+* Add `initial_peer_selinux_context()`.
+* Add `initial_peer_credentials()` to `::tokio::UnixSeqpacketConn`.
+* Add `bind_addr()` and `local_addr()` to `::tokio::UnixSeqpacketListener`.
+* Add `connect_addr()`, `connect_from_addr()`, `local_addr()` and `peer_addr()`
+  to `::tokio::UnixSeqpacketConn`.
+
 Version 0.2.3 (2021-03-06)
 ==========================
 * Add `send_to_unix_addr()`, `recv_from_unix_addr()`, `peek_from_unix_addr()` and vectored variants to `UnixDatagramExt`.

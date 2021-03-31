@@ -307,9 +307,6 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
             let pid = ucred_getpid(ucred.0 as *const _);
             let mut groups_ptr: *const gid_t = ptr::null_mut();
             let ngroups = ucred_getgroups(ucred.0 as *const _, &mut groups_ptr);
-            println!("ucred {{ euid: {}, egid: {}, pid: {}, ngroups: {}, groups_ptr: {:#p} }}",
-                euid, egid, pid, ngroups, groups_ptr,
-            );
             // https://illumos.org/man/3C/ucred says -1 is returned on error,
             // but the types in libc are u32
             if euid != -1i32 as uid_t  &&  egid != -1i32 as gid_t

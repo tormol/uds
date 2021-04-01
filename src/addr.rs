@@ -241,16 +241,16 @@ impl UnixSocketAddr {
         }
     }
 
-    /// The maximum size of pathname addresses supported by `UnixSocketAddr`.
+    /// Returns the maximum size of pathname addresses supported by `UnixSocketAddr`.
     ///
-    /// Returns the size of the underlying `sun_path` field,
+    /// Is the size of the underlying `sun_path` field,
     /// minus 1 if the OS is known to require a trailing NUL (`'\0'`) byte.
     pub fn max_path_len() -> usize {
         mem::size_of_val(&Self::new_unspecified().addr.sun_path)
             - if cfg!(target_os="openbsd") {1} else {0}
     }
 
-    /// Create a pathname unix socket address.
+    /// Creates a pathname unix socket address.
     ///
     /// # Errors
     ///
@@ -281,9 +281,9 @@ impl UnixSocketAddr {
         from_path_inner(path.as_ref().as_os_str().as_bytes())
     }
 
-    /// The maximum size of abstract addesses supported by `UnixSocketAddr`.
+    /// Returns maximum size of abstract addesses supported by `UnixSocketAddr`.
     ///
-    /// Returns the size of the underlying `sun_path` field minus 1 for the
+    /// Is the size of the underlying `sun_path` field minus 1 for the
     /// leading `'\0'` byte.
     ///
     /// This value is also returned on operating systems that doesn't support
@@ -292,15 +292,15 @@ impl UnixSocketAddr {
         mem::size_of_val(&Self::new_unspecified().addr.sun_path) - 1
     }
 
-    /// Whether the operating system is known to support abstract unix domain
-    /// socket addresses.
+    /// Returns whether the operating system is known to support
+    /// abstract unix domain socket addresses.
     ///
     /// Is `true` for Linux & Android, and `false` for all other OSes.
     pub const fn has_abstract_addresses() -> bool {
         cfg!(any(target_os="linux", target_os="android"))
     }
 
-    /// Create an abstract unix domain socket address.
+    /// Creates an abstract unix domain socket address.
     ///
     /// Abstract addresses use a namespace separate from the file system,
     /// that doesn't have directories (ie. is flat) or permissions.
@@ -340,7 +340,7 @@ impl UnixSocketAddr {
         from_abstract_inner(name.as_ref())
     }
 
-    /// Try to convert a `std::os::unix::net::SocketAddr` into an `UnixSocketAddr`.
+    /// Tries to convert a `std::os::unix::net::SocketAddr` into an `UnixSocketAddr`.
     ///
     /// This can fail (produce `None`) on Linux and Android
     /// if the `std` `SocketAddr` represents an abstract address,
@@ -384,7 +384,7 @@ impl UnixSocketAddr {
         }
     }
 
-    /// Check whether the address is unnamed.
+    /// Checks whether the address is unnamed.
     pub fn is_unnamed(&self) -> bool {
         if Self::has_abstract_addresses() {
             self.len <= path_offset()
@@ -394,7 +394,7 @@ impl UnixSocketAddr {
             self.len <= path_offset()  ||  self.addr.sun_path[0] as u8 == b'\0'
         }
     }
-    /// Check whether the address is a name in the abstract namespace.
+    /// Checks whether the address is a name in the abstract namespace.
     ///
     /// Always returns `false` on operating systems that don't support abstract
     /// addresses.
@@ -405,22 +405,22 @@ impl UnixSocketAddr {
             false
         }
     }
-    /// Check whether the address is a path that begins with '/'.
+    /// Checks whether the address is a path that begins with '/'.
     pub fn is_absolute_path(&self) -> bool {
         self.len > path_offset()  &&  self.addr.sun_path[0] as u8 == b'/'
     }
-    /// Check whether the address is a path that doesn't begin with '/'.
+    /// Checks whether the address is a path that doesn't begin with '/'.
     pub fn is_relative_path(&self) -> bool {
         self.len > path_offset()
             &&  self.addr.sun_path[0] as u8 != b'\0'
             &&  self.addr.sun_path[0] as u8 != b'/'
     }
-    /// Check whether the address is a path.
+    /// Checks whether the address is a path.
     pub fn is_path(&self) -> bool {
         self.len > path_offset()  &&  self.addr.sun_path[0] as u8 != b'\0'
     }
 
-    /// Get a view of the address that can be pattern matched
+    /// Returns a view of the address that can be pattern matched
     /// to the differnt types of addresses.
     ///
     /// # Examples
@@ -448,7 +448,7 @@ impl UnixSocketAddr {
         AddrName::from(self)
     }
 
-    /// Get the path of a path-based address.
+    /// Returns the path of a path-based address.
     pub fn as_pathname(&self) -> Option<&Path> {
         match UnixSocketAddrRef::from(self) {
             UnixSocketAddrRef::Path(path) => Some(path),
@@ -456,7 +456,7 @@ impl UnixSocketAddr {
         }
     }
 
-    /// Get the name of an address which is in the abstract namespace.
+    /// Returns the name of an address which is in the abstract namespace.
     pub fn as_abstract(&self) -> Option<&[u8]> {
         match UnixSocketAddrRef::from(self) {
             UnixSocketAddrRef::Abstract(name) => Some(name),
@@ -464,7 +464,7 @@ impl UnixSocketAddr {
         }
     }
 
-    /// Get a view that can be pattern matched to the differnt types of
+    /// Returns a view that can be pattern matched to the differnt types of
     /// addresses.
     ///
     /// # Examples
@@ -493,7 +493,7 @@ impl UnixSocketAddr {
         UnixSocketAddrRef::from(self)
     }
 
-    /// Create an address from a slice of bytes to place in `sun_path`.
+    /// Creates an address from a slice of bytes to place in `sun_path`.
     ///
     /// This is a low-level but simple interface for creating addresses by
     /// other unix socket wrappers without exposing any libc types.  
@@ -561,7 +561,7 @@ impl UnixSocketAddr {
             Err(io::Error::new(ErrorKind::InvalidInput, TOO_LONG_DESC))
         }
     }
-    /// Get a low-level but view of the address without using any libc types.
+    /// Returns a low-level but view of the address without using any libc types.
     ///
     /// The returned slice points to the start of `sun_addr` of the contained
     /// `sockaddr_un`, and the length is the number of bytes of `sun_addr`
@@ -610,7 +610,7 @@ impl UnixSocketAddr {
         as_u8(&self.addr.sun_path[..(self.len-path_offset()) as usize])
     }
 
-    /// Prepare a `struct sockaddr*` and `socklen_t*` for passing to FFI
+    /// Prepares a `struct sockaddr*` and `socklen_t*` for passing to FFI
     /// (such as `getsockname()`, `getpeername()`, or `accept()`),
     /// and validate and normalize the produced address afterwards.
     ///
@@ -662,7 +662,7 @@ impl UnixSocketAddr {
         }
     }
 
-    /// Create an `UnixSocketAddr` from a pointer to a generic `sockaddr` and
+    /// Creates an `UnixSocketAddr` from a pointer to a generic `sockaddr` and
     /// a length.
     ///
     /// # Safety
@@ -691,7 +691,7 @@ impl UnixSocketAddr {
         }
     }
 
-    /// Create an `UnixSocketAddr` without any validation.
+    /// Creates an `UnixSocketAddr` without any validation.
     ///
     /// # Safety
     ///
@@ -702,24 +702,24 @@ impl UnixSocketAddr {
         Self{addr, len}
     }
 
-    /// Split the address into its inner, raw parts.
+    /// Splits the address into its inner, raw parts.
     pub fn into_raw(self) -> (sockaddr_un, socklen_t) {
         (self.addr, self.len)
     }
 
-    /// Get a general `sockaddr` reference to the address and its length.
+    /// Returns a general `sockaddr` reference to the address and its length.
     ///
     /// Useful for passing to `bind()`, `connect()`, `sendto()` or other FFI.
     pub fn as_raw_general(&self) -> (&sockaddr, socklen_t) {
         (unsafe { &*(&self.addr as *const sockaddr_un as *const sockaddr) }, self.len)
     }
 
-    /// Get a reference to the inner `struct sockaddr_un`, and length.
+    /// Returns a reference to the inner `struct sockaddr_un`, and length.
     pub fn as_raw(&self) -> (&sockaddr_un, socklen_t) {
         (&self.addr, self.len)
     }
 
-    /// Get mutable references to a general `struct sockaddr` and `socklen_t`.
+    /// Returns mutable references to a general `struct sockaddr` and `socklen_t`.
     ///
     /// If passing to `getpeername()`, `accept()` or similar, remember to set
     /// the length to the capacity,
@@ -733,7 +733,7 @@ impl UnixSocketAddr {
         (&mut*(&mut self.addr as *mut sockaddr_un as *mut sockaddr), &mut self.len)
     }
 
-    /// Get mutable references to the inner `struct sockaddr_un` and length.
+    /// Returns mutable references to the inner `struct sockaddr_un` and length.
     ///
     /// # Safety
     ///

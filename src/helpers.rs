@@ -40,7 +40,7 @@ pub const MSG_NOSIGNAL: c_int = 0; // SO_NOSIGPIPE is set instead
 
 
 
-/// Enable / disable CLOEXEC, for when SOCK_CLOEXEC can't be used.
+/// Enables / disables CLOEXEC, for when SOCK_CLOEXEC can't be used.
 pub fn set_cloexec(fd: RawFd,  close_on_exec: bool) -> Result<(), io::Error> {
     let op = if close_on_exec {FIOCLEX} else {FIONCLEX};
     match cvt!(unsafe { ioctl(fd, op) }) {
@@ -59,7 +59,7 @@ pub fn set_cloexec(fd: RawFd,  close_on_exec: bool) -> Result<(), io::Error> {
         Err(e) => Err(e),
     }
 }
-/// Enable / disable FIONBIO. Used if SOCK_NONBLOCK can't be used.
+/// Enables / disables FIONBIO. Used if SOCK_NONBLOCK can't be used.
 pub fn set_nonblocking(fd: RawFd,  nonblocking: bool) -> Result<(), io::Error> {
     cvt!(unsafe { ioctl(fd, FIONBIO, &mut (nonblocking as c_int)) })?;
     Ok(())

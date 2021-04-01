@@ -1,7 +1,9 @@
 #![cfg(all(feature="tokio", not(target_vendor="apple")))]
 
-use std::io::{self, ErrorKind::*, IoSlice, IoSliceMut};
+use std::io::{self, ErrorKind::*, IoSlice, IoSliceMut, Read, Write};
 use std::net::Shutdown;
+use std::os::unix::io::{AsRawFd, FromRawFd};
+use std::os::unix::net::UnixStream;
 
 use libc::{getpid, geteuid, getegid};
 
@@ -148,6 +150,38 @@ async fn test_peek() {
     ]).await.expect("peek with vectors");
     assert_eq!(received, 8);
     assert_eq!(&buf, b"sesend one");
+}
+
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), tokio::test)]
+#[cfg_attr(any(target_os="illumos", target_os="solaris"), allow(unused))]
+async fn test_fd_passing() {
+    let (mut a, mut b) = UnixSeqpacketConn::pair()
+        .expect("create tokio seqpacket pair");
+    let (mut to_pass, mut to_test) = UnixStream::pair()
+        .expect("create blocking stream pair");
+
+    tokio::task::spawn(async move {
+        a.send_fds(b"a stream", &[to_pass.as_raw_fd()]).await.expect("send fd");
+        to_pass.write(b"once").expect("write");
+    });
+
+    let mut byte_buf = [0; 8];
+    let mut fd_buf = [-1; 2];
+    let (bytes, truncated, fds) = b.recv_fds(&mut byte_buf, &mut fd_buf)
+        .await
+        .expect("receive fd");
+    assert_eq!(bytes, 8);
+    assert_eq!(byte_buf, *b"a stream");
+    assert_eq!(truncated, false);
+    assert_eq!(fds, 1);
+    assert_ne!(fd_buf[0], -1);
+    assert_eq!(fd_buf[1], -1);
+
+    let mut received = unsafe { UnixStream::from_raw_fd(fd_buf[0]) };
+    received.write(b" and again").expect("write on received fd");
+    let bytes = to_test.read(&mut byte_buf).expect("read stream");
+    assert_eq!(bytes, 8);
+    assert_eq!(byte_buf, *b"once and");
 }
 
 #[tokio::test]

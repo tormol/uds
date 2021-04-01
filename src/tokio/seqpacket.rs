@@ -2,6 +2,7 @@ use crate::{nonblocking, UnixSocketAddr, ConnCredentials};
 use futures::{future::poll_fn, ready};
 use std::io::{self, ErrorKind, IoSlice, IoSliceMut};
 use std::net::Shutdown;
+use std::os::unix::io::RawFd;
 use std::path::Path;
 use std::task::{Context, Poll};
 use tokio_02::io::PollEvented;
@@ -103,7 +104,9 @@ impl UnixSeqpacketConn {
     }
     /// Receive a packet from the socket's peer.
     pub async fn recv(&mut self,  buffer: &mut[u8]) -> io::Result<usize> {
-        poll_fn(|cx| self.poll_recv_priv(cx, |conn| conn.recv(buffer) ) ).await
+        poll_fn(|cx| {
+            self.poll_recv_priv(cx, |conn| conn.recv(buffer).map(|(received, _)| received ) )
+        }).await
     }
 
     /// Send a packet assembled from multiple byte slices.
@@ -114,22 +117,44 @@ impl UnixSeqpacketConn {
     /// Receive a packet and place the bytes across multiple buffers.
     pub async fn recv_vectored<'a, 'b>
     (&'a mut self,  buffers: &'b mut [IoSliceMut<'b>]) -> io::Result<usize> {
-        poll_fn(|cx| self.poll_recv_priv(cx, |conn| conn.recv_vectored(buffers) ) ).await
+        poll_fn(|cx| {
+            self.poll_recv_priv(
+                cx,
+                |conn| conn.recv_vectored(buffers).map(|(received, _)| received )
+            )
+        }).await
     }
 
     /// Receive a packet without removing it from the incoming queue.
     pub async fn peek(&mut self,  buffer: &mut[u8]) -> io::Result<usize> {
-        poll_fn(|cx| self.poll_recv_priv(cx, |conn| conn.peek(buffer) ) ).await
+        poll_fn(|cx| {
+            self.poll_recv_priv(cx, |conn| conn.peek(buffer).map(|(received, _)| received ) )
+        }).await
     }
     /// Read a packet into multiple buffers without removing it from the incoming queue.
     pub async fn peek_vectored<'a, 'b>
     (&'a mut self,  buffers: &'b mut [IoSliceMut<'b>]) -> io::Result<usize> {
-        poll_fn(|cx| self.poll_recv_priv(cx, |conn| conn.peek_vectored(buffers) ) ).await
+        poll_fn(|cx| {
+            self.poll_recv_priv(
+                cx,
+                |conn| conn.peek_vectored(buffers).map(|(received, _)| received )
+            )
+        }).await
+    }
+
+    /// Send a packet with associated file descriptors.
+    pub async fn send_fds(&mut self,  bytes: &[u8],  fds: &[RawFd]) -> io::Result<usize> {
+        poll_fn(|cx| self.poll_send_priv(cx, |conn| conn.send_fds(bytes, fds) ) ).await
+    }
+    /// Receive a packet and associated file descriptors.
+    pub async fn recv_fds(&mut self,  byte_buffer: &mut[u8],  fd_buffer: &mut[RawFd])
+    -> io::Result<(usize, bool, usize)> {
+        poll_fn(|cx| self.poll_recv_priv(cx, |conn| conn.recv_fds(byte_buffer, fd_buffer) ) ).await
     }
 
     pub(crate) fn poll_send_priv
-    <S: Fn(&nonblocking::UnixSeqpacketConn)->Result<usize,io::Error>>
-    (&self,  cx: &mut Context<'_>,  send_op: S) -> Poll<Result<usize, io::Error>> {
+    <O, S: Fn(&nonblocking::UnixSeqpacketConn)->Result<O,io::Error>>
+    (&self,  cx: &mut Context<'_>,  send_op: S) -> Poll<Result<O, io::Error>> {
         ready!(self.io.poll_write_ready(cx))?;
         match send_op(self.io.get_ref()) {
             Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
@@ -141,16 +166,15 @@ impl UnixSeqpacketConn {
     }
 
     pub(crate) fn poll_recv_priv
-    <R: FnMut(&nonblocking::UnixSeqpacketConn)->Result<(usize,bool),io::Error>>
-    (&self,  cx: &mut Context<'_>,  mut recv_op: R) -> Poll<Result<usize, io::Error>> {
+    <O, R: FnMut(&nonblocking::UnixSeqpacketConn)->Result<O,io::Error>>
+    (&self,  cx: &mut Context<'_>,  mut recv_op: R) -> Poll<Result<O, io::Error>> {
         ready!(self.io.poll_read_ready(cx, mio::Ready::readable()))?;
         match recv_op(self.io.get_ref()) {
             Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                 self.io.clear_read_ready(cx, mio::Ready::readable())?;
                 Poll::Pending
             }
-            Err(e) => Poll::Ready(Err(e)),
-            Ok((received, _truncated)) => Poll::Ready(Ok(received)),
+            x => Poll::Ready(x),
         }
     }
 }

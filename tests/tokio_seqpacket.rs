@@ -227,6 +227,24 @@ async fn test_peer_selinux_context() {
 }
 
 #[tokio::test]
+async fn test_conn_from_raw_fd() {
+    let (a_nonblocking, b_nonblocking) = nonblocking::UnixSeqpacketConn::pair()
+        .expect("create nonblocking seqpacket pair");
+
+    let a_fd = a_nonblocking.as_raw_fd();
+    let mut a = unsafe {
+        UnixSeqpacketConn::from_raw_fd(a_nonblocking.into_raw_fd())
+            .expect("create from raw fd")
+    };
+    assert_eq!(a.as_raw_fd(), a_fd);
+
+    a.send(b"I'm registered").await.expect("send from constructed");
+    let mut buf = [0; 24];
+    let (len, _) = b_nonblocking.recv(&mut buf).expect("receive on un-registered");
+    assert_eq!(len, 14);
+}
+
+#[tokio::test]
 async fn test_conn_into_raw_fd() {
     let (a, mut b) = UnixSeqpacketConn::pair()
         .expect("create tokio seqpacket pair");

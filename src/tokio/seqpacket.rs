@@ -2,7 +2,7 @@ use crate::{nonblocking, UnixSocketAddr, ConnCredentials};
 use futures::{future::poll_fn, ready};
 use std::io::{self, ErrorKind, IoSlice, IoSliceMut};
 use std::net::Shutdown;
-use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
+use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 use std::path::Path;
 use std::task::{Context, Poll};
 use tokio_02::io::PollEvented;
@@ -61,6 +61,18 @@ impl UnixSeqpacketConn {
         let b = UnixSeqpacketConn::from_nonblocking(b)?;
 
         Ok((a, b))
+    }
+
+    /// Creates a tokio-compatible socket from a raw file descriptor.
+    ///
+    /// This function is provided instead of implementing [`FromRawFd`](std::os::unix::io::FromRawFd)
+    /// because registering with the reactor might fail.
+    ///
+    /// # Safety
+    ///
+    /// The file descriptor must represent a connected seqpacket socket.
+    pub unsafe fn from_raw_fd(fd: RawFd) -> Result<Self, io::Error> {
+        Self::from_nonblocking(nonblocking::UnixSeqpacketConn::from_raw_fd(fd))
     }
 
     /// Shuts down the read, write, or both halves of this connection.
@@ -215,6 +227,18 @@ impl UnixSeqpacketListener {
         let listener = UnixSeqpacketListener::new(listener)?;
 
         Ok(listener)
+    }
+
+    /// Creates a tokio-compatible listener from a raw file descriptor.
+    ///
+    /// This function is provided instead of implementing [`FromRawFd`](std::os::unix::io::FromRawFd)
+    /// because registering with the reactor might fail.
+    ///
+    /// # Safety
+    ///
+    /// The file descriptor must represent a non-blocking seqpacket listener.
+    pub unsafe fn from_raw_fd(fd: RawFd) -> Result<Self, io::Error> {
+        Self::new(nonblocking::UnixSeqpacketListener::from_raw_fd(fd))
     }
 
     pub(crate) fn new(

@@ -356,9 +356,7 @@ impl UnixSocketAddr {
         }
     }
 
-    /// This method can create unnamed and path addresses, but not abstract ones.
-    ///
-    /// Creates unnamed addres for empty strings, and path addresses otherwise.
+    /// Returns unnamed addres for empty strings, and path addresses otherwise.
     ///
     /// # Errors
     ///

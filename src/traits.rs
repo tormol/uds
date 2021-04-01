@@ -24,7 +24,7 @@ pub trait UnixStreamExt: AsRawFd + FromRawFd + Sized {
     /// Creates a connection to a listening path-based or abstract named socket.
     fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error>;
 
-    /// Creates a path-based or abstract-named socket and connect to a listening socket.
+    /// Creates a path-based or abstract-named socket and connects to a listening socket.
     fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
     -> Result<Self, io::Error>;
 
@@ -109,7 +109,7 @@ pub trait UnixListenerExt: AsRawFd + FromRawFd + Sized {
     /// The type represeting the stream connection returned by `accept_unix_addr()`.
     type Conn: FromRawFd;
 
-    /// Creates a socket bound to a `UnixSocketAddr` and start listening on it.
+    /// Creates a socket bound to a `UnixSocketAddr` and starts listening on it.
     fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error>;
 
     /// Returns the address this socket is listening on.
@@ -117,7 +117,7 @@ pub trait UnixListenerExt: AsRawFd + FromRawFd + Sized {
         get_unix_addr(self.as_raw_fd(), GetAddr::LOCAL)
     }
 
-    /// Accepts a connection and return the client's address as
+    /// Accepts a connection and returns the client's address as
     /// an `uds::UnixSocketAddr`.
     fn accept_unix_addr(&self) -> Result<(Self::Conn, UnixSocketAddr), io::Error>;
 }

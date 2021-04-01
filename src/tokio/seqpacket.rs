@@ -15,7 +15,7 @@ pub struct UnixSeqpacketConn {
 impl UnixSeqpacketConn {
     /// Connects to the socket named by path.
     ///
-    /// This function will create a new Unix socket and connect to the path
+    /// This function will create a new Unix socket and connects to the path
     /// specified, associating the returned stream with the default event loop's
     /// handle.
     pub async fn connect<P: AsRef<Path>>(path: P) -> io::Result<Self> {
@@ -126,7 +126,7 @@ impl UnixSeqpacketConn {
     (&'a mut self,  slices: &'b [IoSlice<'b>]) -> io::Result<usize> {
         poll_fn(|cx| self.poll_send_priv(cx, |conn| conn.send_vectored(slices) ) ).await
     }
-    /// Receives a packet and place the bytes across multiple buffers.
+    /// Receives a packet and places the bytes across multiple buffers.
     pub async fn recv_vectored<'a, 'b>
     (&'a mut self,  buffers: &'b mut [IoSliceMut<'b>]) -> io::Result<usize> {
         poll_fn(|cx| {

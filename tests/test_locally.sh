@@ -43,9 +43,7 @@ echo
 
 echo "checking with minimum supported Rust version $MSRV"
 rm Cargo.lock
-cargo "+$MSRV" check $CAFLAGS --all-features --tests --examples
-# requiring stable for tests or examples is OK though,
-# just remove the option then.
+cargo "+$MSRV" check $CAFLAGS --all-features
 echo
 
 echo "checking with minimum version dependencies"

@@ -131,6 +131,26 @@ async fn test_vectored() {
 }
 
 #[tokio::test]
+async fn test_peek() {
+    let (mut a, mut b) = UnixSeqpacketConn::pair()
+        .expect("create tokio seqpacket pair");
+
+    tokio::task::spawn(async move {a.send(b"send one").await.expect("send"); });
+
+    let mut buf = [0; 10];
+    let received = b.peek(&mut buf).await.expect("peek");
+    assert_eq!(received, 8);
+    assert_eq!(&buf, b"send one\0\0");
+    let (front, back) = buf[2..].split_at_mut(4);
+    let received = b.peek_vectored(&mut[
+        IoSliceMut::new(front),
+        IoSliceMut::new(back),
+    ]).await.expect("peek with vectors");
+    assert_eq!(received, 8);
+    assert_eq!(&buf, b"sesend one");
+}
+
+#[tokio::test]
 async fn test_shutdown() {
     let (mut sock_tx, mut sock_rx) = UnixSeqpacketConn::pair().unwrap();
 

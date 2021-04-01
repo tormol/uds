@@ -117,6 +117,16 @@ impl UnixSeqpacketConn {
         poll_fn(|cx| self.poll_recv_priv(cx, |conn| conn.recv_vectored(buffers) ) ).await
     }
 
+    /// Receive a packet without removing it from the incoming queue.
+    pub async fn peek(&mut self,  buffer: &mut[u8]) -> io::Result<usize> {
+        poll_fn(|cx| self.poll_recv_priv(cx, |conn| conn.peek(buffer) ) ).await
+    }
+    /// Read a packet into multiple buffers without removing it from the incoming queue.
+    pub async fn peek_vectored<'a, 'b>
+    (&'a mut self,  buffers: &'b mut [IoSliceMut<'b>]) -> io::Result<usize> {
+        poll_fn(|cx| self.poll_recv_priv(cx, |conn| conn.peek_vectored(buffers) ) ).await
+    }
+
     pub(crate) fn poll_send_priv
     <S: Fn(&nonblocking::UnixSeqpacketConn)->Result<usize,io::Error>>
     (&self,  cx: &mut Context<'_>,  send_op: S) -> Poll<Result<usize, io::Error>> {

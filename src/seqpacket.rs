@@ -566,10 +566,12 @@ pub struct UnixSeqpacketListener {
 }
 impl_rawfd_traits!{UnixSeqpacketListener}
 impl UnixSeqpacketListener {
+    /// Creates a socket that listens for seqpacket connections on the specified socket file.
     pub fn bind<P: AsRef<Path>>(path: P) -> Result<Self, io::Error> {
         let addr = UnixSocketAddr::from_path(path.as_ref())?;
         Self::bind_unix_addr(&addr)
     }
+    /// Create a socket that listens for seqpacket connections on the specified address.
     pub fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_SEQPACKET, false)?;
         set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, addr)?;
@@ -577,10 +579,12 @@ impl UnixSeqpacketListener {
         Ok(UnixSeqpacketListener { fd: socket.into_raw_fd() })
     }
 
+    /// Gets the address the socket is listening on.
     pub fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
         get_unix_addr(self.fd, GetAddr::LOCAL)
     }
 
+    /// Accepts a new incoming connection to this listener.
     pub fn accept_unix_addr(&self)
     -> Result<(UnixSeqpacketConn, UnixSocketAddr), io::Error> {
         let (socket, addr) = Socket::accept_from(self.fd, false)?;
@@ -1061,27 +1065,12 @@ impl_rawfd_traits!{NonblockingUnixSeqpacketListener}
 impl_mio_if_enabled!{NonblockingUnixSeqpacketListener}
 
 impl NonblockingUnixSeqpacketListener {
-    /// Connect to an unix seqpacket server listening at `path`.
-    ///
-    /// This is a wrapper around [`connect_unix_addr()`](#method.connect_unix_addr)
-    /// for convenience and compatibility with std.
+    /// Creates a socket that listens for seqpacket connections on the specified socket file.
     pub fn bind<P: AsRef<Path>>(path: P) -> Result<Self, io::Error> {
         let addr = UnixSocketAddr::from_path(&path)?;
         Self::bind_unix_addr(&addr)
     }
-    /// `accept_unix_addr()` doesn't block if no connections are waiting:
-    ///
-    #[cfg_attr(not(target_vendor="apple"), doc="```")]
-    #[cfg_attr(target_vendor="apple", doc="```no_run")]
-    /// # use uds::nonblocking::UnixSeqpacketListener;
-    /// # use std::io::ErrorKind;
-    /// #
-    /// let _ = std::fs::remove_file("nonblocking_seqpacket_listener.socket");
-    /// let listener = UnixSeqpacketListener::bind("nonblocking_seqpacket_listener.socket")
-    ///     .expect("Cannot create nonblocking seqpacket listener");
-    /// assert_eq!(listener.accept_unix_addr().unwrap_err().kind(), ErrorKind::WouldBlock);
-    /// std::fs::remove_file("nonblocking_seqpacket_listener.socket").unwrap();
-    /// ```
+    /// Creates a socket that listens for seqpacket connections on the specified address.
     pub fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_SEQPACKET, true)?;
         set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, addr)?;
@@ -1095,6 +1084,22 @@ impl NonblockingUnixSeqpacketListener {
     }
 
     /// Accept a non-blocking connection, non-blockingly.
+    ///
+    /// # Examples
+    ///
+    /// Doesn't block if no connections are waiting:
+    ///
+    #[cfg_attr(not(target_vendor="apple"), doc="```")]
+    #[cfg_attr(target_vendor="apple", doc="```no_run")]
+    /// # use uds::nonblocking::UnixSeqpacketListener;
+    /// # use std::io::ErrorKind;
+    /// #
+    /// let _ = std::fs::remove_file("nonblocking_seqpacket_listener.socket");
+    /// let listener = UnixSeqpacketListener::bind("nonblocking_seqpacket_listener.socket")
+    ///     .expect("Cannot create nonblocking seqpacket listener");
+    /// assert_eq!(listener.accept_unix_addr().unwrap_err().kind(), ErrorKind::WouldBlock);
+    /// std::fs::remove_file("nonblocking_seqpacket_listener.socket").unwrap();
+    /// ```
     pub fn accept_unix_addr(&self)
     -> Result<(NonblockingUnixSeqpacketConn, UnixSocketAddr), io::Error> {
         let (socket, addr) = Socket::accept_from(self.fd, true)?;

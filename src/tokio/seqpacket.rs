@@ -215,12 +215,14 @@ pub struct UnixSeqpacketListener {
 }
 
 impl UnixSeqpacketListener {
+    /// Creates a socket that listens for seqpacket connections on the specified socket file.
     pub fn bind<P: AsRef<Path>>(path: P) -> Result<Self, io::Error> {
         match nonblocking::UnixSeqpacketListener::bind(path.as_ref()) {
             Ok(listener) => Self::from_nonblocking(listener),
             Err(e) => Err(e),
         }
     }
+    /// Creates a socket that listens for seqpacket connections on the specified address.
     pub fn bind_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         match nonblocking::UnixSeqpacketListener::bind_unix_addr(addr) {
             Ok(listener) => Self::from_nonblocking(listener),
@@ -279,7 +281,7 @@ impl UnixSeqpacketListener {
         }
     }
 
-    /// Get the address of this side of the connection.
+    /// Get the address the socket is listening on.
     pub fn local_addr(&self) -> Result<UnixSocketAddr, io::Error> {
         self.io.get_ref().local_unix_addr()
     }

@@ -6,6 +6,25 @@ export RUST_BACKTRACE=1
 
 CAFLAGS="-j1"
 
+test_targets="x86_64-unknown-linux-gnu x86_64-unknown-linux-musl \
+              i686-unknown-linux-gnu i686-unknown-linux-musl"
+for target in $test_targets; do
+    echo "testing $target"
+    cargo check $CAFLAGS --target "$target" --all-features
+    RUSTFLAGS='--cfg feature="os-poll"' cargo test $CAFLAGS --target "$target" --all-features -- --quiet
+    echo
+done
+
+test_nightly_target="x86_64-unknown-linux-gnux32" # segfaults fixed with LLVM 12
+echo "testing $test_nightly_target (on nightly)"
+RUSTFLAGS='--cfg feature="os-poll"'  cargo +nightly test $CAFLAGS --target "$test_nightly_target" --release --all-features -- --quiet
+echo
+
+echo "checking with minimum supported Rust version $MSRV"
+rm Cargo.lock
+RUSTFLAGS='--cfg feature="os-poll"' cargo "+$MSRV" check $CAFLAGS --all-features
+echo
+
 check_targets="x86_64-unknown-freebsd x86_64-unknown-netbsd \
                x86_64-apple-darwin x86_64-sun-solaris \
                aarch64-unknown-linux-gnu arm-unknown-linux-gnueabi \
@@ -25,26 +44,7 @@ for target in $check_targets; do
     echo
 done
 
-test_targets="x86_64-unknown-linux-gnu x86_64-unknown-linux-musl \
-              i686-unknown-linux-gnu i686-unknown-linux-musl"
-for target in $test_targets; do
-    echo "testing $target"
-    cargo check $CAFLAGS --target "$target" --all-features
-    RUSTFLAGS='--cfg feature="os-poll"' cargo test $CAFLAGS --target "$target" --all-features -- --quiet
-    echo
-done
-
 export RUSTFLAGS='--cfg feature="os-poll"'
-
-test_nightly_target="x86_64-unknown-linux-gnux32" # segfaults fixed with LLVM 12
-echo "testing $test_nightly_target (on nightly)"
-RUSTFLAGS='--cfg feature="os-poll"'  cargo +nightly test $CAFLAGS --target "$test_nightly_target" --release --all-features -- --quiet
-echo
-
-echo "checking with minimum supported Rust version $MSRV"
-rm Cargo.lock
-cargo "+$MSRV" check $CAFLAGS --all-features
-echo
 
 echo "checking with minimum version dependencies"
 rm Cargo.lock

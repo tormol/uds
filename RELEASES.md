@@ -1,3 +1,13 @@
+Version 0.2.5 (2021-04-01)
+==========================
+* Add `send_vectored()` and `recv_vectored()` to `::tokio::UnixSeqpacketConn`.
+* Add `peek()` and `peek_vectored()` to `::tokio::UnixSeqpacketConn`.
+* Add `send_fds()` and `recv_fds()` to `::tokio::UnixSeqpacketConn`.
+* Implement `AsRawfd` and `IntoRawFd` for tokio seqpacket types.
+* Add fallible `from_raw_fd()` to tokio seqpacket types.
+* Add `from_nonblocking()` to `::tokio::UnixSeqpacketListener`.
+* Fix `initial_peer_credentials()` impl for Illumos & Solaris writing to stdout.
+
 Version 0.2.4 (2021-03-25)
 ==========================
 * Implement peer credentials on NetBSD and DragonFly BSD.

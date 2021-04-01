@@ -15,6 +15,7 @@ use libc::{socket, accept, close, listen, socketpair};
 use libc::{ioctl, FIONBIO, FIOCLEX, FIONCLEX};
 use libc::{fcntl, F_DUPFD_CLOEXEC, EINVAL, dup};
 use libc::{getsockopt, SOL_SOCKET, SO_ERROR, c_void};
+#[cfg_attr(target_env="musl", allow(deprecated))]
 use libc::{setsockopt, SO_RCVTIMEO, SO_SNDTIMEO, timeval, time_t};
 #[cfg(any(target_os="illumos", target_os="solaris"))]
 use libc::{F_GETFD, F_SETFD, FD_CLOEXEC};
@@ -147,6 +148,7 @@ pub fn set_timeout(socket: RawFd,  direction: TimeoutDirection,  timeout: Option
             // tv_sec is time_t on all unices supported by libc.
             // (there is no polymorphic way to get the max value of a signed type.)
             // TODO change to ::MAX after MSRV is bumped to 1.43.
+            #[cfg_attr(target_env="musl", allow(deprecated))]
             Err(_) => time_t::max_value() as _,
         };
         time.tv_usec = duration.subsec_micros() as _;

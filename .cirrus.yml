@@ -45,10 +45,6 @@ task:
     - cargo check --features mio_07
     - cargo check --features tokio
     - cargo build --all-features
-  test_script:
-    - cargo run --bin characteristics
-    - export RUSTFLAGS='--cfg feature="os-poll"'
-    - cargo test --all-features --no-fail-fast -- --test-threads=1
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 

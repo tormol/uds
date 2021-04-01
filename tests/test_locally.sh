@@ -1,28 +1,28 @@
 #!/bin/sh
 MSRV="1.39.0"
-
-set -ev
+CAFLAGS="-j1"
 export RUST_BACKTRACE=1
 
-CAFLAGS="-j1"
+set -ev
 
 test_targets="x86_64-unknown-linux-gnu x86_64-unknown-linux-musl \
               i686-unknown-linux-gnu i686-unknown-linux-musl"
 for target in $test_targets; do
     echo "testing $target"
+    cargo check $CAFLAGS --target "$target"
     cargo check $CAFLAGS --target "$target" --all-features
-    RUSTFLAGS='--cfg feature="os-poll"' cargo test $CAFLAGS --target "$target" --all-features -- --quiet
+    cargo test $CAFLAGS --target "$target" --all-features -- --quiet
     echo
 done
 
 test_nightly_target="x86_64-unknown-linux-gnux32" # segfaults fixed with LLVM 12
 echo "testing $test_nightly_target (on nightly)"
-RUSTFLAGS='--cfg feature="os-poll"'  cargo +nightly test $CAFLAGS --target "$test_nightly_target" --release --all-features -- --quiet
+cargo +nightly test $CAFLAGS --target "$test_nightly_target" --release --all-features -- --quiet
 echo
 
 echo "checking with minimum supported Rust version $MSRV"
 rm Cargo.lock
-RUSTFLAGS='--cfg feature="os-poll"' cargo "+$MSRV" check $CAFLAGS --all-features
+cargo "+$MSRV" check $CAFLAGS --all-features
 echo
 
 check_targets="x86_64-unknown-freebsd x86_64-unknown-netbsd \
@@ -33,18 +33,9 @@ check_targets="x86_64-unknown-freebsd x86_64-unknown-netbsd \
 for target in $check_targets; do
     echo "checking $target"
     cargo check $CAFLAGS --target "$target" --tests --examples
-    cargo check $CAFLAGS --target "$target" --tests --examples --features mio
-    cargo check $CAFLAGS --target "$target" --tests --examples --features mio-uds
-    cargo check $CAFLAGS --target "$target" --features mio_07
-    cargo check $CAFLAGS --target "$target" --features tokio
-    cargo check $CAFLAGS --target "$target" --all-features
-    RUSTFLAGS='--cfg feature="os-poll"' cargo check $CAFLAGS --target "$target" --tests --examples --features mio_07
-    RUSTFLAGS='--cfg feature="os-poll"' cargo check $CAFLAGS --target "$target" --tests --examples --features tokio
-    RUSTFLAGS='--cfg feature="os-poll"' cargo check $CAFLAGS --target "$target" --tests --examples --all-features
+    cargo check $CAFLAGS --target "$target" --tests --examples --all-features
     echo
 done
-
-export RUSTFLAGS='--cfg feature="os-poll"'
 
 echo "checking with minimum version dependencies"
 rm Cargo.lock

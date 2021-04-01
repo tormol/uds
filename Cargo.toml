@@ -24,11 +24,8 @@ mio-uds = {version="0.6", optional=true} # no patch release builds with -Z minim
 mio = {version="0.6.14", optional=true} # .14 avoids dragging in libc 0.1 under -Z minimal-versions
 # enabling this feature implements the extension traits for mio 0.7's unix socket types
 # and Source for this crate's non-blocking seqpacket types.
-mio_07 = {package="mio", version="0.7.0", features=["os-util", "uds"], optional=true}
+mio_07 = {package="mio", version="0.7.6", features=["os-ext", "net"], optional=true}
 futures = {version = "0.3", optional=true}
-# examples and tests for mio_07 also requires mio feature os-poll,
-# but adding it as a dev-dependency would also enable it in all cases (cargo bug #4866)
-# instead RUSTFLAGS='--cfg feature="os-poll"' must be used to build & run mio_07 tests
 tokio_02 = {package="tokio", version = "0.2", features = ["io-driver"], optional=true}
 
 [target."cfg(unix)".dev-dependencies]

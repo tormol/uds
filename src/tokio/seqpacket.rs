@@ -18,36 +18,29 @@ impl UnixSeqpacketConn {
     /// This function will create a new Unix socket and connect to the path
     /// specified, associating the returned stream with the default event loop's
     /// handle.
-    pub async fn connect<P: AsRef<Path>>(path: P) -> io::Result<UnixSeqpacketConn> {
+    pub async fn connect<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let conn = nonblocking::UnixSeqpacketConn::connect(path)?;
-        let conn = UnixSeqpacketConn::from_nonblocking(conn)?;
+        let conn = Self::from_nonblocking(conn)?;
 
         poll_fn(|cx| conn.io.poll_write_ready(cx)).await?;
         Ok(conn)
     }
-
     /// Connect to an unix seqpacket server listening at `addr`.
     pub async fn connect_addr(addr: &UnixSocketAddr) -> io::Result<Self> {
         let conn = nonblocking::UnixSeqpacketConn::connect_unix_addr(addr)?;
-        let conn = UnixSeqpacketConn::from_nonblocking(conn)?;
+        let conn = Self::from_nonblocking(conn)?;
 
         poll_fn(|cx| conn.io.poll_write_ready(cx)).await?;
         Ok(conn)
     }
     /// Bind to an address before connecting to a listening seqpacet socket.
-    pub async fn connect_from_addr(from: &UnixSocketAddr, to: &UnixSocketAddr)
+    pub async fn connect_from_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
     -> io::Result<Self> {
         let conn = nonblocking::UnixSeqpacketConn::connect_from_to_unix_addr(from, to)?;
-        let conn = UnixSeqpacketConn::from_nonblocking(conn)?;
+        let conn = Self::from_nonblocking(conn)?;
 
         poll_fn(|cx| conn.io.poll_write_ready(cx)).await?;
         Ok(conn)
-    }
-
-    /// Creates a tokio-compatible socket from a nonblocking variant.
-    pub fn from_nonblocking(conn: nonblocking::UnixSeqpacketConn) -> io::Result<UnixSeqpacketConn> {
-        let io = PollEvented::new(conn)?;
-        Ok(UnixSeqpacketConn { io })
     }
 
     /// Creates an unnamed pair of connected sockets.
@@ -55,14 +48,21 @@ impl UnixSeqpacketConn {
     /// This function will create a pair of interconnected Unix sockets for
     /// communicating back and forth between one another. Each socket will
     /// be associated with the default event loop's handle.
-    pub fn pair() -> io::Result<(UnixSeqpacketConn, UnixSeqpacketConn)> {
+    pub fn pair() -> Result<(UnixSeqpacketConn, UnixSeqpacketConn), io::Error> {
         let (a, b) = nonblocking::UnixSeqpacketConn::pair()?;
-        let a = UnixSeqpacketConn::from_nonblocking(a)?;
-        let b = UnixSeqpacketConn::from_nonblocking(b)?;
+        let a = Self::from_nonblocking(a)?;
+        let b = Self::from_nonblocking(b)?;
 
         Ok((a, b))
     }
 
+    /// Creates a tokio-compatible socket from an existing nonblocking socket.
+    pub fn from_nonblocking(conn: nonblocking::UnixSeqpacketConn) -> Result<Self, io::Error> {
+        match PollEvented::new(conn) {
+            Ok(io) => Ok(Self { io }),
+            Err(e) => Err(e),
+        }
+    }
     /// Creates a tokio-compatible socket from a raw file descriptor.
     ///
     /// This function is provided instead of implementing [`FromRawFd`](std::os::unix::io::FromRawFd)
@@ -76,7 +76,7 @@ impl UnixSeqpacketConn {
     }
 
     /// Shuts down the read, write, or both halves of this connection.
-    pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
+    pub fn shutdown(&self,  how: Shutdown) -> Result<(), io::Error> {
         self.io.get_ref().shutdown(how)
     }
 
@@ -215,20 +215,27 @@ pub struct UnixSeqpacketListener {
 }
 
 impl UnixSeqpacketListener {
-    pub fn bind<P: AsRef<Path>>(path: P) -> io::Result<UnixSeqpacketListener> {
-        let listener = nonblocking::UnixSeqpacketListener::bind(path)?;
-        let listener = UnixSeqpacketListener::new(listener)?;
-
-        Ok(listener)
+    pub fn bind<P: AsRef<Path>>(path: P) -> Result<Self, io::Error> {
+        match nonblocking::UnixSeqpacketListener::bind(path.as_ref()) {
+            Ok(listener) => Self::from_nonblocking(listener),
+            Err(e) => Err(e),
+        }
+    }
+    pub fn bind_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
+        match nonblocking::UnixSeqpacketListener::bind_unix_addr(addr) {
+            Ok(listener) => Self::from_nonblocking(listener),
+            Err(e) => Err(e),
+        }
     }
 
-    pub fn bind_addr(addr: &UnixSocketAddr) -> io::Result<Self> {
-        let listener = nonblocking::UnixSeqpacketListener::bind_unix_addr(addr)?;
-        let listener = UnixSeqpacketListener::new(listener)?;
-
-        Ok(listener)
+    /// Creates a tokio-compatible listener from an existing nonblocking listener.
+    pub fn from_nonblocking(listener: nonblocking::UnixSeqpacketListener)
+    -> Result<Self, io::Error> {
+        match PollEvented::new(listener) {
+            Ok(io) => Ok(Self { io }),
+            Err(e) => Err(e),
+        }
     }
-
     /// Creates a tokio-compatible listener from a raw file descriptor.
     ///
     /// This function is provided instead of implementing [`FromRawFd`](std::os::unix::io::FromRawFd)
@@ -238,14 +245,7 @@ impl UnixSeqpacketListener {
     ///
     /// The file descriptor must represent a non-blocking seqpacket listener.
     pub unsafe fn from_raw_fd(fd: RawFd) -> Result<Self, io::Error> {
-        Self::new(nonblocking::UnixSeqpacketListener::from_raw_fd(fd))
-    }
-
-    pub(crate) fn new(
-        conn: nonblocking::UnixSeqpacketListener,
-    ) -> io::Result<UnixSeqpacketListener> {
-        let io = PollEvented::new(conn)?;
-        Ok(UnixSeqpacketListener { io })
+        Self::from_nonblocking(nonblocking::UnixSeqpacketListener::from_raw_fd(fd))
     }
 
     /// Accepts a new incoming connection to this listener.

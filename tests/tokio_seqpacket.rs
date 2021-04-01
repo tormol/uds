@@ -1,6 +1,6 @@
 #![cfg(all(feature="tokio", not(target_vendor="apple")))]
 
-use std::io::{self, ErrorKind::*};
+use std::io::{self, ErrorKind::*, IoSlice, IoSliceMut};
 use std::net::Shutdown;
 
 use libc::{getpid, geteuid, getegid};
@@ -92,16 +92,42 @@ async fn test_addr() {
 
 #[tokio::test]
 async fn test_conn_pair() {
-    let (mut sock_tx, mut sock_rx) = UnixSeqpacketConn::pair().unwrap();
+    let (mut sock_tx, mut sock_rx) = UnixSeqpacketConn::pair()
+        .expect("create tokio seqpacket pair");
 
     tokio::task::spawn(async move {
-        sock_tx.send(&[b'h', b'i', b'0']).await.unwrap();
+        sock_tx.send(&[b'h', b'i', b'0']).await.expect("send");
     });
 
     let mut buf = [0u8; 3];
-    let read = sock_rx.recv(&mut buf).await.unwrap();
+    let read = sock_rx.recv(&mut buf).await.expect("receive");
     assert_eq!(read, 3);
     assert_eq!(&buf, &[b'h', b'i', b'0']);
+}
+
+#[tokio::test]
+async fn test_vectored() {
+    let (mut a, mut b) = UnixSeqpacketConn::pair()
+        .expect("create tokio seqpacket pair");
+
+    tokio::task::spawn(async move {
+        a.send_vectored(&[
+            IoSlice::new(b"hi"),
+            IoSlice::new(b"there"),
+        ]).await.expect("send vectors");
+    });
+
+    let mut bufs = [[0; 3]; 3];
+    let mut slices = bufs.iter_mut()
+        .map(|array| IoSliceMut::new(array) )
+        .collect::<Vec<IoSliceMut>>();
+    let received = b.recv_vectored(&mut slices[..])
+        .await
+        .expect("receive into vectors");
+    assert_eq!(received, 7);
+    assert_eq!(bufs[0], *b"hit");
+    assert_eq!(bufs[1], *b"her");
+    assert_eq!(bufs[2], *b"e\0\0");
 }
 
 #[tokio::test]

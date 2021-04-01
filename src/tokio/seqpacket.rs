@@ -1,6 +1,6 @@
 use crate::{nonblocking, UnixSocketAddr, ConnCredentials};
 use futures::{future::poll_fn, ready};
-use std::io;
+use std::io::{self, ErrorKind, IoSlice, IoSliceMut};
 use std::net::Shutdown;
 use std::path::Path;
 use std::task::{Context, Poll};
@@ -97,46 +97,50 @@ impl UnixSeqpacketConn {
 }
 
 impl UnixSeqpacketConn {
-    /// Sends data on the socket to the socket's peer.
-    pub async fn send(&mut self, buf: &[u8]) -> io::Result<usize> {
-        poll_fn(|cx| self.poll_send_priv(cx, buf)).await
+    /// Send a packet to the socket's peer.
+    pub async fn send(&mut self,  packet: &[u8]) -> io::Result<usize> {
+        poll_fn(|cx| self.poll_send_priv(cx, |conn| conn.send(packet) ) ).await
+    }
+    /// Receive a packet from the socket's peer.
+    pub async fn recv(&mut self,  buffer: &mut[u8]) -> io::Result<usize> {
+        poll_fn(|cx| self.poll_recv_priv(cx, |conn| conn.recv(buffer) ) ).await
     }
 
-    /// Receives data from the socket.
-    pub async fn recv(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        poll_fn(|cx| self.poll_recv_priv(cx, buf)).await
+    /// Send a packet assembled from multiple byte slices.
+    pub async fn send_vectored<'a, 'b>
+    (&'a mut self,  slices: &'b [IoSlice<'b>]) -> io::Result<usize> {
+        poll_fn(|cx| self.poll_send_priv(cx, |conn| conn.send_vectored(slices) ) ).await
+    }
+    /// Receive a packet and place the bytes across multiple buffers.
+    pub async fn recv_vectored<'a, 'b>
+    (&'a mut self,  buffers: &'b mut [IoSliceMut<'b>]) -> io::Result<usize> {
+        poll_fn(|cx| self.poll_recv_priv(cx, |conn| conn.recv_vectored(buffers) ) ).await
     }
 
-    pub(crate) fn poll_recv_priv(
-        &self,
-        cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
-        ready!(self.io.poll_read_ready(cx, mio::Ready::readable()))?;
-
-        match self.io.get_ref().recv(buf) {
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                self.io.clear_read_ready(cx, mio::Ready::readable())?;
-                Poll::Pending
-            }
-            Err(e) => Poll::Ready(Err(e)),
-            Ok((x, _truncated)) => Poll::Ready(Ok(x)),
-        }
-    }
-
-    pub(crate) fn poll_send_priv(
-        &self,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
+    pub(crate) fn poll_send_priv
+    <S: Fn(&nonblocking::UnixSeqpacketConn)->Result<usize,io::Error>>
+    (&self,  cx: &mut Context<'_>,  send_op: S) -> Poll<Result<usize, io::Error>> {
         ready!(self.io.poll_write_ready(cx))?;
-
-        match self.io.get_ref().send(buf) {
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+        match send_op(self.io.get_ref()) {
+            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                 self.io.clear_write_ready(cx)?;
                 Poll::Pending
             }
             x => Poll::Ready(x),
+        }
+    }
+
+    pub(crate) fn poll_recv_priv
+    <R: FnMut(&nonblocking::UnixSeqpacketConn)->Result<(usize,bool),io::Error>>
+    (&self,  cx: &mut Context<'_>,  mut recv_op: R) -> Poll<Result<usize, io::Error>> {
+        ready!(self.io.poll_read_ready(cx, mio::Ready::readable()))?;
+        match recv_op(self.io.get_ref()) {
+            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                self.io.clear_read_ready(cx, mio::Ready::readable())?;
+                Poll::Pending
+            }
+            Err(e) => Poll::Ready(Err(e)),
+            Ok((received, _truncated)) => Poll::Ready(Ok(received)),
         }
     }
 }
@@ -191,7 +195,7 @@ impl UnixSeqpacketListener {
 
         match self.io.get_ref().accept_unix_addr() {
             Ok((socket, addr)) => Ok((socket, addr)).into(),
-            Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
+            Err(ref err) if err.kind() == ErrorKind::WouldBlock => {
                 self.io.clear_read_ready(cx, mio::Ready::readable())?;
                 Poll::Pending
             }

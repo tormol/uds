@@ -2,7 +2,7 @@ use crate::{nonblocking, UnixSocketAddr, ConnCredentials};
 use futures::{future::poll_fn, ready};
 use std::io::{self, ErrorKind, IoSlice, IoSliceMut};
 use std::net::Shutdown;
-use std::os::unix::io::RawFd;
+use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 use std::path::Path;
 use std::task::{Context, Poll};
 use tokio_02::io::PollEvented;
@@ -179,6 +179,24 @@ impl UnixSeqpacketConn {
     }
 }
 
+impl AsRawFd for UnixSeqpacketConn {
+    fn as_raw_fd(&self) -> RawFd {
+        self.io.get_ref().as_raw_fd()
+    }
+}
+
+impl IntoRawFd for UnixSeqpacketConn {
+    fn into_raw_fd(self) -> RawFd {
+        let fd = self.io.get_ref().as_raw_fd(); // in case into_inner() fails
+        match self.io.into_inner() {
+            Ok(nonblocking) => nonblocking.into_raw_fd(),
+            Err(_) => fd,
+        }
+    }
+}
+
+
+
 /// An I/O object representing a Unix Sequenced-packet socket.
 pub struct UnixSeqpacketListener {
     io: PollEvented<nonblocking::UnixSeqpacketListener>,
@@ -240,5 +258,21 @@ impl UnixSeqpacketListener {
     /// Get the address of this side of the connection.
     pub fn local_addr(&self) -> Result<UnixSocketAddr, io::Error> {
         self.io.get_ref().local_unix_addr()
+    }
+}
+
+impl AsRawFd for UnixSeqpacketListener {
+    fn as_raw_fd(&self) -> RawFd {
+        self.io.get_ref().as_raw_fd()
+    }
+}
+
+impl IntoRawFd for UnixSeqpacketListener {
+    fn into_raw_fd(self) -> RawFd {
+        let fd = self.io.get_ref().as_raw_fd(); // in case into_inner() fails
+        match self.io.into_inner() {
+            Ok(nonblocking) => nonblocking.into_raw_fd(),
+            Err(_) => fd,
+        }
     }
 }

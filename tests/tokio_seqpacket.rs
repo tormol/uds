@@ -2,7 +2,7 @@
 
 use std::io::{self, ErrorKind::*, IoSlice, IoSliceMut, Read, Write};
 use std::net::Shutdown;
-use std::os::unix::io::{AsRawFd, FromRawFd};
+use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd};
 use std::os::unix::net::UnixStream;
 
 use libc::{getpid, geteuid, getegid};
@@ -10,7 +10,7 @@ use libc::{getpid, geteuid, getegid};
 use tokio_02 as tokio;
 
 use uds::tokio::{UnixSeqpacketConn, UnixSeqpacketListener};
-use uds::UnixSocketAddr;
+use uds::{nonblocking, UnixSocketAddr};
 
 #[tokio::test]
 async fn test_listener_accept() {
@@ -224,4 +224,21 @@ async fn test_peer_selinux_context() {
             // fails on Linux on Cirrus, probably as a result of running inside a docker container
         }
     }
+}
+
+#[tokio::test]
+async fn test_conn_into_raw_fd() {
+    let (a, mut b) = UnixSeqpacketConn::pair()
+        .expect("create tokio seqpacket pair");
+
+    let a_nonblocking = unsafe {
+        let a_fd = a.as_raw_fd();
+        assert_eq!(a.into_raw_fd(), a_fd);
+        nonblocking::UnixSeqpacketConn::from_raw_fd(a_fd)
+    };
+
+    a_nonblocking.send(b"hi").expect("send from deregistered socket");
+    let mut buf = [0; 10];
+    assert_eq!(b.recv(&mut buf).await.expect("receive"), 2);
+    assert_eq!(&buf[..2], b"hi");
 }

@@ -5,7 +5,7 @@ use std::os::unix::io::{RawFd, FromRawFd, AsRawFd, IntoRawFd};
 use std::path::Path;
 use std::time::Duration;
 
-use libc::{SOCK_SEQPACKET, MSG_EOR, MSG_PEEK, c_void, close, send};
+use libc::{SOCK_SEQPACKET, MSG_EOR, MSG_PEEK, c_void, close, send, recv};
 
 #[cfg(feature="mio")]
 use mio::{event::Evented, unix::EventedFd, Poll, Token as Token_06, Ready, PollOpt};
@@ -132,9 +132,9 @@ macro_rules! impl_mio_if_enabled {($type:tt) => {
 /// a.send(b"second").unwrap();
 ///
 /// let mut buffer_big_enough_for_both = [0; 20];
-/// let (len, _truncated) = b.recv(&mut buffer_big_enough_for_both).unwrap();
+/// let len = b.recv(&mut buffer_big_enough_for_both).unwrap();
 /// assert_eq!(&buffer_big_enough_for_both[..len], b"first");
-/// let (len, _truncated) = b.recv(&mut buffer_big_enough_for_both).unwrap();
+/// let len = b.recv(&mut buffer_big_enough_for_both).unwrap();
 /// assert_eq!(&buffer_big_enough_for_both[..len], b"second");
 /// ```
 ///
@@ -258,13 +258,10 @@ impl UnixSeqpacketConn {
         Ok(sent as usize)
     }
     /// Receives a packet from the peer.
-    ///
-    /// The returned `bool` indicates whether the packet was truncated due to
-    /// the buffer beeing too small.
-    pub fn recv(&self,  buffer: &mut[u8]) -> Result<(usize, bool), io::Error> {
-        let mut buffers = [IoSliceMut::new(buffer)];
-        let (bytes, ancillary) = recv_ancillary(self.fd, None, 0, &mut buffers, &mut[])?;
-        Ok((bytes, ancillary.message_truncated()))
+    pub fn recv(&self,  buffer: &mut[u8]) -> Result<usize, io::Error> {
+        let ptr = buffer.as_ptr() as *mut c_void;
+        let received = cvt_r!(unsafe { recv(self.fd, ptr, buffer.len(), MSG_NOSIGNAL) })?;
+        Ok(received as usize)
     }
     /// Sends a packet assembled from multiple byte slices.
     pub fn send_vectored(&self,  slices: &[IoSlice])
@@ -294,9 +291,6 @@ impl UnixSeqpacketConn {
     }
     /// Receives a packet without removing it from the incoming queue.
     ///
-    /// The returned `bool` indicates whether the packet was truncated due to
-    /// the buffer being too small.
-    ///
     /// # Examples
     ///
     #[cfg_attr(not(target_vendor="apple"), doc="```")]
@@ -304,17 +298,18 @@ impl UnixSeqpacketConn {
     /// let (a, b) = uds::UnixSeqpacketConn::pair().unwrap();
     /// a.send(b"hello").unwrap();
     /// let mut buf = [0u8; 10];
-    /// assert_eq!(b.peek(&mut buf[..1]).unwrap(), (1, true));
+    /// assert_eq!(b.peek(&mut buf[..1]).unwrap(), 1);
     /// assert_eq!(&buf[..2], &[b'h', 0]);
-    /// assert_eq!(b.peek(&mut buf).unwrap(), (5, false));
+    /// assert_eq!(b.peek(&mut buf).unwrap(), 5);
     /// assert_eq!(&buf[..5], b"hello");
-    /// assert_eq!(b.recv(&mut buf).unwrap(), (5, false));
+    /// assert_eq!(b.recv(&mut buf).unwrap(), 5);
     /// assert_eq!(&buf[..5], b"hello");
     /// ```
-    pub fn peek(&self,  buffer: &mut[u8]) -> Result<(usize, bool), io::Error> {
-        let mut buffers = [IoSliceMut::new(buffer)];
-        recv_ancillary(self.fd, None, MSG_PEEK, &mut buffers, &mut[])
-            .map(|(bytes, ancillary)| (bytes, ancillary.message_truncated()) )
+    pub fn peek(&self,  buffer: &mut[u8]) -> Result<usize, io::Error> {
+        let ptr = buffer.as_ptr() as *mut c_void;
+        let flags = MSG_NOSIGNAL | MSG_PEEK;
+        let received = cvt_r!(unsafe { recv(self.fd, ptr, buffer.len(), flags) })?;
+        Ok(received as usize)
     }
     /// Receives a packet without removing it from the incoming queue.
     ///
@@ -362,16 +357,16 @@ impl UnixSeqpacketConn {
     /// a2.send(b"second").unwrap();
     ///
     /// let mut buf = [0u8; 20];
-    /// let (len, _truncated) = b.recv(&mut buf).unwrap();
+    /// let len = b.recv(&mut buf).unwrap();
     /// assert_eq!(&buf[..len], b"first");
     /// b.send(b"hello first").unwrap();
-    /// let (len, _truncated) = b.recv(&mut buf).unwrap();
+    /// let len = b.recv(&mut buf).unwrap();
     /// assert_eq!(&buf[..len], b"second");
     /// b.send(b"hello second").unwrap();
     ///
-    /// let (len, _truncated) = a2.recv(&mut buf).unwrap();
+    /// let len = a2.recv(&mut buf).unwrap();
     /// assert_eq!(&buf[..len], b"hello first");
-    /// let (len, _truncated) = a1.recv(&mut buf).unwrap();
+    /// let len = a1.recv(&mut buf).unwrap();
     /// assert_eq!(&buf[..len], b"hello second");
     /// ```
     ///
@@ -384,7 +379,7 @@ impl UnixSeqpacketConn {
     ///
     /// let b2 = b1.try_clone().unwrap();
     /// drop(b1);
-    /// assert_eq!(b2.recv(&mut[0; 10]).unwrap().0, "hello".len());
+    /// assert_eq!(b2.recv(&mut[0; 10]).unwrap(), "hello".len());
     /// ```
     pub fn try_clone(&self) -> Result<Self, io::Error> {
         let cloned = Socket::try_clone_from(self.fd)?;
@@ -772,7 +767,7 @@ impl UnixSeqpacketListener {
 /// let current_events = events.iter().collect::<Vec<_>>();
 /// assert!(current_events.len() > 0);
 /// assert_eq!(current_events[0].token(), Token(1));
-/// assert_eq!(a.recv(&mut [0; 8]).expect("receive packet"), (8, true/*truncated*/));
+/// assert_eq!(a.recv(&mut [0; 8]).expect("receive packet"), 8/*truncated*/);
 /// ```
 #[derive(Debug)]
 #[repr(transparent)]
@@ -820,7 +815,7 @@ impl NonblockingUnixSeqpacketConn {
     /// assert!(b.local_unix_addr().unwrap().is_unnamed());
     /// assert_eq!(b.recv(&mut[0; 20]).unwrap_err().kind(), std::io::ErrorKind::WouldBlock);
     /// a.send(b"hello").unwrap();
-    /// assert_eq!(b.recv(&mut[0; 20]).unwrap(), (5, false));
+    /// assert_eq!(b.recv(&mut[0; 20]).unwrap(), 5);
     /// ```
     pub fn pair() -> Result<(Self, Self), io::Error> {
         let (a, b) = Socket::pair(SOCK_SEQPACKET, true)?;
@@ -864,13 +859,10 @@ impl NonblockingUnixSeqpacketConn {
         Ok(sent as usize)
     }
     /// Receives a packet from the peer.
-    ///
-    /// The returned `bool` indicates whether the packet was truncated due to
-    /// too short buffer.
-    pub fn recv(&self,  buffer: &mut[u8]) -> Result<(usize, bool), io::Error> {
-        let mut buffers = [IoSliceMut::new(buffer)];
-        let (bytes, ancillary) = recv_ancillary(self.fd, None, 0, &mut buffers, &mut[])?;
-        Ok((bytes, ancillary.message_truncated()))
+    pub fn recv(&self,  buffer: &mut[u8]) -> Result<usize, io::Error> {
+        let ptr = buffer.as_ptr() as *mut c_void;
+        let received = cvt_r!(unsafe { recv(self.fd, ptr, buffer.len(), MSG_NOSIGNAL) })?;
+        Ok(received as usize)
     }
     /// Sends a packet assembled from multiple byte slices.
     pub fn send_vectored(&self,  slices: &[IoSlice])
@@ -900,9 +892,6 @@ impl NonblockingUnixSeqpacketConn {
     }
     /// Receives a packet without removing it from the incoming queue.
     ///
-    /// The returned `bool` indicates whether the packet was truncated due to
-    /// the buffer being too small.
-    ///
     /// # Examples
     ///
     #[cfg_attr(not(target_vendor="apple"), doc="```")]
@@ -912,16 +901,17 @@ impl NonblockingUnixSeqpacketConn {
     /// let mut buf = [0u8; 10];
     /// assert_eq!(b.peek(&mut buf).unwrap_err().kind(), WouldBlock);
     /// a.send(b"hello").unwrap();
-    /// assert_eq!(b.peek(&mut buf).unwrap(), (5, false));
+    /// assert_eq!(b.peek(&mut buf).unwrap(), 5);
     /// assert_eq!(&buf[..5], b"hello");
-    /// assert_eq!(b.recv(&mut buf).unwrap(), (5, false));
+    /// assert_eq!(b.recv(&mut buf).unwrap(), 5);
     /// assert_eq!(&buf[..5], b"hello");
     /// assert_eq!(b.peek(&mut buf).unwrap_err().kind(), WouldBlock);
     /// ```
-    pub fn peek(&self,  buffer: &mut[u8]) -> Result<(usize, bool), io::Error> {
-        let mut buffers = [IoSliceMut::new(buffer)];
-        recv_ancillary(self.fd, None, MSG_PEEK, &mut buffers, &mut[])
-            .map(|(bytes, ancillary)| (bytes, ancillary.message_truncated()) )
+    pub fn peek(&self,  buffer: &mut[u8]) -> Result<usize, io::Error> {
+        let ptr = buffer.as_ptr() as *mut c_void;
+        let flags = MSG_NOSIGNAL | MSG_PEEK;
+        let received = cvt_r!(unsafe { recv(self.fd, ptr, buffer.len(), flags) })?;
+        Ok(received as usize)
     }
     /// Receives a packet without removing it from the incoming queue.
     ///

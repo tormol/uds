@@ -464,7 +464,7 @@ fn seqpacket_recv_empty() {
     };
 
     match b.recv(&mut[]) {
-        Ok((0, false)) => {
+        Ok(0) => {
             println!("always"); // receive always succeeds
             return;
         },
@@ -476,7 +476,7 @@ fn seqpacket_recv_empty() {
     }
     a.send(&[]).expect("send empty packet without ancillary");
     match b.recv(&mut[0; 8]) {
-        Ok((0, false)) => println!("yes"), // fully supported
+        Ok(0) => println!("yes"), // fully supported
         Err(ref e) if e.kind() == WouldBlock => println!("no"), // empty send ignored
         unexpected => println!("strange (recv() returned {:?})", unexpected),
     }

@@ -116,9 +116,7 @@ impl UnixSeqpacketConn {
     }
     /// Receives a packet from the socket's peer.
     pub async fn recv(&mut self,  buffer: &mut[u8]) -> io::Result<usize> {
-        poll_fn(|cx| {
-            self.poll_recv_priv(cx, |conn| conn.recv(buffer).map(|(received, _)| received ) )
-        }).await
+        poll_fn(|cx| self.poll_recv_priv(cx, |conn| conn.recv(buffer) ) ).await
     }
 
     /// Sends a packet assembled from multiple byte slices.
@@ -139,9 +137,7 @@ impl UnixSeqpacketConn {
 
     /// Receives a packet without removing it from the incoming queue.
     pub async fn peek(&mut self,  buffer: &mut[u8]) -> io::Result<usize> {
-        poll_fn(|cx| {
-            self.poll_recv_priv(cx, |conn| conn.peek(buffer).map(|(received, _)| received ) )
-        }).await
+        poll_fn(|cx| self.poll_recv_priv(cx, |conn| conn.peek(buffer) ) ).await
     }
     /// Reads a packet into multiple buffers without removing it from the incoming queue.
     pub async fn peek_vectored<'a, 'b>

@@ -240,7 +240,7 @@ async fn test_conn_from_raw_fd() {
 
     a.send(b"I'm registered").await.expect("send from constructed");
     let mut buf = [0; 24];
-    let (len, _) = b_nonblocking.recv(&mut buf).expect("receive on un-registered");
+    let len = b_nonblocking.recv(&mut buf).expect("receive on un-registered");
     assert_eq!(len, 14);
 }
 

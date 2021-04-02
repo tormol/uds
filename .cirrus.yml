@@ -3,28 +3,29 @@ task:
   freebsd_instance:
     image: freebsd-12-1-release-amd64
     cpu: 1
-    memory: 1 # GB
+    memory: 1G # Lower is not supported
+  depends_on: Linux i686 stable
   env:
     RUST_BACKTRACE: 1
     RUSTFLAGS: --cfg feature="os-poll"
+    HOME: /tmp # cargo caching needs it
   setup_script:
-    - pkg install -y curl
-    - curl https://sh.rustup.rs -sSf --output rustup.sh
-    - sh rustup.sh -y
+    - pkg install -y rust
   cargo_cache:
     folder: $HOME/.cargo/registry
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
+  target_cache:
+    folder: target
+    fingerprint_script:
+      - rustc --version
+      - cat Cargo.lock 2> /dev/null || true
+  info_script:
+    - rustc --version
   build_script:
-    - . $HOME/.cargo/env
     - cargo check --tests --examples
-    - cargo check --features mio --tests --examples
-    - cargo check --features mio-uds --tests --examples
-    - cargo check --features mio_07 --tests --examples
-    - cargo check --features tokio --tests --examples
     - cargo build --all-features --tests --examples
   test_script:
-    - . $HOME/.cargo/env
-    - cargo run --bin characteristics
+    - cargo run --all-features --bin characteristics
     - cargo test --all-features --no-fail-fast
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
@@ -34,9 +35,12 @@ task:
   container:
     image: rust:1.39
     cpu: 1
-    memory: 1
+    memory: 512M
   cargo_cache:
     folder: $HOME/.cargo/registry
+    fingerprint_script: cat Cargo.lock 2> /dev/null || true
+  target_cache:
+    folder: target
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
   build_script:
     - cargo check
@@ -53,11 +57,14 @@ task:
   container:
     image: rustlang/rust:nightly
     cpu: 1
-    memory: 1
+    memory: 512M
   allow_failures: false
   cargo_cache:
     folder: $HOME/.cargo/registry
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
+  # rustc version so likely to have changed that build artefacts are not worth caching
+  info_script:
+    - rustc --version
   build_script:
     - cargo check -Z minimal-versions
     - cargo build -Z minimal-versions --features mio
@@ -78,7 +85,7 @@ task:
   container:
     image: rust:latest
     cpu: 1
-    memory: 1
+    memory: 1G # OOMs with 512MB
   allow_failures: false
   env:
     RUST_BACKTRACE: 1
@@ -91,6 +98,13 @@ task:
   cargo_cache:
     folder: $HOME/.cargo/registry
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
+  target_cache:
+    folder: target
+    fingerprint_script:
+      - rustc --version
+      - cat Cargo.lock 2> /dev/null || true
+  info_script:
+    - rustc --version
   build_script:
     - cargo build --target i686-unknown-linux-gnu --all-features
     - cargo build --target i686-unknown-linux-musl --all-features
@@ -107,7 +121,7 @@ task:
   container:
     image: rust:latest
     cpu: 1
-    memory: 1
+    memory: 1G
   allow_failures: false
   env:
     RUSTFLAGS: --cfg feature="os-poll"
@@ -122,6 +136,13 @@ task:
   cargo_cache:
     folder: $HOME/.cargo/registry
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
+  target_cache:
+    folder: target
+    fingerprint_script:
+      - rustc --version
+      - cat Cargo.lock 2> /dev/null || true
+  info_script:
+    - rustc --version
   build_script:
     - cargo check --target x86_64-unknown-netbsd --all-features --tests
     - cargo check --target x86_64-sun-solaris --tests
@@ -146,8 +167,14 @@ task:
   cargo_cache:
     folder: $HOME/.cargo/registry
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
-  build_script:
+  target_cache:
+    folder: target
+    fingerprint_script:
+      - rustc --version
+      - cat Cargo.lock 2> /dev/null || true
+  info_script:
     - rustc --version
+  build_script:
     - cargo check --tests --examples
     - cargo build --all-features --tests --examples
   test_script:

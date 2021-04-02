@@ -1,3 +1,8 @@
+Version 0.2.6 (2021-04-03)
+==========================
+* Add `take_error()` and `into_nonblocking()` to tokio seqpacket types.
+* Implement `AsRef` to nonblocking variants for tokio seqpacket types.
+
 Version 0.2.5 (2021-04-01)
 ==========================
 * Add `send_vectored()` and `recv_vectored()` to `::tokio::UnixSeqpacketConn`.

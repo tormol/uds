@@ -107,6 +107,11 @@ impl UnixSeqpacketConn {
     pub fn initial_peer_selinux_context(&self,  buffer: &mut[u8]) -> Result<usize, io::Error> {
         self.io.get_ref().initial_peer_selinux_context(buffer)
     }
+
+    /// Returns the value of the `SO_ERROR` option.
+    pub fn take_error(&self) -> Result<Option<io::Error>, io::Error> {
+        self.io.get_ref().take_error()
+    }
 }
 
 impl UnixSeqpacketConn {
@@ -284,6 +289,15 @@ impl UnixSeqpacketListener {
     /// Returns the address the socket is listening on.
     pub fn local_addr(&self) -> Result<UnixSocketAddr, io::Error> {
         self.io.get_ref().local_unix_addr()
+    }
+
+    /// Returns the value of the `SO_ERROR` option.
+    ///
+    /// This might never produce any errors for listeners. It is therefore
+    /// unlikely to be useful, but is provided for parity with
+    /// `std::unix::net::UnixListener`.
+    pub fn take_error(&self) -> Result<Option<io::Error>, io::Error> {
+        self.io.get_ref().take_error()
     }
 }
 

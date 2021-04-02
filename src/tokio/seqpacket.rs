@@ -200,6 +200,12 @@ impl UnixSeqpacketConn {
     }
 }
 
+impl AsRef<nonblocking::UnixSeqpacketConn> for UnixSeqpacketConn {
+    fn as_ref(&self) -> &nonblocking::UnixSeqpacketConn {
+        self.io.get_ref()
+    }
+}
+
 impl AsRawFd for UnixSeqpacketConn {
     fn as_raw_fd(&self) -> RawFd {
         self.io.get_ref().as_raw_fd()
@@ -306,6 +312,12 @@ impl UnixSeqpacketListener {
     /// `std::unix::net::UnixListener`.
     pub fn take_error(&self) -> Result<Option<io::Error>, io::Error> {
         self.io.get_ref().take_error()
+    }
+}
+
+impl AsRef<nonblocking::UnixSeqpacketListener> for UnixSeqpacketListener {
+    fn as_ref(&self) -> &nonblocking::UnixSeqpacketListener {
+        self.io.get_ref()
     }
 }
 

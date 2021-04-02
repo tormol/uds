@@ -96,6 +96,7 @@ task:
     - cargo build --target i686-unknown-linux-musl --all-features
   test_script:
     - export RUSTFLAGS='--cfg feature="os-poll"'
+    - cargo run --target i686-unknown-linux-gnu --all-features --bin characteristics
     - cargo test --target i686-unknown-linux-gnu --all-features --no-fail-fast -- --test-threads=1
     - cargo test --target i686-unknown-linux-musl --all-features --no-fail-fast -- --test-threads=1
   before_cache_script:
@@ -129,5 +130,29 @@ task:
     - cargo check --target aarch64-linux-android --all-features --tests
     - cargo check --target i686-linux-android --all-features --tests
     - cargo check --target x86_64-pc-windows-msvc --all-features --lib
+  before_cache_script:
+    - rm -rf $HOME/.cargo/registry/index
+
+task:
+  name: macOS stable
+  macos_instance:
+    image: big-sur-base
+    # doesn't accept cpu or memory fields
+  depends_on: Linux i686 stable
+  env:
+    RUST_BACKTRACE: 1
+  setup_script:
+    - brew install rust
+  cargo_cache:
+    folder: $HOME/.cargo/registry
+    fingerprint_script: cat Cargo.lock 2> /dev/null || true
+  build_script:
+    - rustc --version
+    - cargo check --tests --examples
+    - cargo build --all-features --tests --examples
+  test_script:
+    - cargo run --all-features --bin characteristics
+    # serialize tests to avoid spurious failures in fd-passing tests
+    - cargo test --all-features --no-fail-fast -- --test-threads 1
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index

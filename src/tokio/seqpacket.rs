@@ -63,6 +63,10 @@ impl UnixSeqpacketConn {
             Err(e) => Err(e),
         }
     }
+    /// Deregisters the connection and returns the underlying non-blocking type.
+    pub fn into_nonblocking(self) -> Result<nonblocking::UnixSeqpacketConn, io::Error> {
+        self.io.into_inner()
+    }
     /// Creates a tokio-compatible socket from a raw file descriptor.
     ///
     /// This function is provided instead of implementing [`FromRawFd`](std::os::unix::io::FromRawFd)
@@ -242,6 +246,10 @@ impl UnixSeqpacketListener {
             Ok(io) => Ok(Self { io }),
             Err(e) => Err(e),
         }
+    }
+    /// Deregisters the listener and returns the underlying non-blocking type.
+    pub fn into_nonblocking(self) -> Result<nonblocking::UnixSeqpacketListener, io::Error> {
+        self.io.into_inner()
     }
     /// Creates a tokio-compatible listener from a raw file descriptor.
     ///

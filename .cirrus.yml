@@ -35,7 +35,7 @@ task:
   container:
     image: rust:1.39
     cpu: 1
-    memory: 512M
+    memory: 1536MB # doc-tests somehow OOMs with 1 GB here
   cargo_cache:
     folder: $HOME/.cargo/registry
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
@@ -49,6 +49,8 @@ task:
     - cargo check --features mio_07
     - cargo check --features tokio
     - cargo build --all-features
+  test_script:
+    - cargo test --features "mio mio-uds mio_07" --no-fail-fast
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 

@@ -22,10 +22,10 @@ fn seqpacket_is_supported() {
 fn truncated_packets_are_not_resumed() {
     let (a, b) = NonblockingUnixSeqpacketConn::pair().unwrap();
     a.send(b"hello").unwrap();
-    assert_eq!(b.recv(&mut[0; 20]).unwrap(), (5, false));
+    assert_eq!(b.recv(&mut[0; 20]).unwrap(), 5);
     a.send(b"hello").unwrap();
     let mut buf = [0; 3];
-    assert_eq!(b.recv(&mut buf).unwrap(), (3, true));
+    assert_eq!(b.recv(&mut buf).unwrap(), 3);
     assert_eq!(b.recv(&mut buf).unwrap_err().kind(), WouldBlock);
     assert_eq!(&buf[..3], b"hel");
 }
@@ -35,18 +35,18 @@ fn truncated_packets_are_not_resumed() {
 fn zero_length_packet_sort_of_works() {
     let (a, b) = NonblockingUnixSeqpacketConn::pair().unwrap();
     assert_eq!(a.send(&[]).expect("send zero-length packet"), 0);
-    assert_eq!(b.recv(&mut[0u8; 8]).expect("receive zero-length packet"), (0, false));
+    assert_eq!(b.recv(&mut[0u8; 8]).expect("receive zero-length packet"), 0);
     a.send(&[]).unwrap();
     // Only checks length because FreeBSD thinks it gets truncated
-    assert_eq!(b.recv(&mut[]).expect("receive zero-length packet with empty buffer").0, 0);
+    assert_eq!(b.recv(&mut[]).expect("receive zero-length packet with empty buffer"), 0);
     a.send(&[]).unwrap();
     a.send(&[]).unwrap();
-    assert_eq!(b.recv(&mut[0u8; 8]).unwrap(), (0, false));
-    assert_eq!(b.recv(&mut[0u8; 8]).expect("empty packets are not merged"), (0, false));
+    assert_eq!(b.recv(&mut[0u8; 8]).unwrap(), 0);
+    assert_eq!(b.recv(&mut[0u8; 8]).expect("empty packets are not merged"), 0);
     a.send(&[]).unwrap();
     drop(a);
-    assert_eq!(b.recv(&mut[0u8; 8]).expect("receive zero-length packet"), (0, false));
-    assert_eq!(b.recv(&mut[0u8; 8]).expect("receive end-of-connection packet"), (0, false));
+    assert_eq!(b.recv(&mut[0u8; 8]).expect("receive zero-length packet"), 0);
+    assert_eq!(b.recv(&mut[0u8; 8]).expect("receive end-of-connection packet"), 0);
 }
 
 #[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
@@ -57,8 +57,8 @@ fn zero_length_vectored_sort_of_works() {
 
     assert_eq!(a.send_vectored(&[]).unwrap(), 0);
     assert_eq!(a.send_vectored(&[IoSlice::new(&[])]).unwrap(), 0);
-    assert_eq!(b.recv(&mut buf).unwrap(), (0, false));
-    assert_eq!(b.recv(&mut buf).unwrap(), (0, false));
+    assert_eq!(b.recv(&mut buf).unwrap(), 0);
+    assert_eq!(b.recv(&mut buf).unwrap(), 0);
 
     a.send(b"ignore me").unwrap();
     a.send(b"ignore me").unwrap();
@@ -124,11 +124,11 @@ fn send_vectored() {
 
     assert_eq!(a.send_vectored(&[IoSlice::new(b"undivided")]).unwrap(), 9);
     let mut buf = [b'-'; 10];
-    assert_eq!(b.recv(&mut buf).unwrap(), (9, false));
+    assert_eq!(b.recv(&mut buf).unwrap(), 9);
     assert_eq!(&buf, b"undivided-");
 
     a.send_vectored(&[IoSlice::new(b"merge"), IoSlice::new(b" me")]).unwrap();
-    assert_eq!(b.recv(&mut buf).unwrap(), (8, false));
+    assert_eq!(b.recv(&mut buf).unwrap(), 8);
     assert_eq!(&buf[..8], b"merge me");
 
     let slices = [
@@ -141,7 +141,7 @@ fn send_vectored() {
         IoSlice::new(b""),
     ];
     assert_eq!(a.send_vectored(&slices).unwrap(), 11);
-    assert_eq!(b.recv(&mut buf).unwrap(), (buf.len(), true));
+    assert_eq!(b.recv(&mut buf).unwrap(), buf.len());
     assert_eq!(&buf, b"truncate m");
 
     let slices = [
@@ -151,7 +151,7 @@ fn send_vectored() {
     ];
     b.set_nonblocking(true).unwrap();
     assert_eq!(a.send_vectored(&slices).unwrap(), 9);
-    assert_eq!(b.recv(&mut[0u8; 2]).unwrap(), (2, true));
+    assert_eq!(b.recv(&mut[0u8; 2]).unwrap(), 2);
     assert_eq!(b.recv(&mut buf).unwrap_err().kind(), WouldBlock);
 }
 
@@ -189,7 +189,7 @@ fn shutdown() {
         let (sock_tx, sock_rx) = UnixSeqpacketConn::pair().unwrap();
         sock_tx.shutdown(Shutdown::Both).unwrap();
         assert!(sock_tx.send(&[b'h', b'i', b'0']).is_err());
-        assert_eq!(sock_rx.recv(&mut [0u8; 3]).unwrap(), (0, false));
+        assert_eq!(sock_rx.recv(&mut [0u8; 3]).unwrap(), 0);
     }
     // Nonblocking
     {
@@ -198,7 +198,7 @@ fn shutdown() {
         assert!(sock_tx.send(&[b'h', b'i', b'0']).is_err());
         if cfg!(not(any(target_os="illumos", target_os="solaris"))) {
             // sometimes returns WouldBlock on illumos
-            assert_eq!(sock_rx.recv(&mut [0u8; 3]).unwrap(), (0, false));
+            assert_eq!(sock_rx.recv(&mut [0u8; 3]).unwrap(), 0);
         }
     }
 }

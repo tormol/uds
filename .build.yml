@@ -4,7 +4,6 @@ packages:
   - rust
 environment:
   # RUST_BACKTRACE: 1 # Doesn't provide anything useful on OpenBSD
-  RUSTFLAGS: --cfg feature="os-poll"
 tasks:
   - build: |
       cd uds/

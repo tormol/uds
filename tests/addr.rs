@@ -2,7 +2,6 @@ extern crate uds;
 extern crate libc;
 
 use std::os::unix::net::{UnixListener, UnixStream, UnixDatagram};
-use std::os::unix::io::{RawFd, FromRawFd, AsRawFd};
 use std::io::ErrorKind::*;
 use std::io::{IoSlice, IoSliceMut};
 use std::fs::remove_file;
@@ -232,7 +231,7 @@ fn unnamed_from_ffi() {
     }).expect("return address with zero path length");
     assert!(addr.is_unnamed());
     assert_eq!(addr.as_ref(), UnixSocketAddrRef::Unnamed);
-    assert_eq!(format!("{:?}", addr), "UnixSocketAddr(\"Unnamed\")");
+    assert_eq!(format!("{:?}", addr), "UnixSocketAddr(Unnamed)");
 
     if !UnixSocketAddr::has_abstract_addresses() {
         let ((), addr) = UnixSocketAddr::new_from_ffi(|addr, len| {
@@ -246,7 +245,7 @@ fn unnamed_from_ffi() {
         }).expect("return address with zero path");
         assert!(addr.is_unnamed());
         assert_eq!(addr.as_ref(), UnixSocketAddrRef::Unnamed);
-        assert_eq!(format!("{:?}", addr), "UnixSocketAddr(\"Unnamed\")");
+        assert_eq!(format!("{:?}", addr), "UnixSocketAddr(Unnamed)");
     }
 }
 
@@ -266,33 +265,6 @@ fn abstract_from_ffi() {
         assert_eq!(addr.as_ref(), UnixSocketAddrRef::Abstract(b"\x00\x07"));
         assert_eq!(format!("{:?}", addr), "UnixSocketAddr(Abstract(\"\\u{0}\\u{7}\"))");
     }
-}
-
-#[test]
-fn datagram_bind_default_impl() {
-    struct NewNonblocking(RawFd);
-    impl FromRawFd for NewNonblocking {
-        unsafe fn from_raw_fd(fd: RawFd) -> Self {
-            Self(fd)
-        }
-    }
-    impl AsRawFd for NewNonblocking {
-        fn as_raw_fd(&self) -> RawFd {
-            self.0
-        }
-    }
-    impl UnixDatagramExt for NewNonblocking {}
-
-    let _ = std::fs::remove_file("new_nonblocking.sock");
-    let addr = UnixSocketAddr::new("new_nonblocking.sock").unwrap();
-    let socket = NewNonblocking::bind_unix_addr(&addr).expect("bind");
-    assert_eq!(
-        socket.recv_from_unix_addr(&mut[0; 10]).expect_err("is nonblocking").kind(),
-        WouldBlock
-    );
-
-    socket.send_to_unix_addr(b"where am I", &addr).expect("send to self");
-    std::fs::remove_file("new_nonblocking.sock").expect("file was created");
 }
 
 #[test]

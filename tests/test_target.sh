@@ -13,13 +13,11 @@ cargo check $TARGET
 cargo check $TARGET --tests --bins --examples
 if [ -z "$NO_MIO" ] && [ -z "$NO_TEST" ]; then
     cargo check $TARGET --all-features
-    export RUSTFLAGS='--cfg feature="os-poll"'
     cargo test $TARGET --all-features --no-fail-fast -- --test-threads 1
     cargo run --bin characteristics
 elif [ ! -z "$NO_MIO" ] && [ -z "$NO_TEST" ]; then
     cargo test $TARGET --no-fail-fast -- --test-threads 1
     cargo run --bin characteristics
 elif [ ! -z "$NO_TEST"] && [ -z "$NO_MIO" ]; then
-    export RUSTFLAGS='--cfg feature="os-poll"'
     cargo check $TARGET --all-features --tests --bins --examples
 fi

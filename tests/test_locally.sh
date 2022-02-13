@@ -1,7 +1,10 @@
 #!/bin/sh
 MSRV="1.39.0"
-CAFLAGS="-j1"
+CAFLAGS=""
 export RUST_BACKTRACE=1
+
+# for i686 tests gcc-multilib must be installed
+# for x32 tests syscall.x32=y must be added to the boot parameters: https://wiki.debian.org/X32Port
 
 set -ev
 

@@ -7,11 +7,14 @@ use std::time::Duration;
 
 use libc::{SOCK_SEQPACKET, MSG_EOR, MSG_PEEK, c_void, close, send, recv};
 
-#[cfg(feature="mio")]
-use mio::{event::Evented, unix::EventedFd, Poll, Token as Token_06, Ready, PollOpt};
+#[cfg(feature = "mio")]
+use mio::{event::Evented, unix::EventedFd, Poll, PollOpt, Ready, Token as Token_06};
 
-#[cfg(feature="mio_07")]
-use mio_07::{event::Source, unix::SourceFd, Registry, Token as Token_07, Interest};
+#[cfg(feature = "mio_07")]
+use mio_07::{event::Source, unix::SourceFd, Interest, Registry, Token as Token_07};
+
+#[cfg(feature = "mio_08")]
+use mio_08::{event::Source, unix::SourceFd, Interest, Registry, Token as Token_08};
 
 use crate::addr::*;
 use crate::helpers::*;
@@ -90,8 +93,53 @@ macro_rules! impl_mio_if_enabled {($type:tt) => {
             SourceFd(&self.fd).deregister(registry)
         }
     }
-}}
 
+    #[cfg(feature = "mio_08")]
+    impl Source for $type {
+        fn register(
+            &mut self,
+            registry: &Registry,
+            token: Token_08,
+            interest: Interest,
+        ) -> Result<(), io::Error> {
+            SourceFd(&self.fd).register(registry, token, interest)
+        }
+        fn reregister(
+            &mut self,
+            registry: &Registry,
+            token: Token_08,
+            interest: Interest,
+        ) -> Result<(), io::Error> {
+            SourceFd(&self.fd).reregister(registry, token, interest)
+        }
+        fn deregister(&mut self, registry: &Registry) -> Result<(), io::Error> {
+            SourceFd(&self.fd).deregister(registry)
+        }
+    }
+    
+    #[cfg(feature = "mio_08")]
+    impl<'a> Source for &'a $type {
+        fn register(
+            &mut self,
+            registry: &Registry,
+            token: Token_08,
+            interest: Interest,
+        ) -> Result<(), io::Error> {
+            SourceFd(&self.fd).register(registry, token, interest)
+        }
+        fn reregister(
+            &mut self,
+            registry: &Registry,
+            token: Token_08,
+            interest: Interest,
+        ) -> Result<(), io::Error> {
+            SourceFd(&self.fd).reregister(registry, token, interest)
+        }
+        fn deregister(&mut self, registry: &Registry) -> Result<(), io::Error> {
+            SourceFd(&self.fd).deregister(registry)
+        }
+    }
+}}
 
 
 /// An unix domain sequential packet connection.

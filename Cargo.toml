@@ -19,17 +19,31 @@ tokio = ["futures", "mio", "tokio_02"]
 [target."cfg(unix)".dependencies]
 libc = "0.2.90" # peer credentials for DragonFly BSD and NetBSD, SO_PEERSEC on all Linux architectures
 # enabling this feature implements the extension traits for mio-uds types
-mio-uds = {version="0.6", optional=true} # no patch release builds with -Z minimal-versions
+mio-uds = { version = "0.6", optional = true } # no patch release builds with -Z minimal-versions
 # enabling this feature implements Evented for this crate's non-blocking seqpacket types
-mio = {version="0.6.14", optional=true} # .14 avoids dragging in libc 0.1 under -Z minimal-versions
+mio = { version = "0.6.14", optional = true } # .14 avoids dragging in libc 0.1 under -Z minimal-versions
 # enabling this feature implements the extension traits for mio 0.7's unix socket types
 # and Source for this crate's non-blocking seqpacket types.
-mio_07 = {package="mio", version="0.7.6", features=["os-ext", "net"], optional=true}
-futures = {version = "0.3", optional=true}
-tokio_02 = {package="tokio", version = "0.2", features = ["io-driver"], optional=true}
+mio_07 = { package = "mio", version = "0.7.6", features = [
+    "os-ext",
+    "net",
+], optional = true }
+# enabling this feature implements the extension traits for mio 0.8's unix socket types
+# and Source for this crate's non-blocking seqpacket types.
+mio_08 = { package = "mio", version = "0.8", features = [
+    "os-ext",
+    "net",
+], optional = true }
+futures = { version = "0.3", optional = true }
+tokio_02 = { package = "tokio", version = "0.2", features = [
+    "io-driver",
+], optional = true }
 
 [target."cfg(unix)".dev-dependencies]
-tokio_02 = {package="tokio", version = "0.2", features = ["macros", "rt-core"]}
+tokio_02 = { package = "tokio", version = "0.2", features = [
+    "macros",
+    "rt-core",
+] }
 
 [package.metadata.docs.rs]
 features = ["mio-uds", "mio", "mio_07", "tokio"]

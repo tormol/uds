@@ -753,6 +753,12 @@ impl UnixSeqpacketListener {
 /// uds = { version = "x.y", features=["mio_07"] }
 /// ```
 ///
+/// For mio version 0.8:
+///
+/// ```toml
+/// uds = { version = "x.y", features=["mio_08"] }
+/// ```
+///
 /// # Examples
 ///
 /// Sending or receiving when it would block a normal socket:
@@ -1049,7 +1055,7 @@ impl NonblockingUnixSeqpacketConn {
 /// # std::fs::remove_file("nonblocking_seqpacket_listener.socket").unwrap();
 /// ```
 ///
-/// Registering with mio (v0.7):
+/// Registering with mio v0.7:
 ///
 #[cfg_attr(all(feature="mio_07", not(target_vendor="apple")), doc="```")]
 #[cfg_attr(all(feature="mio_07", target_vendor="apple"), doc="```no_run")]

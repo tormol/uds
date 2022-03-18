@@ -588,6 +588,7 @@ impl UnixDatagramExt for mio_07::net::UnixDatagram {
                 Ok(()) => Ok(socket),
                 Err(e) => Err(e),
             }
+            Err(e) => Err(e),
         }
     }
 }

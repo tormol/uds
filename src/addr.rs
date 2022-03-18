@@ -25,7 +25,7 @@ fn as_u8(slice: &[c_char]) -> &[u8] {
     unsafe { &*(slice as *const[c_char] as *const[u8]) }
 }
 
-const TOO_LONG_DESC: &'static str = "address is too long";
+const TOO_LONG_DESC: &str = "address is too long";
 
 /// A unix domain socket address.
 ///

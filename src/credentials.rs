@@ -1,3 +1,5 @@
+#![allow(clippy::match_ref_pats)] // looks more optimized with long array
+
 use std::os::unix::io::RawFd;
 use std::{io, fmt};
 use std::num::NonZeroU32;

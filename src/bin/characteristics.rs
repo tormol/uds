@@ -27,7 +27,7 @@ fn max_path_len() -> usize {
 fn std_bind_max_len_path() {
     print!("std_bind_max_len_path ");
     let max_len = max_path_len();
-    let max_path = std::iter::repeat('B').take(max_len).collect::<String>();
+    let max_path = "B".repeat(max_len);
     let _ = remove_file(&max_path);
     match UnixDatagram::bind(&max_path) {
         Ok(_) => {
@@ -53,7 +53,7 @@ fn max_path_addr(fill: u8) -> (libc::sockaddr_un, libc::socklen_t) {
 fn std_get_local_max_len_path() {
     print!("std_get_local_max_len_path ");
     let max_len = UnixSocketAddr::max_path_len();
-    let max_path = std::iter::repeat('s').take(max_len).collect::<String>();
+    let max_path = "s".repeat(max_len);
     let max_addr = UnixSocketAddr::from_path(&max_path)
         .expect("create path address with max length");
 
@@ -79,7 +79,7 @@ fn std_get_local_max_len_path() {
 
 fn std_reply_max_len_path() {
     print!("std_reply_max_len ");
-    let max_path = std::iter::repeat('S').take(max_path_len()).collect::<String>();
+    let max_path = "S".repeat(max_path_len());
     let receiver_path = "max_path_receiver.socket";
     let receiver = UnixDatagram::bind(receiver_path).expect("create receiver socket");
     let sender = UnixDatagram::unbound().expect("create unix datagram socket");
@@ -153,8 +153,8 @@ fn longer_paths() {
                 "extended address is contigious"
             );
             let extended_path = std::slice::from_raw_parts_mut(path_ptr, combined);
-            for i in 0..len {
-                extended_path[i] = fill;
+            for b in &mut extended_path[..len] {
+                *b = fill;
             }
             let addrlen = (path_offset + len + 1) as libc::socklen_t;
             (addr, addrlen)
@@ -180,7 +180,7 @@ fn longer_paths() {
             } else {
                 match remove_file(std::str::from_utf8(&*path_addr).unwrap()) {
                     Err(ref err) if err.kind() == NotFound => {
-                        Err(format!("bind() succeeded but path was not created"))
+                        Err("bind() succeeded but path was not created".to_string())
                     },
                     Ok(_) => Ok(true),
                     Err(err) => Err(format!("bind() succeeded but deleting file failed with {}", err)),
@@ -252,7 +252,7 @@ fn std_includes_nuls_normal() {
 fn std_includes_nuls_long() {
     print!("std_includes_nuls_long ");
     let max_regular_len = UnixSocketAddr::max_path_len()-1;
-    let max_regular_path = std::iter::repeat('n').take(max_regular_len).collect::<String>();
+    let max_regular_path = "n".repeat(max_regular_len);
     let max_regular_addr = UnixSocketAddr::from_path(&max_regular_path)
         .expect("create path address with max regular length");
 
@@ -407,7 +407,7 @@ fn stream_ancillary_payloads_not_merged() {
         println!("N/A ({})", e);
         return;
     }
-    a.write(b"0").expect("write more bytes but no fds");
+    a.write_all(b"0").expect("write more bytes but no fds");
     let mut fd_buf = [-1; 6];
     match b.recv_fds(&mut[0u8; 20], &mut fd_buf) {
         Ok((1, 1)) if fd_buf[0] != -1  &&  fd_buf[1] == -1 => print!("yes "),

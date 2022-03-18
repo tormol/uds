@@ -1,5 +1,6 @@
 #![allow(
     clippy::unnecessary_mut_passed, // CMSG_ macros only exist for *const
+    clippy::useless_conversion, // not useless on all platforms
     clippy::match_overlapping_arm, // cumbersome to avoid when using inclusive ranges
     dead_code // TODO
 )]

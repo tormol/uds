@@ -6,7 +6,7 @@ A unix domain socket crate that supports abstract addresses, fd-passing and seqp
 """
 readme = "README.md"
 repository = "https://github.com/tormol/uds"
-license = "Apache-2.0 / MIT"
+license = "Apache-2.0 OR MIT"
 authors = ["Torbjørn Birch Moltu <t.b.moltu@lyse.net>"]
 keywords = ["unix", "socket", "seqpacket", "abstract", "fdpassing"]
 categories = ["os::unix-apis", "asynchronous"]

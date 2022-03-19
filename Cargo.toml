@@ -24,7 +24,7 @@ mio-uds = {version="0.6", optional=true} # no patch release builds with -Z minim
 mio = {version="0.6.14", optional=true} # .14 avoids dragging in libc 0.1 under -Z minimal-versions
 # enabling this feature implements the extension traits for mio 0.7's unix socket types
 # and Source for this crate's non-blocking seqpacket types.
-mio_07 = { package = "mio", version = ">= 0.7, >= 0.8", features = ["os-ext", "net"], optional = true }
+mio_07 = { package = "mio", version = ">= 0.7.6, >= 0.8", features = ["os-ext", "net"], optional = true }
 futures = {version = "0.3", optional=true}
 tokio_02 = {package="tokio", version = "0.2", features = ["io-driver"], optional=true}
 

@@ -102,24 +102,6 @@ impl UnixStreamExt for mio_07::net::UnixStream {
     }
 }
 
-#[cfg(feature = "mio_08")]
-impl UnixStreamExt for mio_08::net::UnixStream {
-    fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_STREAM, true)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, addr)?;
-        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
-    }
-    fn connect_from_to_unix_addr(
-        from: &UnixSocketAddr,
-        to: &UnixSocketAddr,
-    ) -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_STREAM, true)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, from)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, to)?;
-        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
-    }
-}
-
 /// Extension trait for using [`UnixSocketAddr`](struct.UnixSocketAddr.html) with `UnixListener` types.
 pub trait UnixListenerExt: AsRawFd + FromRawFd {
     /// The type represeting the stream connection returned by `accept_unix_addr()`.
@@ -176,24 +158,6 @@ impl UnixListenerExt for mio_uds::UnixListener {
 #[cfg(feature="mio_07")]
 impl UnixListenerExt for mio_07::net::UnixListener {
     type Conn = mio_07::net::UnixStream;
-
-    fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_STREAM, true)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, on)?;
-        socket.start_listening()?;
-        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
-    }
-
-    fn accept_unix_addr(&self) -> Result<(Self::Conn, UnixSocketAddr), io::Error> {
-        let (socket, addr) = Socket::accept_from(self.as_raw_fd(), true)?;
-        let conn = unsafe { Self::Conn::from_raw_fd(socket.into_raw_fd()) };
-        Ok((conn, addr))
-    }
-}
-
-#[cfg(feature = "mio_08")]
-impl UnixListenerExt for mio_08::net::UnixListener {
-    type Conn = mio_08::net::UnixStream;
 
     fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_STREAM, true)?;
@@ -588,19 +552,6 @@ impl UnixDatagramExt for mio_07::net::UnixDatagram {
                 Ok(()) => Ok(socket),
                 Err(e) => Err(e),
             }
-            Err(e) => Err(e),
-        }
-    }
-}
-
-#[cfg(feature = "mio_08")]
-impl UnixDatagramExt for mio_08::net::UnixDatagram {
-    fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
-        match mio_08::net::UnixDatagram::unbound() {
-            Ok(socket) => match socket.bind_to_unix_addr(addr) {
-                Ok(()) => Ok(socket),
-                Err(e) => Err(e),
-            },
             Err(e) => Err(e),
         }
     }

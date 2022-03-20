@@ -30,9 +30,9 @@ task:
     - rm -rf $HOME/.cargo/registry/index
 
 task:
-  name: Linux amd64 1.39
+  name: Linux amd64 1.56
   container:
-    image: rust:1.39
+    image: rust:1.56
     cpu: 1
     memory: 1536MB # doc-tests somehow OOMs with 1 GB here
   allow_failures: false
@@ -49,6 +49,7 @@ task:
     - cargo check --features mio
     - cargo check --features mio-uds
     - cargo check --features mio_07
+    - cargo check --features mio_08
     - cargo check --features tokio
   test_script:
     - cargo test --features "mio mio-uds mio_07" --no-fail-fast
@@ -75,10 +76,12 @@ task:
     - cargo build -Z minimal-versions --features mio
     - # no version of mio-uds compiles
     - cargo build -Z minimal-versions --features mio_07
+    - cargo build -Z minimal-versions --features mio_08
     - cargo build -Z minimal-versions --features tokio
   test_script:
     - cargo test -Z minimal-versions --features mio --no-fail-fast -- --test-threads=1
     - cargo test -Z minimal-versions --features mio_07 --no-fail-fast -- --test-threads=1
+    - cargo test -Z minimal-versions --features mio_08 --no-fail-fast -- --test-threads=1
     - cargo test -Z minimal-versions --features tokio --no-fail-fast -- --test-threads=1
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index

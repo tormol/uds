@@ -29,7 +29,7 @@ extern crate mio;
 #[cfg(feature="mio_07")]
 extern crate mio_07;
 #[cfg(feature="mio_08")]
-extern crate mio_08 as mio_07;
+extern crate mio_08;
 
 /// Get errno as io::Error on -1.
 macro_rules! cvt {($syscall:expr) => {

@@ -7,6 +7,8 @@ extern crate mio_uds;
 extern crate mio;
 #[cfg(feature="mio_07")]
 extern crate mio_07;
+#[cfg(feature = "mio_08")]
+extern crate mio_08 as mio_07;
 
 use std::fs::remove_file;
 use std::{io::{Read, Write}, path::Path, time::Duration};
@@ -67,7 +69,7 @@ fn mio_uds_stream() {
     remove_file(stream_path).unwrap();
 }
 
-#[cfg(feature="mio_07")]
+#[cfg(any(feature = "mio_07", feature = "mio_08"))]
 #[test]
 fn mio_07_stream() {
     use mio_07::net::{UnixListener, UnixStream};

@@ -10,7 +10,7 @@ use libc::{SOCK_SEQPACKET, MSG_EOR, MSG_PEEK, c_void, close, send, recv};
 #[cfg(feature = "mio")]
 use mio::{event::Evented, unix::EventedFd, Poll, PollOpt, Ready, Token as Token_06};
 
-#[cfg(feature = "mio_07")]
+#[cfg(any(feature = "mio_07", feature = "mio_08"))]
 use mio_07::{event::Source, unix::SourceFd, Interest, Registry, Token as Token_07};
 
 use crate::addr::*;
@@ -61,7 +61,7 @@ macro_rules! impl_mio_if_enabled {($type:tt) => {
         }
     }
 
-    #[cfg(feature="mio_07")]
+    #[cfg(any(feature = "mio_07", feature = "mio_08"))]
     impl Source for $type {
         fn register(&mut self,  registry: &Registry,  token: Token_07,  interest: Interest)
         -> Result<(), io::Error> {
@@ -76,7 +76,7 @@ macro_rules! impl_mio_if_enabled {($type:tt) => {
         }
     }
 
-    #[cfg(feature="mio_07")]
+    #[cfg(any(feature = "mio_07", feature = "mio_08"))]
     impl<'a> Source for &'a $type {
         fn register(&mut self,  registry: &Registry,  token: Token_07,  interest: Interest)
         -> Result<(), io::Error> {

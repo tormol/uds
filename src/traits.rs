@@ -86,7 +86,7 @@ impl UnixStreamExt for mio_uds::UnixStream {
     }
 }
 
-#[cfg(feature="mio_07")]
+#[cfg(any(feature = "mio_07", feature = "mio_08"))]
 impl UnixStreamExt for mio_07::net::UnixStream {
     fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_STREAM, true)?;
@@ -155,7 +155,7 @@ impl UnixListenerExt for mio_uds::UnixListener {
     }
 }
 
-#[cfg(feature="mio_07")]
+#[cfg(any(feature = "mio_07", feature = "mio_08"))]
 impl UnixListenerExt for mio_07::net::UnixListener {
     type Conn = mio_07::net::UnixStream;
 
@@ -544,7 +544,7 @@ impl UnixDatagramExt for mio_uds::UnixDatagram {
     }
 }
 
-#[cfg(feature="mio_07")]
+#[cfg(any(feature = "mio_07", feature = "mio_08"))]
 impl UnixDatagramExt for mio_07::net::UnixDatagram {
     fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         match mio_07::net::UnixDatagram::unbound() {

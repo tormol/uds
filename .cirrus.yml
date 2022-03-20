@@ -61,7 +61,7 @@ task:
   container:
     image: rustlang/rust:nightly
     cpu: 1
-    memory: 512M
+    memory: 2048M # --features tokio is getting SIGKILL so try and raise memory?
   allow_failures: false
   env:
     RUST_BACKTRACE: 1

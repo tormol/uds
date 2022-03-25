@@ -7,11 +7,14 @@ use std::time::Duration;
 
 use libc::{SOCK_SEQPACKET, MSG_EOR, MSG_PEEK, c_void, close, send, recv};
 
-#[cfg(feature="mio")]
-use mio::{event::Evented, unix::EventedFd, Poll, Token as Token_06, Ready, PollOpt};
+#[cfg(feature = "mio")]
+use mio::{event::Evented, unix::EventedFd, Poll, PollOpt, Ready, Token as Token_06};
 
-#[cfg(feature="mio_07")]
-use mio_07::{event::Source, unix::SourceFd, Registry, Token as Token_07, Interest};
+#[cfg(feature = "mio_07")]
+use mio_07::{event::Source, unix::SourceFd, Interest, Registry, Token as Token_07};
+
+#[cfg(feature = "mio_08")]
+use mio_08::{event::Source as Source_08, unix::SourceFd as SourceFd_08, Interest as Interest_08, Registry as Registry_08, Token as Token_08};
 
 use crate::addr::*;
 use crate::helpers::*;
@@ -61,7 +64,7 @@ macro_rules! impl_mio_if_enabled {($type:tt) => {
         }
     }
 
-    #[cfg(feature="mio_07")]
+    #[cfg(feature = "mio_07")]
     impl Source for $type {
         fn register(&mut self,  registry: &Registry,  token: Token_07,  interest: Interest)
         -> Result<(), io::Error> {
@@ -76,7 +79,7 @@ macro_rules! impl_mio_if_enabled {($type:tt) => {
         }
     }
 
-    #[cfg(feature="mio_07")]
+    #[cfg(feature = "mio_07")]
     impl<'a> Source for &'a $type {
         fn register(&mut self,  registry: &Registry,  token: Token_07,  interest: Interest)
         -> Result<(), io::Error> {
@@ -90,8 +93,37 @@ macro_rules! impl_mio_if_enabled {($type:tt) => {
             SourceFd(&self.fd).deregister(registry)
         }
     }
-}}
 
+    #[cfg(feature = "mio_08")]
+    impl Source_08 for $type {
+        fn register(&mut self,  registry: &Registry_08,  token: Token_08,  interest: Interest_08)
+        -> Result<(), io::Error> {
+            SourceFd_08(&self.fd).register(registry, token, interest)
+        }
+        fn reregister(&mut self,  registry: &Registry_08,  token: Token_08,  interest: Interest_08)
+        -> Result<(), io::Error> {
+            SourceFd_08(&self.fd).reregister(registry, token, interest)
+        }
+        fn deregister(&mut self,  registry: &Registry_08) -> Result<(), io::Error> {
+            SourceFd_08(&self.fd).deregister(registry)
+        }
+    }
+
+    #[cfg(feature = "mio_08")]
+    impl<'a> Source_08 for &'a $type {
+        fn register(&mut self,  registry: &Registry_08,  token: Token_08,  interest: Interest_08)
+        -> Result<(), io::Error> {
+            SourceFd_08(&self.fd).register(registry, token, interest)
+        }
+        fn reregister(&mut self,  registry: &Registry_08,  token: Token_08,  interest: Interest_08)
+        -> Result<(), io::Error> {
+            SourceFd_08(&self.fd).reregister(registry, token, interest)
+        }
+        fn deregister(&mut self,  registry: &Registry_08) -> Result<(), io::Error> {
+            SourceFd_08(&self.fd).deregister(registry)
+        }
+    }
+}}
 
 
 /// An unix domain sequential packet connection.

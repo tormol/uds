@@ -10,7 +10,7 @@ license = "Apache-2.0 OR MIT"
 authors = ["Torbjørn Birch Moltu <t.b.moltu@lyse.net>"]
 keywords = ["unix", "socket", "seqpacket", "abstract", "fdpassing"]
 categories = ["os::unix-apis", "asynchronous"]
-edition = "2018"
+edition = "2021"
 exclude = ["tests", "src/bin"]
 
 [features]
@@ -36,4 +36,3 @@ tokio_02 = {package="tokio", version = "0.2", features = ["macros", "rt-core"]}
 
 [package.metadata.docs.rs]
 features = ["mio-uds", "mio", "mio_07", "tokio"]
-rustdoc-args = ["--cfg", "feature=\"os-poll\""]

@@ -153,9 +153,7 @@ fn longer_paths() {
                 "extended address is contigious"
             );
             let extended_path = std::slice::from_raw_parts_mut(path_ptr, combined);
-            for b in &mut extended_path[..len] {
-                *b = fill;
-            }
+            extended_path[..len].fill(fill);
             let addrlen = (path_offset + len + 1) as libc::socklen_t;
             (addr, addrlen)
         }

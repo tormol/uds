@@ -1,5 +1,5 @@
 #!/bin/sh
-MSRV="1.39.0"
+MSRV="1.56.0"
 CAFLAGS=""
 export RUST_BACKTRACE=1
 

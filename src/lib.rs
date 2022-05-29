@@ -1,4 +1,4 @@
-/* Copyright 2019-2021 Torbjørn Birch Moltu, 2020 Jon Magnuson
+/* Copyright 2019-2022 Torbjørn Birch Moltu, 2020 Jon Magnuson, 2022 Jake Shadle
  *
  * Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
  * http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or

@@ -74,7 +74,7 @@ macro_rules! mio_streams {
         use $version::net::{UnixListener, UnixStream};
         use $version::{Poll, Events, Interest, Token};
 
-        let listener_path = "mio 0.7 listener.ssock";
+        let listener_path = concat!(stringify!($version), "_listener.ssock");
         let _ = remove_file(listener_path);
         let listener_addr = UnixSocketAddr::new(listener_path).unwrap();
         let mut listener = UnixListener::bind_unix_addr(&listener_addr)
@@ -106,7 +106,7 @@ macro_rules! mio_streams {
         assert_eq!(stream_served.read(&mut [0; 20]).expect("read from client"), 16);
         let _ = poll.poll(&mut events, Some(Duration::from_millis(1)));
 
-        let stream_path = "mio 0.7 stream.sock";
+        let stream_path = concat!(stringify!($version), "_stream.sock");
         let _ = remove_file(stream_path);
         let _named_stream = UnixStream::connect_from_to_unix_addr(
             &UnixSocketAddr::new(stream_path).unwrap(),

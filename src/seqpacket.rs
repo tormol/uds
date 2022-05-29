@@ -1082,6 +1082,7 @@ impl NonblockingUnixSeqpacketConn {
 /// assert!(current_events.len() > 0);
 /// assert_eq!(current_events[0].token(), Token(0));
 /// let (_, _addr) = listener.accept_unix_addr().expect("accept connection");
+/// # let _ = std::fs::remove_file("seqpacket.sock"); // clean up after ourself on success
 /// ```
 #[derive(Debug)]
 #[repr(transparent)]

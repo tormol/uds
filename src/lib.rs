@@ -27,7 +27,7 @@
     clippy::needless_return, // consistency with early returns, and to not look incomplete
     clippy::redundant_closure, // avoiding auto-functions of tuple structs and enum variants
     clippy::needless_lifetimes, // explicity when useful
-    clippy::ref_in_deref, // derefencing one field from a raw pointer
+    clippy::needless_borrow, // dereferencing one field from a raw pointer
     // more lints are disabled inside ancillary.rs and credentials.rs
 )]
 

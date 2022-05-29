@@ -263,7 +263,7 @@ fn abstract_from_ffi() {
         }).expect("return abstract address");
         assert!(addr.is_abstract());
         assert_eq!(addr.as_ref(), UnixSocketAddrRef::Abstract(b"\x00\x07"));
-        assert_eq!(format!("{:?}", addr), "UnixSocketAddr(Abstract(\"\\u{0}\\u{7}\"))");
+        assert_eq!(format!("{:?}", addr), format!("UnixSocketAddr(Abstract({:?}))", "\x00\x07"));
     }
 }
 

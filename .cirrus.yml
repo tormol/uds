@@ -130,7 +130,7 @@ task:
   setup_script:
     - rustup component add clippy
     - rustup target add x86_64-unknown-netbsd
-    - rustup target add x86_64-sun-solaris
+    - rustup target add x86_64-unknown-illumos
     - rustup target add x86_64-unknown-linux-gnux32
     - rustup target add aarch64-unknown-linux-gnu
     - rustup target add aarch64-linux-android
@@ -150,7 +150,7 @@ task:
     - cargo clippy
     - cargo clippy --all-features
     - cargo check --target x86_64-unknown-netbsd --all-features --tests
-    - cargo check --target x86_64-sun-solaris --tests
+    - cargo check --target x86_64-unknown-illumos --tests
     - cargo check --target x86_64-unknown-linux-gnux32 --all-features --tests
     - cargo check --target aarch64-unknown-linux-gnu --all-features --tests
     - cargo check --target aarch64-linux-android --all-features --tests
@@ -162,7 +162,7 @@ task:
 task:
   name: macOS stable
   macos_instance:
-    image: big-sur-base
+    image: monterey-base
     # doesn't accept cpu or memory fields
   depends_on: Linux i686 stable
   env:

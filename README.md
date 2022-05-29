@@ -65,7 +65,7 @@ Also, some OSes might return the original file descriptor without cloning it if 
 
 * Android: I haven't tested on it, but I assume there are no differences from regular Linux.
 * Windows 10: While it added some unix socket features, Windows support is not a priority. (PRs are welcome though).
-* Solaris: Treated identically as Illumos.
+* Solaris: Treated identically as Illumos. mio 0.8 doesn't support it.
 
 ## mio integration
 

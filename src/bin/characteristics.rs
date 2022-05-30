@@ -42,9 +42,7 @@ fn max_path_addr(fill: u8) -> (libc::sockaddr_un, libc::socklen_t) {
     unsafe {
         let mut addr: libc::sockaddr_un = mem::zeroed();
         addr.sun_family = libc::AF_UNIX as libc::sa_family_t;
-        for dst in &mut addr.sun_path[..] {
-            *dst = fill as libc::c_char;
-        }
+        addr.sun_path[..].fill(fill as libc::c_char);
         let len = mem::size_of_val(&addr) as libc::socklen_t;
         (addr, len)
     }

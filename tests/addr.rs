@@ -211,10 +211,8 @@ fn path_from_ffi() {
     let (len, addr) = UnixSocketAddr::new_from_ffi(|addr, len| {
         let addr = unsafe { &mut*(addr as *mut sockaddr as *mut sockaddr_un)};
         *len = size_of::<sockaddr_un>() as socklen_t;
-        for dst in &mut addr.sun_path[..] {
-            *dst = b'b' as _;
-        }
-        Ok(addr.sun_path[..].len())
+        addr.sun_path.fill(b'b' as _);
+        Ok(addr.sun_path.len())
     }).expect("return address with max length path");
     assert!(addr.is_path());
     let path = String::from_utf8(vec![b'b'; len]).unwrap();

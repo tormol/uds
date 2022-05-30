@@ -21,8 +21,12 @@ fn path_offset() -> socklen_t {
     }
 }
 
-fn as_u8(slice: &[c_char]) -> &[u8] {
+const fn as_u8(slice: &[c_char]) -> &[u8] {
     unsafe { &*(slice as *const[c_char] as *const[u8]) }
+}
+
+const fn as_char(slice: &[u8]) -> &[c_char] {
+    unsafe { &*(slice as *const[u8] as *const[c_char]) }
 }
 
 const TOO_LONG_DESC: &str = "address is too long";
@@ -270,9 +274,7 @@ impl UnixSocketAddr {
             } else if path.iter().any(|&b| b == b'\0' ) {
                 Err(io::Error::new(ErrorKind::InvalidInput, "path cannot contain nul bytes"))
             } else {
-                for (dst, src) in addr.addr.sun_path.iter_mut().zip(path) {
-                    *dst = *src as c_char;
-                }
+                addr.addr.sun_path[..path.len()].copy_from_slice(as_char(path));
                 addr.len = path_offset() + path.len() as socklen_t;
                 if path.len() < capacity {
                     addr.len += 1; // for increased portability
@@ -332,9 +334,7 @@ impl UnixSocketAddr {
             } else if name.len() > UnixSocketAddr::max_abstract_len() {
                 Err(io::Error::new(ErrorKind::InvalidInput, "abstract name is too long"))
             } else {
-                for (dst, src) in addr.addr.sun_path[1..].iter_mut().zip(name) {
-                    *dst = *src as c_char;
-                }
+                addr.addr.sun_path[1..1+name.len()].copy_from_slice(as_char(name));
                 addr.len = path_offset() + 1 + name.len() as socklen_t;
                 Ok(addr)
             }
@@ -373,9 +373,7 @@ impl UnixSocketAddr {
             let message = "path is too long for unix socket address";
             Err(io::Error::new(ErrorKind::InvalidInput, message))
         } else {
-            for (dst, src) in addr.addr.sun_path.iter_mut().zip(path) {
-                *dst = *src as c_char;
-            }
+            addr.addr.sun_path[..path.len()].copy_from_slice(as_char(path));
             addr.len = path_offset() + path.len() as socklen_t;
             if path.len() < mem::size_of_val(&addr.addr.sun_path) {
                 addr.len += 1;
@@ -552,9 +550,7 @@ impl UnixSocketAddr {
         if addr.len() <= Self::max_path_len() {
             let name = addr;
             let mut addr = Self::default();
-            for (src, dst) in name.iter().zip(&mut addr.addr.sun_path[..]) {
-                *dst = *src as c_char;
-            }
+            addr.addr.sun_path[..name.len()].copy_from_slice(as_char(name));
             addr.len = path_offset() + name.len() as socklen_t;
             Ok(addr)
         } else {

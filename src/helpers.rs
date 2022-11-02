@@ -12,16 +12,18 @@ use std::time::Duration;
 use libc::{c_int, sockaddr, socklen_t, AF_UNIX};
 use libc::{bind, connect, getsockname, getpeername};
 use libc::{socket, accept, close, listen, socketpair};
-use libc::{ioctl, FIONBIO, FIOCLEX, FIONCLEX};
+use libc::{ioctl, FIONBIO};
+#[cfg(not(target_os = "haiku"))]
+use libc::{FIOCLEX,FIONCLEX};
 use libc::{fcntl, F_DUPFD_CLOEXEC, EINVAL, dup};
 use libc::{getsockopt, SOL_SOCKET, SO_ERROR, c_void};
 #[cfg_attr(target_env="musl", allow(deprecated))]
 use libc::{setsockopt, SO_RCVTIMEO, SO_SNDTIMEO, timeval, time_t};
 #[cfg(any(target_os="illumos", target_os="solaris"))]
 use libc::{F_GETFD, F_SETFD, FD_CLOEXEC};
-#[cfg(not(target_vendor="apple"))]
+#[cfg(not(any(target_vendor="apple", target_os = "haiku")))]
 use libc::{SOCK_CLOEXEC, SOCK_NONBLOCK};
-#[cfg(not(any(target_vendor="apple", all(target_os="android", target_arch="x86"))))]
+#[cfg(not(any(target_vendor="apple", target_os = "haiku", all(target_os="android", target_arch="x86"))))]
 use libc::{accept4, ENOSYS};
 #[cfg(target_vendor="apple")]
 use libc::SO_NOSIGPIPE;
@@ -42,6 +44,7 @@ pub const MSG_NOSIGNAL: c_int = 0; // SO_NOSIGPIPE is set instead
 
 
 /// Enables / disables CLOEXEC, for when SOCK_CLOEXEC can't be used.
+#[cfg(not(target_os = "haiku"))]
 pub fn set_cloexec(fd: RawFd,  close_on_exec: bool) -> Result<(), io::Error> {
     let op = if close_on_exec {FIOCLEX} else {FIONCLEX};
     match cvt!(unsafe { ioctl(fd, op) }) {
@@ -60,6 +63,12 @@ pub fn set_cloexec(fd: RawFd,  close_on_exec: bool) -> Result<(), io::Error> {
         Err(e) => Err(e),
     }
 }
+
+#[cfg(target_os = "haiku")]
+pub fn set_cloexec(_: RawFd,  _: bool) -> Result<(), io::Error> {
+    Ok(())
+}
+
 /// Enables / disables FIONBIO. Used if SOCK_NONBLOCK can't be used.
 pub fn set_nonblocking(fd: RawFd,  nonblocking: bool) -> Result<(), io::Error> {
     cvt!(unsafe { ioctl(fd, FIONBIO, &mut (nonblocking as c_int)) })?;
@@ -245,7 +254,7 @@ impl Socket {
         // with Linux < 2.6.27 becaue Rust std still supports 2.6.18.
         // (EINVAL is what std checks for, and EPROTONOTSUPPORT is for
         // known-but-not-supported protcol or protocol families).
-        #[cfg(not(target_vendor="apple"))] {
+        #[cfg(not(any(target_vendor="apple", target_os = "haiku")))] {
             let type_flags = socket_type | SOCK_CLOEXEC | if nonblocking {SOCK_NONBLOCK} else {0};
             match cvt!(unsafe { socket(AF_UNIX, type_flags, 0) }) {
                 Ok(fd) => return Ok(Socket(fd)),
@@ -276,6 +285,7 @@ impl Socket {
             // (used by RHEL 5 which didn't reach EOL until November 2020).
             #[cfg(not(any(
                 target_vendor="apple",
+                target_os = "haiku",
                 all(target_os="android", target_arch="x86")
             )))] {
                 let flags = SOCK_CLOEXEC | if nonblocking {SOCK_NONBLOCK} else {0};
@@ -332,7 +342,7 @@ impl Socket {
         let mut fd_buf = [-1; 2];
         // Set close-on-exec atomically with SOCK_CLOEXEC if possible.
         // Falls through for compatibility with Linux < 2.6.27
-        #[cfg(not(target_vendor="apple"))] {
+        #[cfg(not(any(target_vendor="apple", target_os = "haiku")))] {
             let type_flags = socket_type | SOCK_CLOEXEC | if nonblocking {SOCK_NONBLOCK} else {0};
             match cvt!(unsafe { socketpair(AF_UNIX, type_flags, 0, fd_buf[..].as_mut_ptr()) }) {
                 Ok(_) => return Ok((Socket(fd_buf[0]), Socket(fd_buf[1]))),

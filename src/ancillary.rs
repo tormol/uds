@@ -25,7 +25,7 @@ use libc::{CMSG_SPACE, CMSG_LEN, CMSG_DATA, CMSG_FIRSTHDR, CMSG_NXTHDR};
 use libc::{SOL_SOCKET, SCM_RIGHTS};
 #[cfg(any(target_os="linux", target_os="android"))]
 use libc::SCM_CREDENTIALS;
-#[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")))]
+#[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris", target_os = "haiku")))]
 use libc::MSG_CMSG_CLOEXEC;
 
 use crate::helpers::*;
@@ -41,14 +41,12 @@ use crate::credentials::RawReceivedCredentials;
     all(target_os="linux", not(target_env="musl")),
     target_os="android",
     target_env="uclibc",
-    target_os="haiku"
 ))]
 type ControlLen = usize;
 #[cfg(not(any(
     all(target_os="linux", not(target_env="musl")),
     target_os="android",
     target_env="uclibc",
-    target_os="haiku"
 )))]
 type ControlLen = libc::socklen_t;
 
@@ -443,7 +441,7 @@ pub fn recv_ancillary<'ancillary_buf>(
             msg.msg_controllen = ancillary_buf.len() as ControlLen;
         }
         flags |= MSG_NOSIGNAL;
-        #[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris")))] {
+        #[cfg(not(any(target_vendor="apple", target_os="illumos", target_os="solaris", target_os = "haiku")))] {
             flags |= MSG_CMSG_CLOEXEC;
         }
 

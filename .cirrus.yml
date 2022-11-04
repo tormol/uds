@@ -168,7 +168,7 @@ task:
   env:
     RUST_BACKTRACE: 1
   setup_script:
-    - brew install rust
+    - brew install rust@1.58.0
   cargo_cache:
     folder: $HOME/.cargo/registry
     fingerprint_script: cat Cargo.lock 2> /dev/null || true

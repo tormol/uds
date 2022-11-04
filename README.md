@@ -114,7 +114,7 @@ uds = {version="0.2.6", features=["tokio"]}
 
 ## Minimum Rust version
 
-The minimum Rust version is 1.56.
+The minimum Rust version is 1.58.
 
 ## `unsafe` usage
 

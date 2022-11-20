@@ -2,6 +2,7 @@
     clippy::unnecessary_mut_passed, // CMSG_ macros only exist for *const
     clippy::useless_conversion, // not useless on all platforms
     clippy::match_overlapping_arm, // cumbersome to avoid when using inclusive ranges
+    clippy::borrow_deref_ref, // avoid infinite loop in Borrow impl
     dead_code // TODO
 )]
 
@@ -475,7 +476,7 @@ pub fn recv_fds(
         bufs: &mut[IoSliceMut],  fd_buf: &mut[RawFd]
 ) -> Result<(usize, bool, usize), io::Error> {
     let mut ancillary_buf = AncillaryBuf::with_fd_capacity(fd_buf.len());
-    let (num_bytes, mut ancillary) = recv_ancillary(fd, from, 0, bufs, &mut*ancillary_buf)?;
+    let (num_bytes, mut ancillary) = recv_ancillary(fd, from, 0, bufs, &mut ancillary_buf)?;
     let mut num_fds = 0;
     for message in &mut ancillary {
         if let AncillaryItem::Fds(fds) = message {

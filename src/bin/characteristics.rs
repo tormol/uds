@@ -174,7 +174,7 @@ fn longer_paths() {
                     Err(format!("rejected with {} instead of EINVAL", error))
                 }
             } else {
-                match remove_file(std::str::from_utf8(&*path_addr).unwrap()) {
+                match remove_file(std::str::from_utf8(&path_addr).unwrap()) {
                     Err(ref err) if err.kind() == NotFound => {
                         Err("bind() succeeded but path was not created".to_string())
                     },

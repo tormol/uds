@@ -23,11 +23,13 @@
 
 #![allow(
     clippy::cast_lossless, // improves portability when values are limited by the OS anyway
+    clippy::unnecessary_cast, // not necessarily unnecessary on other OSes
     clippy::len_zero, // the `!` in `if !foo.is_empty()` can be easy to miss
     clippy::needless_return, // consistency with early returns, and to not look incomplete
     clippy::redundant_closure, // avoiding auto-functions of tuple structs and enum variants
     clippy::needless_lifetimes, // explicity when useful
     clippy::needless_borrow, // dereferencing one field from a raw pointer
+    clippy::bool_to_int_with_if, // clearer than usize::from()
     // more lints are disabled inside ancillary.rs and credentials.rs
 )]
 

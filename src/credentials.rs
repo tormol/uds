@@ -107,7 +107,7 @@ pub fn selinux_context(_fd: RawFd,  _buffer: &mut[u8]) -> Result<usize, io::Erro
 /// * Illumos and Solaris provides enough information to fill out
 ///   both variants, but obviously only one can be returned.
 /// * FreeBSD 13 will also provide pid, but this crate doesn't detect that.
-#[derive(Clone,Copy, PartialEq)]
+#[derive(Clone,Copy, PartialEq,Eq)]
 pub enum ConnCredentials {
     LinuxLike{ pid: NonZeroU32, euid: u32, egid: u32 },
     MacOsLike{ euid: u32, number_of_groups: u8, groups: [u32; 16/*what libc uses for all OSes*/] },

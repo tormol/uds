@@ -30,9 +30,9 @@ task:
     - rm -rf $HOME/.cargo/registry/index
 
 task:
-  name: Linux amd64 1.58
+  name: Linux amd64 1.68
   container:
-    image: rust:1.58
+    image: rust:1.68.2
     cpu: 1
     memory: 2536MB # doc-tests somehow OOMs with 1 GB here
   allow_failures: false

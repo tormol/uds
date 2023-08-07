@@ -1,4 +1,7 @@
-#![allow(clippy::match_ref_pats)] // looks more optimized with long array
+#![allow(
+    clippy::match_ref_pats, // looks more optimized with long array
+    clippy::needless_borrowed_reference,
+)]
 
 use std::os::unix::io::RawFd;
 use std::{io, fmt};

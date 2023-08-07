@@ -6,7 +6,7 @@
     dead_code // TODO
 )]
 
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Add};
 use std::borrow::{Borrow, BorrowMut};
 use std::os::unix::io::RawFd;
 use std::io::{self, ErrorKind, IoSlice, IoSliceMut};
@@ -124,7 +124,7 @@ pub fn send_ancillary(
                         header.cmsg_level = SOL_SOCKET;
                         header.cmsg_type = SCM_CREDENTIALS;
                         header.cmsg_len = CMSG_LEN(mem::size_of_val(&creds) as u32) as ControlLen;
-                        *(CMSG_DATA(header) as *mut c_void as *mut _) = creds;
+                        (CMSG_DATA(header) as *mut _).write_unaligned(creds);
                         header = &mut*CMSG_NXTHDR(&mut msg, header);
                     }
                 }
@@ -133,13 +133,10 @@ pub fn send_ancillary(
                     header.cmsg_level = SOL_SOCKET;
                     header.cmsg_type = SCM_RIGHTS;
                     header.cmsg_len = CMSG_LEN(mem::size_of_val(fds) as u32) as ControlLen;
-                    let dst = CMSG_DATA(header) as *mut c_void;
-                    debug_assert!(
-                        dst as usize & (mem::align_of::<RawFd>()-1) == 0,
-                        "CMSG_DATA() is aligned"
-                    );
-                    let dst = &mut*(dst as *mut RawFd);
-                    ptr::copy_nonoverlapping(fds.as_ptr(), dst, fds.len());
+                    let dst = CMSG_DATA(header) as *mut RawFd;
+                    for i in 0..fds.len() {
+                        dst.add(i).write_unaligned(fds[i]);
+                    }
                 }
             }
         }

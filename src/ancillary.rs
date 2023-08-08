@@ -6,13 +6,14 @@
     dead_code // TODO
 )]
 
-use std::ops::{Deref, DerefMut, Add};
+use std::ops::{Deref, DerefMut};
 use std::borrow::{Borrow, BorrowMut};
 use std::os::unix::io::RawFd;
 use std::io::{self, ErrorKind, IoSlice, IoSliceMut};
 use std::alloc::{self, Layout};
 use std::convert::TryInto;
 use std::{mem, ptr, slice};
+use std::marker::PhantomData;
 
 use libc::{c_int, c_uint, c_void};
 use libc::{msghdr, iovec, cmsghdr, sockaddr, sockaddr_un};
@@ -283,11 +284,11 @@ impl AsMut<[u8]> for AncillaryBuf {
 
 
 /// One ancillary message produced by [`Ancillary`](#struct.Ancillary)
-pub enum AncillaryItem {
+pub enum AncillaryItem<'a> {
     /// One or more file descriptors sent by the peer.
     ///
     /// Consumer of the iterator is responsible for closing them.
-    Fds(Vec<RawFd>),
+    Fds(&'a[RawFd]),
     /// Credentials of the sending process.
     #[allow(unused)]
     Credentials(ReceivedCredentials),
@@ -300,23 +301,22 @@ pub enum AncillaryItem {
 }
 
 /// An iterator over ancillary messages received with `recv_ancillary()`.
-pub struct Ancillary {
+pub struct Ancillary<'a> {
     // addr and bytes are not used here:
     // * addr is usually placed on the stack by the calling wrapper method,
     //   which means that its lifetime ends when this struct is returned.
     // * the iovec is incremented by Linux, but possibly not others.
     msg: msghdr,
 
+    _ancillary_buf: PhantomData<&'a[u8]>,
     /// The next message, initialized with CMSG_FIRSTHDR()
     #[cfg(not(any(target_os="illumos", target_os="solaris")))]
     next_message: *mut cmsghdr,
 }
-impl<'a> Iterator for Ancillary {
-    type Item = AncillaryItem;
+impl<'a> Iterator for Ancillary<'a> {
+    type Item = AncillaryItem<'a>;
     #[cfg(not(any(target_os="illumos", target_os="solaris")))]
-    fn next(&mut self) -> Option<AncillaryItem> {
-        use std::mem::size_of;
-
+    fn next(&mut self) -> Option<AncillaryItem<'a>> {
         unsafe {
             if self.next_message.is_null() {
                 return None;
@@ -326,13 +326,14 @@ impl<'a> Iterator for Ancillary {
             let item = match ((*self.next_message).cmsg_level, (*self.next_message).cmsg_type) {
                 (SOL_SOCKET, SCM_RIGHTS) => {
                     let num_fds = payload_bytes / mem::size_of::<RawFd>();
-                    let fds_ptr = CMSG_DATA(self.next_message) as *const RawFd;
-                    let mut fds = Vec::with_capacity(num_fds);
-
-                    for i in 0..num_fds {
-                        fds.push(fds_ptr.add(i).read_unaligned())
-                    }
-
+                    // pointer is aligned due to the cmsg header
+                    let first_fd = CMSG_DATA(self.next_message) as *const c_void;
+                    debug_assert!(
+                        first_fd as usize & (mem::align_of::<RawFd>()-1) == 0,
+                        "CMSG_DATA() is aligned"
+                    );
+                    let first_fd = first_fd as *const RawFd;
+                    let fds = slice::from_raw_parts(first_fd, num_fds);
                     #[cfg(any(target_vendor="apple", target_os="freebsd"))] {
                         // set cloexec
                         // This is necessary on FreeBSD as MSG_CMSG_CLOEXEC
@@ -340,7 +341,7 @@ impl<'a> Iterator for Ancillary {
                         // FIXME this should be done in a separate iteration
                         // when the fds are received, and not after user code
                         // has had a chance to run.
-                        for &fd in &fds {
+                        for &fd in fds {
                             // might fail if fd has not been kept alive by the
                             // sender, so ignore errors.
                             let _ = set_cloexec(fd, true);
@@ -351,7 +352,7 @@ impl<'a> Iterator for Ancillary {
                 #[cfg(any(target_os="linux", target_os="android"))]
                 (SOL_SOCKET, SCM_CREDENTIALS) => {
                     let creds_ptr = CMSG_DATA(self.next_message) as *const RawReceivedCredentials;
-                    assert!(size_of::<RawReceivedCredentials>() <= payload_bytes, "Received enough bytes for full ucred");
+                    assert!(mem::size_of::<RawReceivedCredentials>() <= payload_bytes, "Received enough bytes for full ucred");
                     AncillaryItem::Credentials(ReceivedCredentials::from_raw(creds_ptr.read_unaligned()))
                 }
                 _ => AncillaryItem::Unsupported,
@@ -365,19 +366,19 @@ impl<'a> Iterator for Ancillary {
         None
     }
 }
-impl<'a> Drop for Ancillary {
+impl<'a> Drop for Ancillary<'a> {
     fn drop(&mut self) {
         // close all remaining file descriptors
         for ancillary in self {
             if let AncillaryItem::Fds(fds) = ancillary {
-                for &fd in &fds {
+                for &fd in fds {
                     unsafe { close(fd) };
                 }
             }
         }
     }
 }
-impl Ancillary {
+impl<'a> Ancillary<'a> {
     /// Returns `true` if the non-ancillary part of the datagram or packet was truncated.
     ///
     /// If the provided byte buffer(s) are shorter than the datagram or packet
@@ -395,10 +396,10 @@ impl Ancillary {
 }
 
 /// A safe (but incomplete) wrapper around `recvmsg()`.
-pub fn recv_ancillary(
+pub fn recv_ancillary<'ancillary_buf>(
     socket: RawFd,  from: Option<&mut UnixSocketAddr>,  mut flags: c_int,
-    bufs: &mut[IoSliceMut],  ancillary_buf: &mut[u8],
-) -> Result<(usize, Ancillary), io::Error> {
+    bufs: &mut[IoSliceMut],  ancillary_buf: &'ancillary_buf mut[u8],
+) -> Result<(usize, Ancillary<'ancillary_buf>), io::Error> {
     unsafe {
         let mut msg: msghdr = mem::zeroed();
         msg.msg_name = ptr::null_mut();
@@ -454,6 +455,7 @@ pub fn recv_ancillary(
 
         let ancillary_iterator = Ancillary {
             msg,
+            _ancillary_buf: PhantomData,
             #[cfg(not(any(target_os="illumos", target_os="solaris")))]
             next_message: CMSG_FIRSTHDR(&msg),
         };

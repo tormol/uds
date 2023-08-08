@@ -135,8 +135,8 @@ pub fn send_ancillary(
                     header.cmsg_type = SCM_RIGHTS;
                     header.cmsg_len = CMSG_LEN(mem::size_of_val(fds) as u32) as ControlLen;
                     let dst = CMSG_DATA(header) as *mut RawFd;
-                    for i in 0..fds.len() {
-                        dst.add(i).write_unaligned(fds[i]);
+                    for (i, &fd) in fds.iter().enumerate() {
+                        dst.add(i).write_unaligned(fd);
                     }
                 }
             }

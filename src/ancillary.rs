@@ -125,7 +125,7 @@ pub fn send_ancillary(
                         header.cmsg_level = SOL_SOCKET;
                         header.cmsg_type = SCM_CREDENTIALS;
                         header.cmsg_len = CMSG_LEN(mem::size_of_val(&creds) as u32) as ControlLen;
-                        (CMSG_DATA(header) as *mut _).write_unaligned(creds);
+                        (CMSG_DATA(header) as *mut RawReceivedCredentials).write_unaligned(creds);
                         header = &mut*CMSG_NXTHDR(&mut msg, header);
                     }
                 }

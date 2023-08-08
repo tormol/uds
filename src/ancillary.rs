@@ -284,14 +284,78 @@ impl AsMut<[u8]> for AncillaryBuf {
     }
 }
 
+pub struct FdSliceIterator<'a> {
+    pos: usize,
+    slice: &'a FdSlice<'a>,
+}
+impl<'a> Iterator for FdSliceIterator<'a> {
+    type Item = RawFd;
 
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.slice.len > self.pos {
+            // SAFETY: Safe as long as FdSlice is created correctly
+            let ret = unsafe {
+                self.slice.unaligned_ptr.add(self.pos).read_unaligned()
+            };
+            self.pos += 1;
+            Some(ret)
+        } else {
+            None
+        }
+    }
+}
+
+pub struct FdSlice<'a> {
+    /// The underlying buffer as ptr
+    unaligned_ptr: *const RawFd,
+    /// The amount of [`RawFd`]s in this [`FdSlice`]
+    len: usize,
+    /// The lifetime of the underlying buffer
+    _borrow: PhantomData<&'a RawFd>,
+}
+impl<'a> FdSlice<'a> {
+    /// Creates a new [`FdSlice`] with the lifetime from a `unaligned_ptr` and a `len`.
+    ///
+    /// # Safety
+    /// The unaligned_ptr does not need to be properly aligned, but it needs to point to at least `len` [`RawFd`]s.
+    /// The unaligned_ptr may not be null.
+    unsafe fn new(unaligned_ptr: *const RawFd, len: usize) -> Self {
+        debug_assert!(!unaligned_ptr.is_null(), "No NULL pointer for FdSlice");
+        Self {
+            unaligned_ptr,
+            len,
+            _borrow: PhantomData,
+        }
+    }
+
+    /// The amount of [`RawFd`] in this [`FdSlice`]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Returns an iterator over the elements of this [`FdSlice`]
+    pub fn iter(&self) -> FdSliceIterator {
+        (&self).into_iter()
+    }
+}
+impl<'a> IntoIterator for &'a FdSlice<'a> {
+    type Item = RawFd;
+    type IntoIter = FdSliceIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        FdSliceIterator {
+            pos: 0,
+            slice: self,
+        }
+    }
+}
 
 /// One ancillary message produced by [`Ancillary`](#struct.Ancillary)
 pub enum AncillaryItem<'a> {
     /// One or more file descriptors sent by the peer.
     ///
     /// Consumer of the iterator is responsible for closing them.
-    Fds(&'a[RawFd]),
+    Fds(FdSlice<'a>),
     /// Credentials of the sending process.
     #[allow(unused)]
     Credentials(ReceivedCredentials),
@@ -335,8 +399,7 @@ impl<'a> Iterator for Ancillary<'a> {
                         first_fd as usize & (mem::align_of::<RawFd>()-1) == 0,
                         "CMSG_DATA() is aligned"
                     );
-                    let first_fd = first_fd as *const RawFd;
-                    let fds = slice::from_raw_parts(first_fd, num_fds);
+                    let first_fd = first_fd.cast::<RawFd>();
                     #[cfg(any(target_vendor="apple", target_os="freebsd"))] {
                         // set cloexec
                         // This is necessary on FreeBSD as MSG_CMSG_CLOEXEC
@@ -344,12 +407,15 @@ impl<'a> Iterator for Ancillary<'a> {
                         // FIXME this should be done in a separate iteration
                         // when the fds are received, and not after user code
                         // has had a chance to run.
-                        for &fd in fds {
+                        // SAFETY: It's safe to create FdSlice twice from valid values. The values are valid.
+                        let fds = FdSlice::new(first_fd, num_fds);
+                        for fd in &fds {
                             // might fail if fd has not been kept alive by the
                             // sender, so ignore errors.
                             let _ = set_cloexec(fd, true);
                         }
                     }
+                    let fds = FdSlice::new(first_fd, num_fds);
                     AncillaryItem::Fds(fds)
                 }
                 #[cfg(any(target_os="linux", target_os="android"))]
@@ -379,7 +445,7 @@ impl<'a> Drop for Ancillary<'a> {
         // close all remaining file descriptors
         for ancillary in self {
             if let AncillaryItem::Fds(fds) = ancillary {
-                for &fd in fds {
+                for fd in &fds {
                     unsafe { close(fd) };
                 }
             }
@@ -485,9 +551,13 @@ pub fn recv_fds(
             // which means we might receive two file descriptors even though
             // we only want one.
             let can_keep = fds.len().min(fd_buf.len()-num_fds);
-            fd_buf[num_fds..num_fds+can_keep].copy_from_slice(&fds[..can_keep]);
+            let mut fd_iter = (&fds).iter();
+            for i in 0..can_keep {
+                fd_buf[num_fds + i] = fd_iter.next().unwrap();
+            }
             num_fds += can_keep;
-            for &unwanted in &fds[can_keep..] {
+            // read the rest of fds
+            for unwanted in fd_iter {
                 unsafe { close(unwanted) };
             }
         }

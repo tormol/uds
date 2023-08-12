@@ -119,14 +119,19 @@ pub fn send_ancillary(
             }
 
             #[cfg(not(any(target_os="illumos", target_os="solaris")))] {
-                let mut header = &mut*CMSG_FIRSTHDR(&mut msg);
+                let header_ptr = CMSG_FIRSTHDR(&mut msg);
+                assert!(!header_ptr.is_null(), "CMSG_FIRSTHDR returned unexpected NULL pointer");
+                #[allow(unused_mut)]
+                let mut header = &mut*header_ptr;
                 #[cfg(any(target_os="linux", target_os="android"))] {
                     if let Some(creds) = creds {
                         header.cmsg_level = SOL_SOCKET;
                         header.cmsg_type = SCM_CREDENTIALS;
                         header.cmsg_len = CMSG_LEN(mem::size_of_val(&creds) as u32) as ControlLen;
                         *(CMSG_DATA(header) as *mut c_void as *mut _) = creds;
-                        header = &mut*CMSG_NXTHDR(&mut msg, header);
+                        let header_ptr = CMSG_NXTHDR(&mut msg, header);
+                        assert!(!header_ptr.is_null(), "CMSG_NXTHDR returned unexpected NULL pointer");
+                        header = &mut*header_ptr;
                     }
                 }
 
@@ -194,7 +199,7 @@ impl AncillaryBuf {
                         bytes as usize,
                         mem::align_of::<cmsghdr>()
                     ).unwrap();
-                    alloc::alloc(layout)
+                    alloc::alloc_zeroed(layout)
                 },
                 _ => panic!("capacity is too high"),
             },

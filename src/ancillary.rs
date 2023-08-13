@@ -133,8 +133,11 @@ pub fn send_ancillary(
                     header.cmsg_level = SOL_SOCKET;
                     header.cmsg_type = SCM_RIGHTS;
                     header.cmsg_len = CMSG_LEN(mem::size_of_val(fds) as u32) as ControlLen;
-                    let dst = &mut*(CMSG_DATA(header) as *mut RawFd);
-                    ptr::copy_nonoverlapping(fds.as_ptr(), dst, fds.len());
+                    let mut dst = CMSG_DATA(header) as *mut c_void as *mut RawFd;
+                    for &fd in fds {
+                        ptr::write_unaligned(dst, fd);
+                        dst = dst.add(1);
+                    }
                 }
             }
         }

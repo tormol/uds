@@ -1,14 +1,16 @@
 #![cfg_attr(any(target_os="illumos", target_os="solaris"), allow(unused))]
 
+extern crate libc;
 extern crate uds;
 
-use std::io::{ErrorKind::*, Read, Write};
-use std::os::unix::io::{AsRawFd, FromRawFd};
+use std::io::{ErrorKind::*, Error, Read, Write};
+use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd};
 use std::os::unix::net::{UnixDatagram, UnixStream};
 use std::fs::remove_file;
 use std::env::consts::*;
 use std::mem::ManuallyDrop;
 
+use libc::close;
 use uds::{UnixDatagramExt, UnixStreamExt, UnixSocketAddr};
 
 #[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
@@ -347,6 +349,40 @@ fn stream_fd_order() {
     }
     if received_b.as_raw_fd() != b.as_raw_fd() {
         unsafe { ManuallyDrop::drop(&mut received_b) };
+    }
+}
+
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
+fn many_fds() {
+    let (a, b) = UnixStream::pair().expect("create stream socket pair");
+    // only odd numbers cause difference between CMSG_SPACE() and CMSG_LEN(), and only on 64bit.
+    let mut fds = [-1; 99];
+    for (i, fd) in fds.iter_mut().enumerate() {
+        match b.try_clone() {
+            Ok(clone) => *fd = clone.into_raw_fd(),
+            Err(e) => panic!("failed to clone the {}nt fd: {}", i+1, e),
+        }
+    }
+    a.send_fds(&b"99"[..], &fds).expect("send 99 fds");
+
+    let mut recv_buf = [0; 10];
+    let mut recv_fds = [-1; 200];
+    b.recv_fds(&mut recv_buf, &mut recv_fds).expect("receive 99 of 200 fds");
+    for (i, &received) in recv_fds[..fds.len()].iter().enumerate() {
+        assert_ne!(received, -1, "rerceived fd {} is not -1", i+1);
+        assert_eq!(
+                unsafe { close(received) },
+                0,
+                "close(received fd {}) failed: {}", i+1, Error::last_os_error(),
+        );
+    }
+
+    for (i, &sent) in fds.iter().enumerate() {
+        assert_eq!(
+                unsafe { close(sent) },
+                0,
+                "close(sent fd {}) failed: {}", i+1, Error::last_os_error(),
+        );
     }
 }
 

@@ -77,7 +77,7 @@ pub fn send_ancillary(
         #[cfg(any(target_os="linux", target_os="android"))]
         let creds = creds.map(|creds| {
             let creds = creds.into_raw();
-            needed_capacity += CMSG_LEN(mem::size_of_val(&creds) as u32);
+            needed_capacity += CMSG_SPACE(mem::size_of_val(&creds) as u32);
             creds
         });
         if fds.len() > 0 {
@@ -87,7 +87,7 @@ pub fn send_ancillary(
                 return Err(io::Error::new(ErrorKind::InvalidInput, "too many file descriptors"));
             }
             #[cfg(not(any(target_os="illumos", target_os="solaris")))] {
-                needed_capacity += CMSG_LEN(mem::size_of_val::<[RawFd]>(fds) as u32);
+                needed_capacity += CMSG_SPACE(mem::size_of_val::<[RawFd]>(fds) as u32);
             }
             #[cfg(any(target_os="illumos", target_os="solaris"))] {
                 return Err(io::Error::new(

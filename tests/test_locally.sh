@@ -9,7 +9,8 @@ export RUST_BACKTRACE=1
 set -ev
 
 test_targets="x86_64-unknown-linux-gnu x86_64-unknown-linux-musl \
-              i686-unknown-linux-gnu i686-unknown-linux-musl"
+              i686-unknown-linux-gnu i686-unknown-linux-musl \
+              x86_64-unknown-linux-gnux32"
 for target in $test_targets; do
     echo "testing $target"
     cargo check $CAFLAGS --target "$target"
@@ -17,11 +18,6 @@ for target in $test_targets; do
     cargo test $CAFLAGS --target "$target" --all-features -- --quiet
     echo
 done
-
-test_nightly_target="x86_64-unknown-linux-gnux32" # segfaults fixed with LLVM 12
-echo "testing $test_nightly_target (on nightly)"
-cargo +nightly test $CAFLAGS --target "$test_nightly_target" --release --all-features -- --quiet
-echo
 
 echo "checking with minimum supported Rust version $MSRV"
 rm Cargo.lock

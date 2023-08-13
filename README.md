@@ -59,7 +59,9 @@ Also, some OSes might return the original file descriptor without cloning it if 
 | **abstract addresses** | Yes | N/A | N/A | N/A | N/A | N/A | N/A |
 | **mio (0.6 & 0.7 & uds)** | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | **tokio** | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| **Tested?** | Locally + CI | CI | CI + Manually | CI | Manually | Manually | Manually |
+| **Tested?** | Locally + CI | CI | CI | CI | Manually<sup>\*</sup> | Manually<sup>\*</sup> | Manually<sup>\*</sup> |
+
+<sup>\*</sup>: Not tested since v0.2.6. (but (cross)checked on CI.)
 
 ### Other OSes
 
@@ -76,7 +78,7 @@ To enable it, add this to Cargo.toml:
 
 ```toml
 [dependencies]
-uds = {version="0.2.6", features=["mio"]}
+uds = {version="0.2.7", features=["mio"]}
 ```
 
 The extension traits can also be implement for [mio-uds](https://github.com/alexcrichton/mio-uds) types:
@@ -85,14 +87,14 @@ To enable them, add this to Cargo.toml:
 
 ```toml
 [dependencies]
-uds = {version="0.2.6", features=["mio-uds"]}
+uds = {version="0.2.7", features=["mio-uds"]}
 ```
 
 Mio 0.7 is also supported:
 
 ```toml
 [dependencies]
-uds = {version="0.2.6", features=["mio_07"]}
+uds = {version="0.2.7", features=["mio_07"]}
 ```
 
 ## tokio integration
@@ -104,7 +106,7 @@ To enable it, add this to Cargo.toml:
 
 ```toml
 [dependencies]
-uds = {version="0.2.6", features=["tokio"]}
+uds = {version="0.2.7", features=["tokio"]}
 ```
 
 ## Minimum Rust version

@@ -25,7 +25,7 @@ task:
     - cargo build --all-features --tests --examples
   test_script:
     - cargo run --all-features --bin characteristics
-    - cargo test --all-features --no-fail-fast
+    - cargo test --all-features --no-fail-fast -- --test-threads 1 --nocapture
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -115,8 +115,8 @@ task:
     - cargo build --target i686-unknown-linux-musl --all-features
   test_script:
     - cargo run --target i686-unknown-linux-gnu --all-features --bin characteristics
-    - cargo test --target i686-unknown-linux-gnu --all-features --no-fail-fast -- --test-threads=1
-    - cargo test --target i686-unknown-linux-musl --all-features --no-fail-fast -- --test-threads=1
+    - cargo test --target i686-unknown-linux-gnu --all-features --no-fail-fast -- --test-threads=1 --nocapture
+    - cargo test --target i686-unknown-linux-musl --all-features --no-fail-fast -- --test-threads=1 --nocapture
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -181,6 +181,6 @@ task:
   test_script:
     - cargo run --all-features --bin characteristics
     # serialize tests to avoid spurious failures in fd-passing tests
-    - cargo test --all-features --no-fail-fast -- --test-threads 1
+    - cargo test --all-features --no-fail-fast -- --test-threads 1 --nocapture
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index

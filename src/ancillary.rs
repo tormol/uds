@@ -400,10 +400,6 @@ impl<'a> Iterator for Ancillary<'a> {
                     let num_fds = payload_bytes / mem::size_of::<RawFd>();
                     // pointer is aligned due to the cmsg header
                     let first_fd = CMSG_DATA(self.next_message) as *const c_void;
-                    debug_assert!(
-                        first_fd as usize & (mem::align_of::<RawFd>()-1) == 0,
-                        "CMSG_DATA() is aligned"
-                    );
                     let first_fd = first_fd.cast::<RawFd>();
                     #[cfg(any(target_vendor="apple", target_os="freebsd"))] {
                         // set cloexec

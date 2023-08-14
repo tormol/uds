@@ -1,3 +1,12 @@
+Version 0.4.0 (2023-08-14)
+==========================
+* Remove tokio support.
+  Because 0.2 is not much used at this point.
+  1.\* support might be implemented later.
+* Remove mio 0.6, mio-uds & mio 0.7 support.
+  To simplify code and reduce combinations of features to test.  
+  The feature for mio 0.8 support remains `"mio_08"`: `"mio"` is reserved for mio 1.0.
+
 Version 0.3.0 (2023-08-14)
 ==========================
 * Don't return truncatedness from `UnixSeqpacketConn` and `tokio::UnixSeqpacketConn`s `recv()` and `peek()` methods.

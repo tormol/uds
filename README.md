@@ -77,7 +77,7 @@ To enable it, add this to Cargo.toml:
 
 ```toml
 [dependencies]
-uds = {version="0.3.0", features=["mio_08"]}
+uds = {version="0.4.0", features=["mio_08"]}
 ```
 
 ## Minimum Rust version

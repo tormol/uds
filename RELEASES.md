@@ -1,3 +1,12 @@
+Version 0.2.7 (2023-08-14)
+==========================
+* Fix potentialy unaligned accesses and slices in release mode. (Thanks @domenukk!)  
+  Would previously panic in debug mode, but now non-aligned payloads are supported.
+* Fix large ancillary buffers not being zero-initialized when filling out a buffer to send.  (Thanks @domenukk!)
+* Fix using wrong macro when calculating required ancillary buffer size when sending.  
+  The only effect of this is was some padding on 64-bit Linux or FreeBSD would not be allocated or sent.  
+  This could therefore *not* cause out-of-bounds writes.
+
 Version 0.2.6 (2021-04-03)
 ==========================
 * Add `take_error()` and `into_nonblocking()` to tokio seqpacket types.

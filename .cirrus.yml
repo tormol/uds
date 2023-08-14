@@ -47,8 +47,9 @@ task:
   check_script:
     - cargo check
     - cargo check --features mio_08
+    - cargo check --features tokio
   test_script:
-    - cargo test --features "mio_08" --no-fail-fast
+    - cargo test --all-features --no-fail-fast
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -70,8 +71,10 @@ task:
   build_script:
     - cargo check -Z minimal-versions
     - cargo build -Z minimal-versions --features mio_08
+    - cargo build -Z minimal-versions --features tokio
   test_script:
-    - cargo test -Z minimal-versions --features mio_08 --no-fail-fast -- --test-threads=1
+    # mio alone fails due to the tokio dev-dependency
+    - cargo test -Z minimal-versions --all-features --no-fail-fast -- --test-threads=1
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 

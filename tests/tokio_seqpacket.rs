@@ -7,7 +7,7 @@ use std::os::unix::net::UnixStream;
 
 use libc::{getpid, geteuid, getegid};
 
-use tokio_02 as tokio;
+use tokio_crate as tokio;
 
 use uds::tokio::{UnixSeqpacketConn, UnixSeqpacketListener};
 use uds::{nonblocking, UnixSocketAddr};
@@ -29,7 +29,7 @@ async fn test_listener_accept() {
     });
 
     for i in 1usize..=3 {
-        let mut socket = UnixSeqpacketConn::connect(sock_path).await.unwrap();
+        let mut socket = UnixSeqpacketConn::connect(sock_path).unwrap();
         let mut buf = [0u8; 3];
         let read = socket.recv(&mut buf).await.unwrap();
         assert_eq!(read, 3);
@@ -70,7 +70,7 @@ async fn test_addr() {
 
     {
         let mut buf = [0; 100];
-        let mut anon = UnixSeqpacketConn::connect_addr(&listener_addr).await.unwrap();
+        let mut anon = UnixSeqpacketConn::connect_addr(&listener_addr).unwrap();
         assert!(anon.local_addr().unwrap().is_unnamed());
         assert_eq!(anon.peer_addr().unwrap(), listener_addr);
         assert_eq!(anon.recv(&mut buf).await.unwrap(), 5);
@@ -80,7 +80,6 @@ async fn test_addr() {
     {
         let mut buf = [0; 100];
         let mut named = UnixSeqpacketConn::connect_from_addr(&client_addr, &listener_addr)
-            .await
             .unwrap();
         assert_eq!(named.local_addr().unwrap(), client_addr);
         assert!(named.recv(&mut buf).await.unwrap() > 11);

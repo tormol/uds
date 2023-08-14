@@ -58,6 +58,7 @@ Also, some OSes might return the original file descriptor without cloning it if 
 | **fd-passing** | Yes | Yes | Yes | Yes | Yes | Yes | No |
 | **abstract addresses** | Yes | N/A | N/A | N/A | N/A | N/A | N/A |
 | **mio 0.8** | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| **tokio 1.0** | Yes | Yes | Yes | Yes | Yes | Yes | No |
 | **Tested?** | Locally + CI | CI | CI | CI | Manually<sup>\*</sup> | Manually<sup>\*</sup> | Manually<sup>\*</sup> |
 
 <sup>\*</sup>: Not tested since v0.2.6. (but (cross)checked on CI.)
@@ -70,14 +71,25 @@ Also, some OSes might return the original file descriptor without cloning it if 
 
 ## mio integration
 
-The non-blocking seqpacket types can optionally be used with [mio](https://github.com/tokio-rs/mio)
-(version 0.8):
+The `mio_08` feature makes the seqpacket types usable with [mio](https://github.com/tokio-rs/mio) version 0.8 (by implementing its `Source` trait for them),
+and implements this crates extension traits for the unix socket types in []`mio::net`](https://docs.rs/mio/latest/mio/net/index.html).
 
 To enable it, add this to Cargo.toml:
 
 ```toml
 [dependencies]
 uds = {version="0.4.0", features=["mio_08"]}
+```
+
+## tokio integration
+
+The `tokio` feature adds [`async`-based seqpacket types](https://docs.rs/uds/latest/uds/tokio/index.html) for use with [tokio](https://github.com/tokio-rs/tokio) version 1.\*:
+
+To enable it, add this to Cargo.toml:
+
+```toml
+[dependencies]
+uds = {version="0.4.1", features=["tokio"]}
 ```
 
 ## Minimum Rust version

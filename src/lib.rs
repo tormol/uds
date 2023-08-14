@@ -36,6 +36,8 @@
 extern crate libc;
 #[cfg(feature="mio_08")]
 extern crate mio_08;
+#[cfg(feature="tokio")]
+extern crate tokio_crate;
 
 /// Get errno as io::Error on -1.
 macro_rules! cvt {($syscall:expr) => {
@@ -65,6 +67,8 @@ mod helpers;
 mod ancillary;
 mod traits;
 mod seqpacket;
+#[cfg(feature="tokio")]
+pub mod tokio;
 
 pub use addr::{UnixSocketAddr, UnixSocketAddrRef, AddrName};
 pub use traits::{UnixListenerExt, UnixStreamExt, UnixDatagramExt};

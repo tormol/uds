@@ -1,15 +1,16 @@
 use crate::{nonblocking, UnixSocketAddr, ConnCredentials};
 use futures::{future::poll_fn, ready};
+use tokio_crate::io::{Ready, Interest};
 use std::io::{self, ErrorKind, IoSlice, IoSliceMut};
 use std::net::Shutdown;
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 use std::path::Path;
 use std::task::{Context, Poll};
-use tokio_02::io::PollEvented;
+use tokio_crate::io::unix::AsyncFd;
 
 /// An I/O object representing a Unix Sequenced-packet socket.
 pub struct UnixSeqpacketConn {
-    io: PollEvented<nonblocking::UnixSeqpacketConn>,
+    io: AsyncFd<nonblocking::UnixSeqpacketConn>,
 }
 
 impl UnixSeqpacketConn {
@@ -18,29 +19,20 @@ impl UnixSeqpacketConn {
     /// This function will create a new Unix socket and connects to the path
     /// specified, associating the returned stream with the default event loop's
     /// handle.
-    pub async fn connect<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+    pub fn connect<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let conn = nonblocking::UnixSeqpacketConn::connect(path)?;
-        let conn = Self::from_nonblocking(conn)?;
-
-        poll_fn(|cx| conn.io.poll_write_ready(cx)).await?;
-        Ok(conn)
+        Self::from_nonblocking(conn)
     }
     /// Connects to an unix seqpacket server listening at `addr`.
-    pub async fn connect_addr(addr: &UnixSocketAddr) -> io::Result<Self> {
+    pub fn connect_addr(addr: &UnixSocketAddr) -> io::Result<Self> {
         let conn = nonblocking::UnixSeqpacketConn::connect_unix_addr(addr)?;
-        let conn = Self::from_nonblocking(conn)?;
-
-        poll_fn(|cx| conn.io.poll_write_ready(cx)).await?;
-        Ok(conn)
+        Self::from_nonblocking(conn)
     }
     /// Binds to an address before connecting to a listening seqpacet socket.
-    pub async fn connect_from_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
+    pub fn connect_from_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
     -> io::Result<Self> {
         let conn = nonblocking::UnixSeqpacketConn::connect_from_to_unix_addr(from, to)?;
-        let conn = Self::from_nonblocking(conn)?;
-
-        poll_fn(|cx| conn.io.poll_write_ready(cx)).await?;
-        Ok(conn)
+        Self::from_nonblocking(conn)
     }
 
     /// Creates an unnamed pair of connected sockets.
@@ -58,13 +50,13 @@ impl UnixSeqpacketConn {
 
     /// Creates a tokio-compatible socket from an existing nonblocking socket.
     pub fn from_nonblocking(conn: nonblocking::UnixSeqpacketConn) -> Result<Self, io::Error> {
-        match PollEvented::new(conn) {
+        match AsyncFd::new(conn) {
             Ok(io) => Ok(Self { io }),
             Err(e) => Err(e),
         }
     }
     /// Deregisters the connection and returns the underlying non-blocking type.
-    pub fn into_nonblocking(self) -> Result<nonblocking::UnixSeqpacketConn, io::Error> {
+    pub fn into_nonblocking(self) -> nonblocking::UnixSeqpacketConn {
         self.io.into_inner()
     }
     /// Creates a tokio-compatible socket from a raw file descriptor.
@@ -172,26 +164,32 @@ impl UnixSeqpacketConn {
     pub(crate) fn poll_send_priv
     <O, S: Fn(&nonblocking::UnixSeqpacketConn)->Result<O,io::Error>>
     (&self,  cx: &mut Context<'_>,  send_op: S) -> Poll<Result<O, io::Error>> {
-        ready!(self.io.poll_write_ready(cx))?;
+        let mut ready = ready!(self.io.poll_write_ready(cx))?;
         match send_op(self.io.get_ref()) {
             Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                self.io.clear_write_ready(cx)?;
+                ready.clear_ready_matching(Ready::WRITABLE);
                 Poll::Pending
             }
-            x => Poll::Ready(x),
+            result => {
+                ready.retain_ready();
+                Poll::Ready(result)
+            }
         }
     }
 
     pub(crate) fn poll_recv_priv
     <O, R: FnMut(&nonblocking::UnixSeqpacketConn)->Result<O,io::Error>>
     (&self,  cx: &mut Context<'_>,  mut recv_op: R) -> Poll<Result<O, io::Error>> {
-        ready!(self.io.poll_read_ready(cx, mio::Ready::readable()))?;
+        let mut ready = ready!(self.io.poll_read_ready(cx))?;
         match recv_op(self.io.get_ref()) {
             Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                self.io.clear_read_ready(cx, mio::Ready::readable())?;
+                ready.clear_ready_matching(Ready::READABLE);
                 Poll::Pending
             }
-            x => Poll::Ready(x),
+            result => {
+                ready.retain_ready();
+                Poll::Ready(result)
+            }
         }
     }
 }
@@ -210,11 +208,7 @@ impl AsRawFd for UnixSeqpacketConn {
 
 impl IntoRawFd for UnixSeqpacketConn {
     fn into_raw_fd(self) -> RawFd {
-        let fd = self.io.get_ref().as_raw_fd(); // in case into_inner() fails
-        match self.io.into_inner() {
-            Ok(nonblocking) => nonblocking.into_raw_fd(),
-            Err(_) => fd,
-        }
+        self.io.into_inner().into_raw_fd()
     }
 }
 
@@ -222,7 +216,7 @@ impl IntoRawFd for UnixSeqpacketConn {
 
 /// An I/O object representing a Unix Sequenced-packet socket.
 pub struct UnixSeqpacketListener {
-    io: PollEvented<nonblocking::UnixSeqpacketListener>,
+    io: AsyncFd<nonblocking::UnixSeqpacketListener>,
 }
 
 impl UnixSeqpacketListener {
@@ -244,13 +238,13 @@ impl UnixSeqpacketListener {
     /// Creates a tokio-compatible listener from an existing nonblocking listener.
     pub fn from_nonblocking(listener: nonblocking::UnixSeqpacketListener)
     -> Result<Self, io::Error> {
-        match PollEvented::new(listener) {
+        match AsyncFd::with_interest(listener, Interest::READABLE) {
             Ok(io) => Ok(Self { io }),
             Err(e) => Err(e),
         }
     }
     /// Deregisters the listener and returns the underlying non-blocking type.
-    pub fn into_nonblocking(self) -> Result<nonblocking::UnixSeqpacketListener, io::Error> {
+    pub fn into_nonblocking(self) -> nonblocking::UnixSeqpacketListener {
         self.io.into_inner()
     }
     /// Creates a tokio-compatible listener from a raw file descriptor.
@@ -274,25 +268,32 @@ impl UnixSeqpacketListener {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<io::Result<(UnixSeqpacketConn, UnixSocketAddr)>> {
-        let (io, addr) = ready!(self.poll_accept_nonblocking(cx))?;
-        let io = UnixSeqpacketConn::from_nonblocking(io)?;
-
-        Ok((io, addr)).into()
+        match self.poll_accept_nonblocking(cx) {
+            Poll::Ready(Ok((io, addr))) => {
+                match UnixSeqpacketConn::from_nonblocking(io) {
+                    Ok(io) => Poll::Ready(Ok((io, addr))),
+                    Err(e) => Poll::Ready(Err(e)),
+                }
+            }
+            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+            Poll::Pending => Poll::Pending,
+        }
     }
 
     fn poll_accept_nonblocking(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<io::Result<(nonblocking::UnixSeqpacketConn, UnixSocketAddr)>> {
-        ready!(self.io.poll_read_ready(cx, mio::Ready::readable()))?;
-
+        let mut ready = ready!(self.io.poll_read_ready(cx))?;
         match self.io.get_ref().accept_unix_addr() {
-            Ok((socket, addr)) => Ok((socket, addr)).into(),
             Err(ref err) if err.kind() == ErrorKind::WouldBlock => {
-                self.io.clear_read_ready(cx, mio::Ready::readable())?;
+                ready.clear_ready_matching(Ready::READABLE);
                 Poll::Pending
             }
-            Err(err) => Err(err).into(),
+            result => {
+                ready.retain_ready();
+                Poll::Ready(result)
+            }
         }
     }
 
@@ -325,10 +326,6 @@ impl AsRawFd for UnixSeqpacketListener {
 
 impl IntoRawFd for UnixSeqpacketListener {
     fn into_raw_fd(self) -> RawFd {
-        let fd = self.io.get_ref().as_raw_fd(); // in case into_inner() fails
-        match self.io.into_inner() {
-            Ok(nonblocking) => nonblocking.into_raw_fd(),
-            Err(_) => fd,
-        }
+        self.io.into_inner().into_raw_fd()
     }
 }

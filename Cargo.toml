@@ -11,7 +11,7 @@ authors = ["Torbjørn Birch Moltu <t.b.moltu@lyse.net>"]
 keywords = ["unix", "socket", "seqpacket", "abstract", "fdpassing"]
 categories = ["os::unix-apis", "asynchronous"]
 edition = "2021"
-exclude = ["tests", "src/bin"]
+exclude = ["tests", "src/bin", ".vscode"]
 
 [target."cfg(unix)".dependencies]
 libc = "0.2.90" # peer credentials for DragonFly BSD and NetBSD, SO_PEERSEC on all Linux architectures

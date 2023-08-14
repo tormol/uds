@@ -1,11 +1,11 @@
 use crate::{nonblocking, UnixSocketAddr, ConnCredentials};
-use futures::{future::poll_fn, ready};
-use tokio_crate::io::{Ready, Interest};
-use std::io::{self, ErrorKind, IoSlice, IoSliceMut};
+
+use std::io::{self, IoSlice, IoSliceMut};
 use std::net::Shutdown;
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 use std::path::Path;
-use std::task::{Context, Poll};
+
+use tokio_crate::io::Interest;
 use tokio_crate::io::unix::AsyncFd;
 
 /// An I/O object representing a Unix Sequenced-packet socket.
@@ -113,84 +113,48 @@ impl UnixSeqpacketConn {
 impl UnixSeqpacketConn {
     /// Sends a packet to the socket's peer.
     pub async fn send(&mut self,  packet: &[u8]) -> io::Result<usize> {
-        poll_fn(|cx| self.poll_send_priv(cx, |conn| conn.send(packet) ) ).await
+        self.io.async_io(Interest::WRITABLE, |conn| conn.send(packet) ).await
     }
     /// Receives a packet from the socket's peer.
     pub async fn recv(&mut self,  buffer: &mut[u8]) -> io::Result<usize> {
-        poll_fn(|cx| self.poll_recv_priv(cx, |conn| conn.recv(buffer) ) ).await
+        self.io.async_io(Interest::READABLE, |conn| conn.recv(buffer) ).await
     }
 
     /// Sends a packet assembled from multiple byte slices.
     pub async fn send_vectored<'a, 'b>
     (&'a mut self,  slices: &'b [IoSlice<'b>]) -> io::Result<usize> {
-        poll_fn(|cx| self.poll_send_priv(cx, |conn| conn.send_vectored(slices) ) ).await
+        self.io.async_io(Interest::WRITABLE, |conn| conn.send_vectored(slices) ).await
     }
     /// Receives a packet and places the bytes across multiple buffers.
     pub async fn recv_vectored<'a, 'b>
     (&'a mut self,  buffers: &'b mut [IoSliceMut<'b>]) -> io::Result<usize> {
-        poll_fn(|cx| {
-            self.poll_recv_priv(
-                cx,
+        self.io.async_io(
+                Interest::READABLE,
                 |conn| conn.recv_vectored(buffers).map(|(received, _)| received )
-            )
-        }).await
+        ).await
     }
 
     /// Receives a packet without removing it from the incoming queue.
     pub async fn peek(&mut self,  buffer: &mut[u8]) -> io::Result<usize> {
-        poll_fn(|cx| self.poll_recv_priv(cx, |conn| conn.peek(buffer) ) ).await
+        self.io.async_io(Interest::READABLE, |conn| conn.peek(buffer) ).await
     }
     /// Reads a packet into multiple buffers without removing it from the incoming queue.
     pub async fn peek_vectored<'a, 'b>
     (&'a mut self,  buffers: &'b mut [IoSliceMut<'b>]) -> io::Result<usize> {
-        poll_fn(|cx| {
-            self.poll_recv_priv(
-                cx,
+        self.io.async_io(
+                Interest::READABLE,
                 |conn| conn.peek_vectored(buffers).map(|(received, _)| received )
-            )
-        }).await
+        ).await
     }
 
     /// Sends a packet with associated file descriptors.
     pub async fn send_fds(&mut self,  bytes: &[u8],  fds: &[RawFd]) -> io::Result<usize> {
-        poll_fn(|cx| self.poll_send_priv(cx, |conn| conn.send_fds(bytes, fds) ) ).await
+        self.io.async_io(Interest::WRITABLE, |conn| conn.send_fds(bytes, fds) ).await
     }
     /// Receives a packet and associated file descriptors.
     pub async fn recv_fds(&mut self,  byte_buffer: &mut[u8],  fd_buffer: &mut[RawFd])
     -> io::Result<(usize, bool, usize)> {
-        poll_fn(|cx| self.poll_recv_priv(cx, |conn| conn.recv_fds(byte_buffer, fd_buffer) ) ).await
-    }
-
-    pub(crate) fn poll_send_priv
-    <O, S: Fn(&nonblocking::UnixSeqpacketConn)->Result<O,io::Error>>
-    (&self,  cx: &mut Context<'_>,  send_op: S) -> Poll<Result<O, io::Error>> {
-        let mut ready = ready!(self.io.poll_write_ready(cx))?;
-        match send_op(self.io.get_ref()) {
-            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                ready.clear_ready_matching(Ready::WRITABLE);
-                Poll::Pending
-            }
-            result => {
-                ready.retain_ready();
-                Poll::Ready(result)
-            }
-        }
-    }
-
-    pub(crate) fn poll_recv_priv
-    <O, R: FnMut(&nonblocking::UnixSeqpacketConn)->Result<O,io::Error>>
-    (&self,  cx: &mut Context<'_>,  mut recv_op: R) -> Poll<Result<O, io::Error>> {
-        let mut ready = ready!(self.io.poll_read_ready(cx))?;
-        match recv_op(self.io.get_ref()) {
-            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                ready.clear_ready_matching(Ready::READABLE);
-                Poll::Pending
-            }
-            result => {
-                ready.retain_ready();
-                Poll::Ready(result)
-            }
-        }
+        self.io.async_io(Interest::READABLE, |conn| conn.recv_fds(byte_buffer, fd_buffer) ).await
     }
 }
 

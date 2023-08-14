@@ -18,15 +18,11 @@ libc = "0.2.90" # peer credentials for DragonFly BSD and NetBSD, SO_PEERSEC on a
 # enabling this feature implements the extension traits for mio 0.8's unix socket types
 # and Source for this crate's non-blocking seqpacket types.
 mio_08 = { package = "mio", version = "0.8", features = ["os-ext", "net"], optional = true }
-futures = { version = "0.3", optional=true }
 # .28 for AsyncFd.async_io() helper
-tokio_crate = { package="tokio", version = "1.28", features = ["net"], optional=true }
+tokio = { version = "1.28", features = ["net"], optional=true }
 
 [target."cfg(unix)".dev-dependencies]
-tokio_crate = { package="tokio", version = "1.28", features = ["macros", "rt"] }
-
-[features]
-tokio = ["futures", "mio_08", "tokio_crate"]
+tokio = { version = "1.28", features = ["macros", "rt"] }
 
 [package.metadata.docs.rs]
 features = ["mio_08", "tokio"]

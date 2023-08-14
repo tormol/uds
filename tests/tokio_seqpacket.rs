@@ -7,7 +7,7 @@ use std::os::unix::net::UnixStream;
 
 use libc::{getpid, geteuid, getegid};
 
-use tokio_crate as tokio;
+use tokio;
 
 use uds::tokio::{UnixSeqpacketConn, UnixSeqpacketListener};
 use uds::{nonblocking, UnixSocketAddr};

@@ -261,40 +261,12 @@ impl UnixSeqpacketListener {
 
     /// Accepts a new incoming connection to this listener.
     pub async fn accept(&mut self) -> io::Result<(UnixSeqpacketConn, UnixSocketAddr)> {
-        poll_fn(|cx| self.poll_accept(cx)).await
-    }
-
-    pub(crate) fn poll_accept(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<io::Result<(UnixSeqpacketConn, UnixSocketAddr)>> {
-        match self.poll_accept_nonblocking(cx) {
-            Poll::Ready(Ok((io, addr))) => {
-                match UnixSeqpacketConn::from_nonblocking(io) {
-                    Ok(io) => Poll::Ready(Ok((io, addr))),
-                    Err(e) => Poll::Ready(Err(e)),
-                }
-            }
-            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
-            Poll::Pending => Poll::Pending,
-        }
-    }
-
-    fn poll_accept_nonblocking(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<io::Result<(nonblocking::UnixSeqpacketConn, UnixSocketAddr)>> {
-        let mut ready = ready!(self.io.poll_read_ready(cx))?;
-        match self.io.get_ref().accept_unix_addr() {
-            Err(ref err) if err.kind() == ErrorKind::WouldBlock => {
-                ready.clear_ready_matching(Ready::READABLE);
-                Poll::Pending
-            }
-            result => {
-                ready.retain_ready();
-                Poll::Ready(result)
-            }
-        }
+        let (conn, addr) = self.io.async_io(
+                Interest::READABLE,
+                |inner| inner.accept_unix_addr()
+        ).await?;
+        let conn = UnixSeqpacketConn::from_nonblocking(conn)?;
+        Ok((conn, addr))
     }
 
     /// Returns the address the socket is listening on.

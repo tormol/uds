@@ -50,7 +50,6 @@ task:
     - cargo check --features mio-uds
     - cargo check --features mio_07
     - cargo check --features mio_08
-    - cargo check --features tokio
   test_script:
     - cargo test --features "mio mio-uds mio_07" --no-fail-fast
   before_cache_script:
@@ -77,12 +76,10 @@ task:
     - # no version of mio-uds compiles
     - cargo build -Z minimal-versions --features mio_07
     - cargo build -Z minimal-versions --features mio_08
-    - cargo build -Z minimal-versions --features tokio
   test_script:
     - cargo test -Z minimal-versions --features mio --no-fail-fast -- --test-threads=1
     - cargo test -Z minimal-versions --features mio_07 --no-fail-fast -- --test-threads=1
     - cargo test -Z minimal-versions --features mio_08 --no-fail-fast -- --test-threads=1
-    - cargo test -Z minimal-versions --features tokio --no-fail-fast -- --test-threads=1
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 

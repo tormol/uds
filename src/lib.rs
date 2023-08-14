@@ -71,8 +71,6 @@ mod helpers;
 mod ancillary;
 mod traits;
 mod seqpacket;
-#[cfg(feature="tokio")]
-pub mod tokio;
 
 pub use addr::{UnixSocketAddr, UnixSocketAddrRef, AddrName};
 pub use traits::{UnixListenerExt, UnixStreamExt, UnixDatagramExt};

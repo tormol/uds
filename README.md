@@ -58,7 +58,6 @@ Also, some OSes might return the original file descriptor without cloning it if 
 | **fd-passing** | Yes | Yes | Yes | Yes | Yes | Yes | No |
 | **abstract addresses** | Yes | N/A | N/A | N/A | N/A | N/A | N/A |
 | **mio (0.6 & 0.7 & 0.8 & uds)** | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| **tokio** | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | **Tested?** | Locally + CI | CI | CI | CI | Manually<sup>\*</sup> | Manually<sup>\*</sup> | Manually<sup>\*</sup> |
 
 <sup>\*</sup>: Not tested since v0.2.6. (but (cross)checked on CI.)
@@ -100,18 +99,6 @@ uds = {version="0.3.0", features=["mio_07"]}
 ```toml
 [dependencies]
 uds = {version="0.3.0", features=["mio_08"]}
-```
-
-## tokio integration
-
-Futures-aware seqpacket types can optionally be used with [tokio](https://github.com/tokio-rs/tokio)
-(version 0.2):
-
-To enable it, add this to Cargo.toml:
-
-```toml
-[dependencies]
-uds = {version="0.3.0", features=["tokio"]}
 ```
 
 ## Minimum Rust version

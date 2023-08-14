@@ -46,12 +46,9 @@ task:
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
   check_script:
     - cargo check
-    - cargo check --features mio
-    - cargo check --features mio-uds
-    - cargo check --features mio_07
     - cargo check --features mio_08
   test_script:
-    - cargo test --features "mio mio-uds mio_07" --no-fail-fast
+    - cargo test --features "mio_08" --no-fail-fast
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -72,13 +69,8 @@ task:
     - rustc --version
   build_script:
     - cargo check -Z minimal-versions
-    - cargo build -Z minimal-versions --features mio
-    - # no version of mio-uds compiles
-    - cargo build -Z minimal-versions --features mio_07
     - cargo build -Z minimal-versions --features mio_08
   test_script:
-    - cargo test -Z minimal-versions --features mio --no-fail-fast -- --test-threads=1
-    - cargo test -Z minimal-versions --features mio_07 --no-fail-fast -- --test-threads=1
     - cargo test -Z minimal-versions --features mio_08 --no-fail-fast -- --test-threads=1
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index

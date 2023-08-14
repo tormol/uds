@@ -70,38 +70,6 @@ impl UnixStreamExt for UnixStream {
     }
 }
 
-#[cfg(feature="mio-uds")]
-impl UnixStreamExt for mio_uds::UnixStream {
-    fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_STREAM, true)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, addr)?;
-        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
-    }
-    fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
-    -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_STREAM, true)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, from)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, to)?;
-        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
-    }
-}
-
-#[cfg(feature = "mio_07")]
-impl UnixStreamExt for mio_07::net::UnixStream {
-    fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_STREAM, true)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, addr)?;
-        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
-    }
-    fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
-    -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_STREAM, true)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, from)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, to)?;
-        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
-    }
-}
-
 #[cfg(feature = "mio_08")]
 impl UnixStreamExt for mio_08::net::UnixStream {
     fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
@@ -148,42 +116,6 @@ impl UnixListenerExt for UnixListener {
 
     fn accept_unix_addr(&self) -> Result<(Self::Conn, UnixSocketAddr), io::Error> {
         let (socket, addr) = Socket::accept_from(self.as_raw_fd(), false)?;
-        let conn = unsafe { Self::Conn::from_raw_fd(socket.into_raw_fd()) };
-        Ok((conn, addr))
-    }
-}
-
-#[cfg(feature="mio-uds")]
-impl UnixListenerExt for mio_uds::UnixListener {
-    type Conn = mio_uds::UnixStream;
-
-    fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_STREAM, true)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, on)?;
-        socket.start_listening()?;
-        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
-    }
-
-    fn accept_unix_addr(&self) -> Result<(Self::Conn, UnixSocketAddr), io::Error> {
-        let (socket, addr) = Socket::accept_from(self.as_raw_fd(), true)?;
-        let conn = unsafe { Self::Conn::from_raw_fd(socket.into_raw_fd()) };
-        Ok((conn, addr))
-    }
-}
-
-#[cfg(feature = "mio_07")]
-impl UnixListenerExt for mio_07::net::UnixListener {
-    type Conn = mio_07::net::UnixStream;
-
-    fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_STREAM, true)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, on)?;
-        socket.start_listening()?;
-        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
-    }
-
-    fn accept_unix_addr(&self) -> Result<(Self::Conn, UnixSocketAddr), io::Error> {
-        let (socket, addr) = Socket::accept_from(self.as_raw_fd(), true)?;
         let conn = unsafe { Self::Conn::from_raw_fd(socket.into_raw_fd()) };
         Ok((conn, addr))
     }
@@ -371,9 +303,9 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     ///
     /// Read content into a separate buffer than header:
     ///
-    #[cfg_attr(feature="mio_07", doc="```")]
-    #[cfg_attr(not(feature="mio_07"), doc="```no_compile")]
-    /// use mio_07::net::UnixDatagram;
+    #[cfg_attr(feature="mio_08", doc="```")]
+    #[cfg_attr(not(feature="mio_08"), doc="```no_compile")]
+    /// use mio_08::net::UnixDatagram;
     /// use uds::UnixDatagramExt;
     /// use std::io::IoSliceMut;
     ///
@@ -561,32 +493,6 @@ impl UnixDatagramExt for UnixDatagram {
                 Err(e) => Err(e),
             }
             Err(e) => Err(e)
-        }
-    }
-}
-
-#[cfg(feature="mio-uds")]
-impl UnixDatagramExt for mio_uds::UnixDatagram {
-    fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
-        match mio_uds::UnixDatagram::unbound() {
-            Ok(socket) => match socket.bind_to_unix_addr(addr) {
-                Ok(()) => Ok(socket),
-                Err(e) => Err(e),
-            }
-            Err(e) => Err(e)
-        }
-    }
-}
-
-#[cfg(feature = "mio_07")]
-impl UnixDatagramExt for mio_07::net::UnixDatagram {
-    fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
-        match mio_07::net::UnixDatagram::unbound() {
-            Ok(socket) => match socket.bind_to_unix_addr(addr) {
-                Ok(()) => Ok(socket),
-                Err(e) => Err(e),
-            }
-            Err(e) => Err(e),
         }
     }
 }

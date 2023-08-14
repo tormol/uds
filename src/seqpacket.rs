@@ -7,12 +7,6 @@ use std::time::Duration;
 
 use libc::{SOCK_SEQPACKET, MSG_EOR, MSG_PEEK, c_void, close, send, recv};
 
-#[cfg(feature = "mio")]
-use mio::{event::Evented, unix::EventedFd, Poll, PollOpt, Ready, Token as Token_06};
-
-#[cfg(feature = "mio_07")]
-use mio_07::{event::Source, unix::SourceFd, Interest, Registry, Token as Token_07};
-
 #[cfg(feature = "mio_08")]
 use mio_08::{event::Source as Source_08, unix::SourceFd as SourceFd_08, Interest as Interest_08, Registry as Registry_08, Token as Token_08};
 
@@ -49,51 +43,6 @@ macro_rules! impl_rawfd_traits {($type:tt) => {
 
 /// Implements `mio::Evented` and `mio::Source` for a fd-wrapping type.
 macro_rules! impl_mio_if_enabled {($type:tt) => {
-    #[cfg(feature="mio")]
-    impl Evented for $type {
-        fn register(&self,  poll: &Poll,  token: Token_06,  interest: Ready,  opts: PollOpt)
-        -> Result<(), io::Error> {
-            EventedFd(&self.fd).register(poll, token, interest, opts)
-        }
-        fn reregister(&self,  poll: &Poll,  token: Token_06,  interest: Ready,  opts: PollOpt)
-        -> Result<(), io::Error> {
-            EventedFd(&self.fd).reregister(poll, token, interest, opts)
-        }
-        fn deregister(&self,  poll: &Poll) -> Result<(), io::Error> {
-            EventedFd(&self.fd).deregister(poll)
-        }
-    }
-
-    #[cfg(feature = "mio_07")]
-    impl Source for $type {
-        fn register(&mut self,  registry: &Registry,  token: Token_07,  interest: Interest)
-        -> Result<(), io::Error> {
-            SourceFd(&self.fd).register(registry, token, interest)
-        }
-        fn reregister(&mut self,  registry: &Registry,  token: Token_07,  interest: Interest)
-        -> Result<(), io::Error> {
-            SourceFd(&self.fd).reregister(registry, token, interest)
-        }
-        fn deregister(&mut self,  registry: &Registry) -> Result<(), io::Error> {
-            SourceFd(&self.fd).deregister(registry)
-        }
-    }
-
-    #[cfg(feature = "mio_07")]
-    impl<'a> Source for &'a $type {
-        fn register(&mut self,  registry: &Registry,  token: Token_07,  interest: Interest)
-        -> Result<(), io::Error> {
-            SourceFd(&self.fd).register(registry, token, interest)
-        }
-        fn reregister(&mut self,  registry: &Registry,  token: Token_07,  interest: Interest)
-        -> Result<(), io::Error> {
-            SourceFd(&self.fd).reregister(registry, token, interest)
-        }
-        fn deregister(&mut self,  registry: &Registry) -> Result<(), io::Error> {
-            SourceFd(&self.fd).deregister(registry)
-        }
-    }
-
     #[cfg(feature = "mio_08")]
     impl Source_08 for $type {
         fn register(&mut self,  registry: &Registry_08,  token: Token_08,  interest: Interest_08)
@@ -741,20 +690,6 @@ impl UnixSeqpacketListener {
 ///
 /// This type can be used with mio if one of the mio features are enabled:
 ///
-/// For mio version 0.6:
-///
-/// ```toml
-/// uds = { version = "x.y", features=["mio"] }
-/// ```
-///
-/// For mio version 0.7:
-///
-/// ```toml
-/// uds = { version = "x.y", features=["mio_07"] }
-/// ```
-///
-/// For mio version 0.8:
-///
 /// ```toml
 /// uds = { version = "x.y", features=["mio_08"] }
 /// ```
@@ -782,21 +717,22 @@ impl UnixSeqpacketListener {
 /// }
 /// ```
 ///
-/// Registering with mio (v0.6):
+/// Registering with mio (v0.8):
 ///
-#[cfg_attr(all(feature="mio", not(target_vendor="apple")), doc="```")]
-#[cfg_attr(all(feature="mio", target_vendor="apple"), doc="```no_run")]
-#[cfg_attr(not(feature="mio"), doc="```no_compile")]
+#[cfg_attr(all(feature="mio_08", not(target_vendor="apple")), doc="```")]
+#[cfg_attr(all(feature="mio_08", target_vendor="apple"), doc="```no_run")]
+#[cfg_attr(not(feature="mio_08"), doc="```no_compile")]
 /// use uds::nonblocking::UnixSeqpacketConn;
-/// use mio::{Poll, Token, Ready, PollOpt, Events};
+/// use mio_08::{Poll, Events, Token, Interest};
 /// use std::io::ErrorKind;
 ///
-/// let (a, b) = UnixSeqpacketConn::pair()
+/// let (mut a, b) = UnixSeqpacketConn::pair()
 ///     .expect("create nonblocking seqpacket pair");
 ///
-/// let poll = Poll::new().expect("create mio poll");
+/// let mut poll = Poll::new().expect("create mio poll");
 /// let mut events = Events::with_capacity(10);
-/// poll.register(&a, Token(1), Ready::all(),  PollOpt::edge())
+/// poll.registry()
+///     .register(&mut a, Token(1), Interest::READABLE)
 ///     .expect("register unix seqpacket connection with mio");
 ///
 /// b.send(b"this is it").expect("send seqpacket");
@@ -1027,10 +963,10 @@ impl NonblockingUnixSeqpacketConn {
 /// returns non-blocking [connection sockets](struct.NonblockingUnixSeqpacketConn.html)
 /// and doesn't block if no client `connect()`ions are pending.
 ///
-/// This type can be used with mio if the `mio` feature is enabled:
+/// This type can be used with mio if the `mio_08` feature is enabled:
 ///
 /// ```toml
-/// uds = { version = "x.y", features=["mio"] }
+/// uds = { version = "x.y", features=["mio_08"] }
 /// ```
 ///
 /// # Examples
@@ -1055,13 +991,13 @@ impl NonblockingUnixSeqpacketConn {
 /// # std::fs::remove_file("nonblocking_seqpacket_listener.socket").unwrap();
 /// ```
 ///
-/// Registering with mio v0.7:
+/// Registering with mio v0.8:
 ///
-#[cfg_attr(all(feature="mio_07", not(target_vendor="apple")), doc="```")]
-#[cfg_attr(all(feature="mio_07", target_vendor="apple"), doc="```no_run")]
-#[cfg_attr(not(feature="mio_07"), doc="```no_compile")]
+#[cfg_attr(all(feature="mio_08", not(target_vendor="apple")), doc="```")]
+#[cfg_attr(all(feature="mio_08", target_vendor="apple"), doc="```no_run")]
+#[cfg_attr(not(feature="mio_08"), doc="```no_compile")]
 /// use uds::nonblocking::{UnixSeqpacketListener, UnixSeqpacketConn};
-/// use mio_07::{Poll, Events, Token, Interest};
+/// use mio_08::{Poll, Events, Token, Interest};
 /// use std::io::ErrorKind;
 ///
 /// # let _ = std::fs::remove_file("seqpacket.sock");

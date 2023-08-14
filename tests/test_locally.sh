@@ -43,9 +43,6 @@ done
 echo "checking with minimum version dependencies"
 rm Cargo.lock
 cargo +nightly check $CAFLAGS -Z minimal-versions
-cargo +nightly check $CAFLAGS -Z minimal-versions --features mio
-# no version of mio-uds compiles with minimal versions
-cargo +nightly check $CAFLAGS -Z minimal-versions --features mio_07
 cargo +nightly check $CAFLAGS -Z minimal-versions --features mio_08
 rm Cargo.lock
 echo

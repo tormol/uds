@@ -4,7 +4,7 @@ A unix domain sockets Rust library that supports abstract addresses, fd-passing,
 
 [![crates.io page](https://img.shields.io/crates/v/uds.svg)](https://crates.io/crates/uds) ![License: Apache v2 / MIT](https://img.shields.io/crates/l/uds.svg) [![Documentation](https://docs.rs/uds/badge.svg)](https://docs.rs/uds/) [![cirrus-ci build status](https://api.cirrus-ci.com/github/tormol/uds.svg)](https://cirrus-ci.com/github/tormol/uds) [![sourcehut build status](https://builds.sr.ht/~torbmol/uds.svg)](https://builds.sr.ht/~sircmpwn/builds.sr.ht?)
 
-When possible, features are implemented via extension traits for [`std::os::unix::net`](https://doc.rust-lang.org/std/os/unix/net/index.html) types (and optionally [mio-uds](https://crates.io/crates/mio-uds) types) instead of exposing new structs.
+When possible, features are implemented via extension traits for [`std::os::unix::net`](https://doc.rust-lang.org/std/os/unix/net/index.html) types (and optionally [mio](https://crates.io/crates/mio)'s uds types) instead of exposing new structs.
 The only new socket structs this crate exposes are those for seqpacket sockets.
 
 Ancillary credentials and timestamps are not yet supported.
@@ -45,8 +45,8 @@ if creds.euid() == 0 {
 
 ## Portability
 
-macOS doesn't support SOCK_SEQPACKET sockets, and abstract socket addresses is Linux-only, so if you don't want to bother with supporting non-portable features you are probably better off only using what std or mio-uds provides.
-If you're writing a datagram server though, using std or mio-uds means you can't respond to abstract adresses, forcing clients to use path addresses and deal with cleaning up the socket file after themselves.
+macOS doesn't support SOCK_SEQPACKET sockets, and abstract socket addresses is Linux-only, so if you don't want to bother with supporting non-portable features you are probably better off only using what std or mio provides.
+If you're writing a datagram server though, using std or mio means you can't respond to abstract adresses, forcing clients to use path addresses and deal with cleaning up the socket file after themselves.
 
 Even when all operating systems you care about supports something, they might behave differently:  
 On Linux file descriptors are cloned when they are sent, but macOS and the BSDs first clones them when they are received. This means that if a FD is closed before the peer receives it you have a problem.  
@@ -57,7 +57,7 @@ Also, some OSes might return the original file descriptor without cloning it if 
 | **Seqpacket** | Yes | N/A | Yes | Yes | Yes | Yes | N/A |
 | **fd-passing** | Yes | Yes | Yes | Yes | Yes | Yes | No |
 | **abstract addresses** | Yes | N/A | N/A | N/A | N/A | N/A | N/A |
-| **mio (0.6 & 0.7 & 0.8 & uds)** | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| **mio 0.8** | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | **Tested?** | Locally + CI | CI | CI | CI | Manually<sup>\*</sup> | Manually<sup>\*</sup> | Manually<sup>\*</sup> |
 
 <sup>\*</sup>: Not tested since v0.2.6. (but (cross)checked on CI.)
@@ -71,30 +71,9 @@ Also, some OSes might return the original file descriptor without cloning it if 
 ## mio integration
 
 The non-blocking seqpacket types can optionally be used with [mio](https://github.com/tokio-rs/mio)
-(version 0.6):
+(version 0.8):
 
 To enable it, add this to Cargo.toml:
-
-```toml
-[dependencies]
-uds = {version="0.3.0", features=["mio"]}
-```
-
-The extension traits can also be implement for [mio-uds](https://github.com/alexcrichton/mio-uds) types:
-
-To enable them, add this to Cargo.toml:
-
-```toml
-[dependencies]
-uds = {version="0.3.0", features=["mio-uds"]}
-```
-
-Mio 0.7 and 0.8 are also supported:
-
-```toml
-[dependencies]
-uds = {version="0.3.0", features=["mio_07"]}
-```
 
 ```toml
 [dependencies]

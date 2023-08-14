@@ -11,8 +11,8 @@
 //!
 //! File-descriptor passing and abstract socket support
 //! for stream and datagram sockets is provided via extension traits for
-//! existing types in `std::os::unix::net` and from [mio_uds](https://github.com/alexcrichton/mio_uds)
-//! (the latter is opt-in and must be enabled with `features=["mio_uds"]` in Cargo.toml).
+//! existing types in `std::os::unix::net` and from [mio](https://github.com/tokio-rs/mio)
+//! (the latter is opt-in and must be enabled with `features=["mio_08"]` in Cargo.toml).
 //!
 //! See README for status of operating system support and other general info.
 
@@ -34,12 +34,6 @@
 )]
 
 extern crate libc;
-#[cfg(feature="mio-uds")]
-extern crate mio_uds;
-#[cfg(feature="mio")]
-extern crate mio;
-#[cfg(feature="mio_07")]
-extern crate mio_07;
 #[cfg(feature="mio_08")]
 extern crate mio_08;
 

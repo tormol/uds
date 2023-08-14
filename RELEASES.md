@@ -1,3 +1,14 @@
+Version 0.3.0 (2023-08-14)
+==========================
+* Don't return truncatedness from `UnixSeqpacketConn` and `tokio::UnixSeqpacketConn`s `recv()` and `peek()` methods.
+  For consistency with the return types of similar methods on stream and datagram types.  
+  Use `recv_vectored()` with empty fd buffer if you want to know whether the packet was truncated.
+* Remove default impl of `UnixDatagramExt::bind_unix_addr()`, and remove `Sized` bound on the trait.
+* Stop quoting Unnamed in `UnixSocketaddr`'s `Debug` impl.
+* Add mio_08 feature, for using this library with mio 0.8.
+* Require Rust 1.63.
+  (Mainly to make CI pass, so older versions will likely work.)
+
 Version 0.2.7 (2023-08-14)
 ==========================
 * Fix potentialy unaligned accesses and slices in release mode. (Thanks @domenukk!)  

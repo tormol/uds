@@ -78,7 +78,7 @@ To enable it, add this to Cargo.toml:
 
 ```toml
 [dependencies]
-uds = {version="0.2.7", features=["mio"]}
+uds = {version="0.3.0", features=["mio"]}
 ```
 
 The extension traits can also be implement for [mio-uds](https://github.com/alexcrichton/mio-uds) types:
@@ -87,19 +87,19 @@ To enable them, add this to Cargo.toml:
 
 ```toml
 [dependencies]
-uds = {version="0.2.7", features=["mio-uds"]}
+uds = {version="0.3.0", features=["mio-uds"]}
 ```
 
 Mio 0.7 and 0.8 are also supported:
 
 ```toml
 [dependencies]
-uds = {version="0.2.7", features=["mio_07"]}
+uds = {version="0.3.0", features=["mio_07"]}
 ```
 
 ```toml
 [dependencies]
-uds = {version="0.2.6", features=["mio_08"]}
+uds = {version="0.3.0", features=["mio_08"]}
 ```
 
 ## tokio integration
@@ -111,7 +111,7 @@ To enable it, add this to Cargo.toml:
 
 ```toml
 [dependencies]
-uds = {version="0.2.7", features=["tokio"]}
+uds = {version="0.3.0", features=["tokio"]}
 ```
 
 ## Minimum Rust version

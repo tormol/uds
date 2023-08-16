@@ -9,7 +9,7 @@ use crate::helpers::*;
 use crate::ancillary::*;
 use crate::credentials::*;
 
-/// Extension trait for `std::os::unix::net::UnixDatagram` and nonblocking equivalents.
+/// Extension trait for `std::os::unix::net::UnixStream` and nonblocking equivalents.
 pub trait UnixStreamExt: AsRawFd + FromRawFd {
     /// Get the address of this socket, as a type that fully supports abstract addresses.
     fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {

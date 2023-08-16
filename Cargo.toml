@@ -22,7 +22,8 @@ mio_08 = { package = "mio", version = "0.8", features = ["os-ext", "net"], optio
 tokio = { version = "1.28", features = ["net"], optional=true }
 
 [target."cfg(unix)".dev-dependencies]
-tokio = { version = "1.28", features = ["macros", "rt"] }
+# rt-multi-thread is required for #[tokio::main] in doctests
+tokio = { version = "1.28", features = ["macros", "rt", 'rt-multi-thread'] }
 
 [package.metadata.docs.rs]
 features = ["mio_08", "tokio"]

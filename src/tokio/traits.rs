@@ -11,11 +11,19 @@ use crate::addr::UnixSocketAddr;
 use crate::helpers::*;
 use crate::credentials::*;
 
+mod private {
+    use super::*;
+    pub trait Sealed {}
+    impl Sealed for UnixStream {}
+    impl Sealed for UnixListener {}
+    impl Sealed for UnixDatagram {}
+}
+
 /// Extension trait for `tokio::net::UnixStream`.
 ///
 /// Doesn't have `send_fds()` or `recv_fds()`,
 /// because they would be `async` which isn't supported in traits yet.
-pub trait UnixStreamExt: AsRawFd {
+pub trait UnixStreamExt: AsRawFd + private::Sealed {
     /// Get the address of this socket, as a type that fully supports abstract addresses.
     fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
         get_unix_addr(self.as_raw_fd(), GetAddr::LOCAL)
@@ -69,7 +77,7 @@ impl UnixStreamExt for UnixStream {
 ///
 /// Lacks `accept_unix_addr()` which is the most important part,
 /// because it would be `async` which isn't supported in traits yet.
-pub trait UnixListenerExt: AsRawFd {
+pub trait UnixListenerExt: AsRawFd + private::Sealed {
     type Conn;
 
     /// Creates a socket bound to a `UnixSocketAddr` and starts listening on it.
@@ -95,7 +103,7 @@ impl UnixListenerExt for UnixListener {
 /// Extension trait for `tokio::net::UnixDatagram`.
 ///
 /// Only has the parts that don't require `async`, which isn't supported in traits yet.
-pub trait UnixDatagramExt: AsRawFd {
+pub trait UnixDatagramExt: AsRawFd + private::Sealed {
     /// Create a socket bound to a path or abstract name.
     ///
     /// # Examples

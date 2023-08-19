@@ -72,7 +72,7 @@ Also, some OSes might return the original file descriptor without cloning it if 
 ## mio integration
 
 The `mio_08` feature makes the seqpacket types usable with [mio](https://github.com/tokio-rs/mio) version 0.8 (by implementing its `Source` trait for them),
-and implements this crates extension traits for the unix socket types in []`mio::net`](https://docs.rs/mio/latest/mio/net/index.html).
+and implements this crates extension traits for the unix socket types in [`mio::net`](https://docs.rs/mio/latest/mio/net/index.html).
 
 To enable it, add this to Cargo.toml:
 

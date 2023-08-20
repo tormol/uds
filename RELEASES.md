@@ -1,3 +1,10 @@
+Version 0.4.1 (2023-08-20)
+==========================
+* Tokio support is back, now for tokio 1.\*.
+* There's now also tokio versions of the extensions traits:
+  They don't have any methods that would be async, such as `send_fds()` or `receive_fds()`,
+  but allow binding and connecting to `uds::UnixSocketAddr`s, and getting information about the peer.
+
 Version 0.4.0 (2023-08-14)
 ==========================
 * Remove tokio support.

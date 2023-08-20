@@ -34,7 +34,7 @@ task:
   container:
     image: rust:1.63.0
     cpu: 1
-    memory: 2536MB # doc-tests somehow OOMs with 1 GB here
+    memory: 3072MB # doc-tests somehow OOMs with 2,5 GB here
   allow_failures: false
   env:
     RUST_BACKTRACE: 1
@@ -49,7 +49,7 @@ task:
     - cargo check --features mio_08
     - cargo check --features tokio
   test_script:
-    - cargo test --all-features --no-fail-fast
+    - cargo test --all-features --no-fail-fast -- --test-threads=1 --nocapture
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 

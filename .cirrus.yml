@@ -34,7 +34,7 @@ task:
   container:
     image: rust:1.63.0
     cpu: 1
-    memory: 3072MB # doc-tests somehow OOMs with 2,5 GB here
+    memory: 512M
   allow_failures: false
   env:
     RUST_BACKTRACE: 1
@@ -58,7 +58,7 @@ task:
   container:
     image: rustlang/rust:nightly
     cpu: 1
-    memory: 2048M # --features tokio is getting SIGKILL so try and raise memory?
+    memory: 512M
   allow_failures: false
   env:
     RUST_BACKTRACE: 1

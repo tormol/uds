@@ -226,7 +226,7 @@ impl AncillaryBuf {
                 Self::with_capacity(0)
             } else if num_fds <= max_fds {
                 let payload_bytes = num_fds * mem::size_of::<RawFd>();
-                Self::with_capacity(CMSG_SPACE(payload_bytes as u32) as usize)
+                Self::with_capacity(CMSG_SPACE(payload_bytes as c_uint) as usize)
             } else {
                 panic!("too many file descriptors for ancillary buffer length")
             }

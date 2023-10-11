@@ -103,6 +103,7 @@ pub fn send_ancillary(
             }
         }
         // stack buffer which should be big enough for most scenarios
+        #[repr(C)]
         struct AncillaryFixedBuf(/*for alignment*/[cmsghdr; 0], [u8; 256]);
         let mut ancillary_buf = AncillaryFixedBuf([], [0; 256]);
 

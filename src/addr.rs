@@ -673,15 +673,16 @@ impl UnixSocketAddr {
             Err(io::Error::new(ErrorKind::InvalidInput, "addr is NULL"))
         } else if len < path_offset() {
             Err(io::Error::new(ErrorKind::InvalidInput, "address length is too low"))
-        } else if len > path_offset() + mem::size_of_val(&copy.addr.sun_path) as socklen_t {
+        } else if len > mem::size_of::<sockaddr_un>() as socklen_t {
             Err(io::Error::new(ErrorKind::InvalidInput, TOO_LONG_DESC))
         } else if (&*addr).sa_family != AF_UNIX as sa_family_t {
             Err(io::Error::new(ErrorKind::InvalidData, "not an unix socket address"))
         } else {
             let addr = addr as *const sockaddr_un;
             let sun_path_ptr = (&*addr).sun_path.as_ptr();
-            let sun_path = slice::from_raw_parts(sun_path_ptr, len as usize);
-            copy.addr.sun_path.copy_from_slice(sun_path);
+            let path_len = (len - path_offset()) as usize;
+            let sun_path = slice::from_raw_parts(sun_path_ptr, path_len);
+            copy.addr.sun_path[..path_len].copy_from_slice(sun_path);
             copy.len = len;
             Ok(copy)
         }

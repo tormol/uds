@@ -34,7 +34,7 @@ task:
   container:
     image: rust:1.63.0
     cpu: 1
-    memory: 512M
+    memory: 1G # OOMs with 512MB
   allow_failures: false
   env:
     RUST_BACKTRACE: 1
@@ -58,7 +58,7 @@ task:
   container:
     image: rustlang/rust:nightly
     cpu: 1
-    memory: 512M
+    memory: 1G
   allow_failures: false
   env:
     RUST_BACKTRACE: 1

@@ -242,7 +242,7 @@ impl UnixSocketAddr {
         let mut addr: sockaddr_un = unsafe { mem::zeroed() };
         addr.sun_family = AF_UNIX as sa_family_t;
         UnixSocketAddr {
-            len: mem::size_of::<sa_family_t>() as socklen_t,
+            len: path_offset(),
             addr,
         }
     }
@@ -672,7 +672,7 @@ impl UnixSocketAddr {
         } else if addr.is_null() {
             Err(io::Error::new(ErrorKind::InvalidInput, "addr is NULL"))
         } else if len < path_offset() {
-            Err(io::Error::new(ErrorKind::InvalidInput, "address length is too low"))
+            Err(io::Error::new(ErrorKind::InvalidInput, "address length is too short"))
         } else if len > mem::size_of::<sockaddr_un>() as socklen_t {
             Err(io::Error::new(ErrorKind::InvalidInput, TOO_LONG_DESC))
         } else if (&*addr).sa_family != AF_UNIX as sa_family_t {

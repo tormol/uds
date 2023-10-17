@@ -339,3 +339,87 @@ fn datagram_peek_vectored() {
     std::fs::remove_file("datagram_server.sock").unwrap();
     let _ = std::fs::remove_file("datagram_client.sock");
 }
+
+#[test]
+fn from_raw_path() {
+    let path_addr = UnixSocketAddr::from_path("a/path.sock").unwrap();
+    let a = unsafe {
+        let (raw_addr, raw_len) = path_addr.as_raw();
+        UnixSocketAddr::from_raw(raw_addr as *const sockaddr_un as *const sockaddr, raw_len)
+    }.expect("from_raw() accepts from_path()");
+    assert_eq!(a, path_addr);
+    assert!(a.is_path());
+}
+
+#[test]
+fn from_raw_max_len_path() {
+    let path = "R".repeat(UnixSocketAddr::max_path_len());
+    let path_addr = UnixSocketAddr::from_path(path.as_str()).unwrap();
+    let a = unsafe {
+        let (raw_addr, raw_len) = path_addr.as_raw();
+        UnixSocketAddr::from_raw(raw_addr as *const sockaddr_un as *const sockaddr, raw_len)
+    }.expect("from_path() is valid");
+    assert_eq!(a, path_addr);
+    assert!(a.is_path());
+}
+
+#[test]
+fn from_raw_too_long_path() {
+    #[repr(C)]
+    struct TooLong {
+        fam: libc::sa_family_t,
+        path: [u8; 300],
+    }
+    let path_addr = TooLong {
+        fam: libc::AF_UNIX as libc::sa_family_t,
+        path: [b'o'; 300],
+    };
+    unsafe {
+        let raw_addr = &path_addr as *const TooLong as *const sockaddr;
+        UnixSocketAddr::from_raw(raw_addr, size_of::<TooLong>() as _)
+    }.expect_err("too long");
+}
+
+#[test]
+fn from_raw_empty() {
+    let unspecified_addr = UnixSocketAddr::new_unspecified();
+    let (raw_addr, raw_len) = unspecified_addr.as_raw();
+    let a = unsafe {
+        UnixSocketAddr::from_raw(raw_addr as *const sockaddr_un as *const sockaddr, raw_len)
+    }.expect("from_raw() accepts new_unspecified()");
+    assert_eq!(a, unspecified_addr);
+    assert!(a.is_unnamed());
+
+    if !UnixSocketAddr::has_abstract_addresses() {
+        let a = unsafe {
+            UnixSocketAddr::from_raw(raw_addr as *const sockaddr_un as *const sockaddr, raw_len+10)
+        }.expect("from_raw() accepts extra NULs");
+        assert_eq!(a, unspecified_addr);
+        assert!(a.is_unnamed());
+    }
+}
+
+#[cfg(any(target_os="linux", target_os="android"))]
+#[test]
+fn from_raw_abstract() {
+    let abstract_addr = UnixSocketAddr::from_abstract(b"aa!").unwrap();
+    let a = unsafe {
+        let (raw_addr, raw_len) = abstract_addr.as_raw();
+        UnixSocketAddr::from_raw(raw_addr as *const sockaddr_un as *const sockaddr, raw_len)
+    }.expect("from_raw() accepts from_abstract()");
+    assert_eq!(a, abstract_addr);
+    assert!(a.is_abstract());
+
+    let max_abstract = "l".repeat(UnixSocketAddr::max_abstract_len());
+    let abstract_addr = UnixSocketAddr::from_abstract(max_abstract.as_bytes()).unwrap();
+    let (raw_addr, raw_len) = abstract_addr.as_raw();
+    let a = unsafe {
+        UnixSocketAddr::from_raw(raw_addr as *const sockaddr_un as *const sockaddr, raw_len)
+    }.expect("from_raw() accepts longest abstract");
+    assert_eq!(a, abstract_addr);
+    assert!(a.is_abstract());
+
+    unsafe {
+        UnixSocketAddr::from_raw(raw_addr as *const sockaddr_un as *const sockaddr, raw_len+1)
+    }.expect_err("from_raw() rejects too long abstract");
+}

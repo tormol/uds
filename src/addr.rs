@@ -707,11 +707,24 @@ impl UnixSocketAddr {
     /// Returns a general `sockaddr` reference to the address and its length.
     ///
     /// Useful for passing to `bind()`, `connect()`, `sendto()` or other FFI.
+    ///
+    /// Pathname addresses are not guaranteed to be NUL-terminated on most OSes:
+    /// Most paths will be NUL-terminated, but paths that just fit within `sockaddr_un.sun_len`
+    /// (iow their length is equal to `addr.sun_len[..].len()`) will not have one.  
+    /// Therefore do not call `SUN_LEN()` on unknown addresses.  
+    /// See [`max_path_len()`](#tymethod.max_path_len) for which OSes this affects.
     pub fn as_raw_general(&self) -> (&sockaddr, socklen_t) {
+        // SAFETY: sockaddr is a super-type of sockaddr_un.
         (unsafe { &*(&self.addr as *const sockaddr_un as *const sockaddr) }, self.len)
     }
 
     /// Returns a reference to the inner `struct sockaddr_un`, and length.
+    ///
+    /// Pathname addresses are not guaranteed to be NUL-terminated on most OSes:
+    /// Most paths will be NUL-terminated, but paths that just fit within `sockaddr_un.sun_len`
+    /// (iow their length is equal to `addr.sun_len[..].len()`) will not have one.  
+    /// Therefore do not call `SUN_LEN()` on unknown addresses.  
+    /// See [`max_path_len()`](#tymethod.max_path_len) for which OSes this affects.
     pub fn as_raw(&self) -> (&sockaddr_un, socklen_t) {
         (&self.addr, self.len)
     }
@@ -722,15 +735,28 @@ impl UnixSocketAddr {
     /// the length to the capacity,
     /// and consider using [`new_from_ffi()`](#method.new_from_ffi) instead.
     ///
+    /// Pathname addresses are not guaranteed to be NUL-terminated on most OSes:
+    /// Most paths will be NUL-terminated, but paths that just fit within `sockaddr_un.sun_len`
+    /// (iow their length is equal to `addr.sun_len[..].len()`) will not have one.  
+    /// Therefore do not call `SUN_LEN()` on unknown addresses.  
+    /// See [`max_path_len()`](#tymethod.max_path_len) for which OSes this affects.
+    ///
     /// # Safety
     ///
     /// Assigning a value > `sizeof(struct sockaddr_un)` to the `socklen_t`
     /// reference might lead to out-of-bounds reads later.
     pub unsafe fn as_raw_mut_general(&mut self) -> (&mut sockaddr, &mut socklen_t) {
+        // SAFETY: sockaddr is a super-type of sockaddr_un.
         (&mut*(&mut self.addr as *mut sockaddr_un as *mut sockaddr), &mut self.len)
     }
 
     /// Returns mutable references to the inner `struct sockaddr_un` and length.
+    ///
+    /// Pathname addresses are not guaranteed to be NUL-terminated on most OSes:
+    /// Most paths will be NUL-terminated, but paths that just fit within `sockaddr_un.sun_len`
+    /// (iow their length is equal to `addr.sun_len[..].len()`) will not have one.  
+    /// Therefore do not call `SUN_LEN()` on unknown addresses.  
+    /// See [`max_path_len()`](#tymethod.max_path_len) for which OSes this affects
     ///
     /// # Safety
     ///

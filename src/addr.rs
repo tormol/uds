@@ -557,7 +557,7 @@ impl UnixSocketAddr {
             Err(io::Error::new(ErrorKind::InvalidInput, TOO_LONG_DESC))
         }
     }
-    /// Returns a low-level but view of the address without using any libc types.
+    /// Returns a low-level view of the address without using any libc types.
     ///
     /// The returned slice points to the start of `sun_addr` of the contained
     /// `sockaddr_un`, and the length is the number of bytes of `sun_addr`
@@ -565,7 +565,7 @@ impl UnixSocketAddr {
     ///
     /// # Examples
     ///
-    /// A normal path-based address
+    /// A normal path-based address:
     ///
     /// ```
     /// # use std::path::Path;

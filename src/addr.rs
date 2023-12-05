@@ -249,11 +249,36 @@ impl UnixSocketAddr {
 
     /// Returns the maximum size of pathname addresses supported by `UnixSocketAddr`.
     ///
-    /// Is the size of the underlying `sun_path` field,
-    /// minus 1 if the OS is known to require a trailing NUL (`'\0'`) byte.
+    /// Is the size of the underlying `sun_path` field, minus 1 if the OS
+    /// is known to either require a trailing NUL (`'\0'`) byte,
+    /// or supports longer paths that go past the end of `sun_path`.
+    ///
+    /// These OSes are:
+    ///
+    /// * OpenBSD: Enforces that `sun_path`` is NUL-terminated.
+    /// * macOS / iOS / anything else Apple: I haven't found a manpage,
+    ///   but it supports longer paths.
+    /// * Illumos: [The manpage](https://illumos.org/man/3SOCKET/sockaddr_un)
+    ///   says it must be NUL-terminated (and that it cannot be longer),
+    ///   but when I tested on an older version, neither of these constraints seem to be the case.
+    /// * Solaris: Assumed to be identical to Illumos.
+    ///
+    /// OSes that have been tested that they allow using the full `sun_path`
+    /// without NUL and no longer paths, and whose manpages don't state the opposite:
+    ///
+    /// * [Linux](https://www.man7.org/linux/man-pages/man7/unix.7.html)
+    /// * [FreeBSD](https://man.freebsd.org/cgi/man.cgi?query=unix&sektion=4)
+    /// * [NetBSD](https://man.netbsd.org/unix.4)
+    /// * [Dragonfly BSD](https://man.dragonflybsd.org/?command=unix&section=4)
     pub fn max_path_len() -> usize {
+        let always_nul_terminate = cfg!(any(
+            target_os="openbsd",
+            target_vendor="apple",
+            target_os="illumos",
+            target_os="solaris",
+        ));
         mem::size_of_val(&Self::new_unspecified().addr.sun_path)
-            - if cfg!(target_os="openbsd") {1} else {0}
+            - if always_nul_terminate {1} else {0}
     }
 
     /// Creates a pathname unix socket address.

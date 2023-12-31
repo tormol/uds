@@ -1,6 +1,6 @@
 [package]
 name = "uds"
-version = "0.4.1"
+version = "0.4.2"
 description = """
 A unix domain socket crate that supports abstract addresses, fd-passing and seqpacket sockets.
 """

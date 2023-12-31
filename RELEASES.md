@@ -1,3 +1,12 @@
+Version 0.4.2 (2023-12-31)
+==========================
+* Reduce max path length by one on Apple OSes, Illumos and Solaris. ([#19](https://github.com/tormol/uds/pull/19))  
+  While non-NUL-terminated paths work, the man pages says paths must be NUL-terminated.  
+  These OSes support arbitrarily long paths, and this library can't represent those,
+  so it already only supported a subset of all possible path addresses.
+* Fix `UnixSocketAddr::from_raw()` never having worked. ([#18](https://github.com/tormol/uds/pull/18))
+* Fix potentiall soundness issues. ([#13](https://github.com/tormol/uds/pull/13) and [#14](https://github.com/tormol/uds/pull/14))
+
 Version 0.4.1 (2023-08-20)
 ==========================
 * Tokio support is back, now for tokio 1.\*.

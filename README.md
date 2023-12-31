@@ -89,7 +89,7 @@ To enable it, add this to Cargo.toml:
 
 ```toml
 [dependencies]
-uds = {version="0.4.1", features=["tokio"]}
+uds = {version="0.4.2", features=["tokio"]}
 ```
 
 ## Minimum Rust version

@@ -40,6 +40,7 @@ async fn stream_is_nonblocking() {
 }
 
 #[cfg_attr(any(target_os="linux", target_os="android"), tokio::test)]
+#[cfg_attr(not(any(target_os="linux", target_os="android")), allow(dead_code))]
 async fn abstract_stream() {
     let stream_name = "@tokio_abstract_stream";
     let listener_name = "@tokio_abstract_listener";
@@ -84,6 +85,7 @@ async fn datagram_unix_addr() {
 }
 
 #[cfg_attr(any(target_os="linux", target_os="android"), tokio::test)]
+#[cfg_attr(not(any(target_os="linux", target_os="android")), allow(dead_code))]
 async fn abstract_datagram() {
     let a_addr = UnixSocketAddr::new("@tokio a").unwrap();
     let b_addr = UnixSocketAddr::new("@tokio b").unwrap();
@@ -98,6 +100,7 @@ async fn abstract_datagram() {
 }
 
 #[cfg_attr(any(target_os="linux", target_os="android"), tokio::test)]
+#[cfg_attr(not(any(target_os="linux", target_os="android")), allow(dead_code))]
 async fn initial_pair_credentials() {
     let (a, b) = UnixDatagram::pair().unwrap();
     let me = a.initial_pair_credentials().expect("get peer credentials");

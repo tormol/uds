@@ -1,7 +1,7 @@
 task:
-  name: FreeBSD 12 amd64 stable
+  name: FreeBSD 14 amd64 stable
   freebsd_instance:
-    image: freebsd-12-1-release-amd64
+    image_family: freebsd-14-0
     cpu: 1
     memory: 1G # Lower is not supported
   depends_on: Linux i686 stable

@@ -82,7 +82,7 @@ pub fn selinux_context(fd: RawFd,  buffer: &mut[u8]) -> Result<usize, io::Error>
 
 #[cfg(not(any(target_os="linux", target_os="android")))]
 pub fn selinux_context(_fd: RawFd,  _buffer: &mut[u8]) -> Result<usize, io::Error> {
-    Err(io::Error::new(Other, "not available"))
+    Err(io::Error::new(Unsupported, "not available"))
 }
 
 
@@ -341,7 +341,7 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
                     groups,
                 })
             } else {
-                Err(io::Error::new(Other, "Not enough information was available"))
+                Err(io::Error::new(InvalidData, "Not enough information was available"))
             }
         }
     }
@@ -354,7 +354,7 @@ pub fn peer_credentials(conn: RawFd) -> Result<ConnCredentials, io::Error> {
     target_os="illumos", target_os="solaris",
 )))]
 pub fn peer_credentials(_: RawFd) -> Result<ConnCredentials, io::Error> {
-    Err(io::Error::new(Other, "Not available"))
+    Err(io::Error::new(Unsupported, "Not available"))
 }
 
 

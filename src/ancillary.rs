@@ -97,7 +97,7 @@ pub fn send_ancillary(
             }
             #[cfg(any(target_os="illumos", target_os="solaris"))] {
                 return Err(io::Error::new(
-                    ErrorKind::Other,
+                    ErrorKind::Unsupported,
                     "ancillary data support is not implemented yet for Illumos or Solaris"
                 ))
             }
@@ -492,7 +492,7 @@ pub fn recv_ancillary<'ancillary_buf>(
         if ancillary_buf.len() > 0 {
             #[cfg(any(target_os="illumos", target_os="solaris"))] {
                 return Err(io::Error::new(
-                    ErrorKind::Other,
+                    ErrorKind::Unsupported,
                     "ancillary message support is not implemented yet on Illumos or Solaris, sorry"
                 ))
             }

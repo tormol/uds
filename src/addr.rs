@@ -528,8 +528,8 @@ impl UnixSocketAddr {
     ///
     /// # Errors
     ///
-    /// If the slice is longer than `sun_path`, an error of kind `Other` is
-    /// returned. No other validation of the bytes is performed.
+    /// If the slice is longer than `sun_path`, an error of kind `InvalidInput`
+    /// is returned. No other validation of the bytes is performed.
     ///
     /// # Examples
     ///

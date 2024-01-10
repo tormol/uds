@@ -23,7 +23,7 @@ use libc::{getpid, geteuid, getegid, getgid, getgroups};
 fn peer_credentials_not_supported() {
     let (a, _b) = UnixStream::pair().unwrap();
     let error = a.initial_peer_credentials().unwrap_err();
-    assert_eq!(error.kind(), Other);
+    assert_eq!(error.kind(), Unsupported);
 }
 
 fn assert_credentials_matches_current_process(creds: &ConnCredentials,  socket_type: &str) {
@@ -166,9 +166,8 @@ fn pair_credentials_of_datagram_socketpair() {
             assert_credentials_matches_current_process(&creds, "datagram socketpair");
             assert_eq!(b.initial_pair_credentials().unwrap(), creds);
         }
-        Err(ref e) if e.kind() == InvalidInput  ||  e.to_string().contains("not supported") => {
-            // fails with ENOTSUP on OmniOS and DragonFly, which becomes ErrorKind::Other
-        }
+        Err(ref e) if e.kind() == InvalidInput => {}
+        Err(ref e) if e.kind() == Unsupported /*solarish and DragonFly*/ => {}
         Err(e) => panic!("failed with unexpected error variant {:?}", e.kind())
     }
 }

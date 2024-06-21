@@ -11,6 +11,11 @@ use crate::addr::UnixSocketAddr;
 use crate::helpers::*;
 use crate::credentials::*;
 
+#[cfg(feature = "async_trait")]
+use crate::ancillary::*;
+#[cfg(feature = "async_trait")]
+use std::os::fd::RawFd;
+
 mod private {
     use super::*;
     pub trait Sealed {}
@@ -20,9 +25,6 @@ mod private {
 }
 
 /// Extension trait for `tokio::net::UnixStream`.
-///
-/// Doesn't have `send_fds()` or `recv_fds()`,
-/// because they would be `async` which isn't supported in traits yet.
 pub trait UnixStreamExt: AsRawFd + private::Sealed {
     /// Get the address of this socket, as a type that fully supports abstract addresses.
     fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
@@ -56,6 +58,22 @@ pub trait UnixStreamExt: AsRawFd + private::Sealed {
     fn initial_peer_selinux_context(&self,  buffer: &mut[u8]) -> Result<usize, io::Error> {
         selinux_context(self.as_raw_fd(), buffer)
     }
+
+    /// Sends file descriptors in addition to bytes.
+    #[cfg(feature = "async_trait")]
+    fn send_fds(
+        &self,
+        bytes: &[u8],
+        fds: &[RawFd],
+    ) -> (impl Send + std::future::Future<Output = Result<usize, io::Error>>);
+
+    /// Receives file descriptors in addition to bytes.
+    #[cfg(feature = "async_trait")]
+    fn recv_fds(
+        &self,
+        buf: &mut [u8],
+        fd_buf: &mut [RawFd],
+    ) -> (impl Send + std::future::Future<Output = Result<(usize, usize), io::Error>>);
 }
 
 impl UnixStreamExt for UnixStream {
@@ -70,6 +88,29 @@ impl UnixStreamExt for UnixStream {
         set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, from)?;
         set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, to)?;
         UnixStream::from_std(unsafe { stdUnixStream::from_raw_fd(socket.into_raw_fd()) })
+    }
+
+    /// Sends file descriptors in addition to bytes.
+    #[cfg(feature = "async_trait")]
+    async fn send_fds(&self, bytes: &[u8], fds: &[RawFd]) -> Result<usize, io::Error> {
+        self.async_io(tokio_crate::io::Interest::WRITABLE, || {
+            send_ancillary(self.as_raw_fd(), None, 0, &[io::IoSlice::new(bytes)], fds, None)
+        })
+        .await
+    }
+
+    /// Receives file descriptors in addition to bytes.
+    #[cfg(feature = "async_trait")]
+    async fn recv_fds(
+        &self,
+        buf: &mut [u8],
+        fd_buf: &mut [RawFd],
+    ) -> Result<(usize, usize), io::Error> {
+        self.async_io(tokio_crate::io::Interest::READABLE, || {
+            recv_fds(self.as_raw_fd(), None, &mut [io::IoSliceMut::new(buf)], fd_buf)
+                .map(|(bytes, _, fds)| (bytes, fds))
+        })
+        .await
     }
 }
 

@@ -49,7 +49,29 @@ task:
     - cargo check --features mio_08
     - cargo check --features tokio
   test_script:
-    - cargo test --all-features --no-fail-fast -- --test-threads=1 --nocapture
+    - cargo test --features mio_08,tokio --no-fail-fast -- --test-threads=1 --nocapture
+  before_cache_script:
+    - rm -rf $HOME/.cargo/registry/index
+
+task:
+  name: Linux amd64 1.75
+  container:
+    image: rust:1.75.0
+    cpu: 1
+    memory: 1G # OOMs with 512MB
+  allow_failures: false
+  env:
+    RUST_BACKTRACE: 1
+  cargo_cache:
+    folder: $HOME/.cargo/registry
+    fingerprint_script: cat Cargo.lock 2> /dev/null || true
+  target_cache:
+    folder: target
+    fingerprint_script: cat Cargo.lock 2> /dev/null || true
+  check_script:
+    - cargo check --features tokio,async_trait
+  test_script:
+    - cargo test --features tokio,async_trait --no-fail-fast -- --test-threads=1 --nocapture
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 

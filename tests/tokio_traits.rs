@@ -103,3 +103,59 @@ async fn initial_pair_credentials() {
     let me = a.initial_pair_credentials().expect("get peer credentials");
     assert_eq!(me, b.initial_pair_credentials().unwrap());
 }
+
+#[cfg(feature="async_trait")]
+mod async_trait {
+    use super::*;
+
+    use std::os::unix::io::IntoRawFd;
+
+    use libc::close;
+
+    #[cfg_attr(not(any(target_os = "illumos", target_os = "solaris")), tokio::test)]
+    async fn many_fds() {
+        let (a, b) = std::os::unix::net::UnixStream::pair().expect("create stream socket pair");
+
+        a.set_nonblocking(true).expect("set a to nonblocking");
+        let a = UnixStream::from_std(a).expect("convert to tokio unix stream");
+
+        // only odd numbers cause difference between CMSG_SPACE() and CMSG_LEN(), and only on 64bit.
+        let mut fds = [-1; 99];
+        for (i, fd) in fds.iter_mut().enumerate() {
+            match b.try_clone() {
+                Ok(clone) => *fd = clone.into_raw_fd(),
+                Err(e) => panic!("failed to clone the {}nt fd: {}", i + 1, e),
+            }
+        }
+        a.send_fds(&b"99"[..], &fds).await.expect("send 99 fds");
+
+        let mut recv_buf = [0; 10];
+        let mut recv_fds = [-1; 200];
+
+        b.set_nonblocking(true).expect("set b to nonblocking");
+        let b = UnixStream::from_std(b).expect("convert to tokio unix stream");
+        b.recv_fds(&mut recv_buf, &mut recv_fds)
+            .await
+            .expect("receive 99 of 200 fds");
+        for (i, &received) in recv_fds[..fds.len()].iter().enumerate() {
+            assert_ne!(received, -1, "rerceived fd {} is not -1", i + 1);
+            assert_eq!(
+                unsafe { close(received) },
+                0,
+                "close(received fd {}) failed: {}",
+                i + 1,
+                std::io::Error::last_os_error(),
+            );
+        }
+
+        for (i, &sent) in fds.iter().enumerate() {
+            assert_eq!(
+                unsafe { close(sent) },
+                0,
+                "close(sent fd {}) failed: {}",
+                i + 1,
+                std::io::Error::last_os_error(),
+            );
+        }
+    }
+}

@@ -92,6 +92,16 @@ To enable it, add this to Cargo.toml:
 uds = {version="0.4.2", features=["tokio"]}
 ```
 
+### async
+
+The combination of `tokio` and `async_trait` add async `send` and `recv` methods to the extension trait, in addition to everything already added by the `tokio` feature.
+This increases the minimum Rust version to 1.75.
+
+```toml
+[dependencies]
+uds = {version="0.4.2", features=["tokio", "async_trait"]}
+```
+
 ## Minimum Rust version
 
 The minimum Rust version is 1.63.  

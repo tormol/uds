@@ -70,8 +70,8 @@ impl UnixStreamExt for UnixStream {
     }
 }
 
-#[cfg(feature = "mio_08")]
-impl UnixStreamExt for mio_08::net::UnixStream {
+#[cfg(feature = "mio_1xx")]
+impl UnixStreamExt for mio_1xx::net::UnixStream {
     fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_STREAM, true)?;
         set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, addr)?;
@@ -121,9 +121,9 @@ impl UnixListenerExt for UnixListener {
     }
 }
 
-#[cfg(feature = "mio_08")]
-impl UnixListenerExt for mio_08::net::UnixListener {
-    type Conn = mio_08::net::UnixStream;
+#[cfg(feature = "mio_1xx")]
+impl UnixListenerExt for mio_1xx::net::UnixListener {
+    type Conn = mio_1xx::net::UnixStream;
 
     fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> {
         let socket = Socket::new(SOCK_STREAM, true)?;
@@ -303,9 +303,9 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     ///
     /// Read content into a separate buffer than header:
     ///
-    #[cfg_attr(feature="mio_08", doc="```")]
-    #[cfg_attr(not(feature="mio_08"), doc="```no_compile")]
-    /// use mio_08::net::UnixDatagram;
+    #[cfg_attr(feature="mio_1xx", doc="```")]
+    #[cfg_attr(not(feature="mio_1xx"), doc="```no_compile")]
+    /// use mio_1xx::net::UnixDatagram;
     /// use uds::UnixDatagramExt;
     /// use std::io::IoSliceMut;
     ///
@@ -497,10 +497,10 @@ impl UnixDatagramExt for UnixDatagram {
     }
 }
 
-#[cfg(feature = "mio_08")]
-impl UnixDatagramExt for mio_08::net::UnixDatagram {
+#[cfg(feature = "mio_1xx")]
+impl UnixDatagramExt for mio_1xx::net::UnixDatagram {
     fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
-        match mio_08::net::UnixDatagram::unbound() {
+        match mio_1xx::net::UnixDatagram::unbound() {
             Ok(socket) => match socket.bind_to_unix_addr(addr) {
                 Ok(()) => Ok(socket),
                 Err(e) => Err(e),

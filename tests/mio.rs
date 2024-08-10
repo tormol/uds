@@ -1,7 +1,7 @@
-#![cfg(any(feature = "mio_08"))]
+#![cfg(any(feature = "mio_1xx"))]
 
-#[cfg(feature = "mio_08")]
-extern crate mio_08;
+#[cfg(feature = "mio_1xx")]
+extern crate mio_1xx;
 
 use std::fs::remove_file;
 use std::{io::{Read, Write}, path::Path, time::Duration};
@@ -63,8 +63,8 @@ macro_rules! mio_streams {
     }
 }
 
-#[cfg(feature = "mio_08")]
+#[cfg(feature = "mio_1xx")]
 #[test]
-fn mio_08_stream() {
-    mio_streams!(mio_08);
+fn mio_1xx_stream() {
+    mio_streams!(mio_1xx);
 }

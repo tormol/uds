@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use libc::{SOCK_SEQPACKET, MSG_EOR, MSG_PEEK, c_void, close, send, recv};
 
-#[cfg(feature = "mio_08")]
-use mio_08::{event::Source as Source_08, unix::SourceFd as SourceFd_08, Interest as Interest_08, Registry as Registry_08, Token as Token_08};
+#[cfg(feature = "mio_1xx")]
+use mio_1xx::{event::Source as Source_08, unix::SourceFd as SourceFd_08, Interest as Interest_08, Registry as Registry_08, Token as Token_08};
 
 use crate::addr::*;
 use crate::helpers::*;
@@ -43,7 +43,7 @@ macro_rules! impl_rawfd_traits {($type:tt) => {
 
 /// Implements `mio::Evented` and `mio::Source` for a fd-wrapping type.
 macro_rules! impl_mio_if_enabled {($type:tt) => {
-    #[cfg(feature = "mio_08")]
+    #[cfg(feature = "mio_1xx")]
     impl Source_08 for $type {
         fn register(&mut self,  registry: &Registry_08,  token: Token_08,  interest: Interest_08)
         -> Result<(), io::Error> {
@@ -58,7 +58,7 @@ macro_rules! impl_mio_if_enabled {($type:tt) => {
         }
     }
 
-    #[cfg(feature = "mio_08")]
+    #[cfg(feature = "mio_1xx")]
     impl<'a> Source_08 for &'a $type {
         fn register(&mut self,  registry: &Registry_08,  token: Token_08,  interest: Interest_08)
         -> Result<(), io::Error> {
@@ -691,7 +691,7 @@ impl UnixSeqpacketListener {
 /// This type can be used with mio if one of the mio features are enabled:
 ///
 /// ```toml
-/// uds = { version = "x.y", features=["mio_08"] }
+/// uds = { version = "x.y", features=["mio_1xx"] }
 /// ```
 ///
 /// # Examples
@@ -719,11 +719,11 @@ impl UnixSeqpacketListener {
 ///
 /// Registering with mio (v0.8):
 ///
-#[cfg_attr(all(feature="mio_08", not(target_vendor="apple")), doc="```")]
-#[cfg_attr(all(feature="mio_08", target_vendor="apple"), doc="```no_run")]
-#[cfg_attr(not(feature="mio_08"), doc="```no_compile")]
+#[cfg_attr(all(feature="mio_1xx", not(target_vendor="apple")), doc="```")]
+#[cfg_attr(all(feature="mio_1xx", target_vendor="apple"), doc="```no_run")]
+#[cfg_attr(not(feature="mio_1xx"), doc="```no_compile")]
 /// use uds::nonblocking::UnixSeqpacketConn;
-/// use mio_08::{Poll, Events, Token, Interest};
+/// use mio_1xx::{Poll, Events, Token, Interest};
 /// use std::io::ErrorKind;
 ///
 /// let (mut a, b) = UnixSeqpacketConn::pair()
@@ -963,10 +963,10 @@ impl NonblockingUnixSeqpacketConn {
 /// returns non-blocking [connection sockets](struct.NonblockingUnixSeqpacketConn.html)
 /// and doesn't block if no client `connect()`ions are pending.
 ///
-/// This type can be used with mio if the `mio_08` feature is enabled:
+/// This type can be used with mio if the `mio_1xx` feature is enabled:
 ///
 /// ```toml
-/// uds = { version = "x.y", features=["mio_08"] }
+/// uds = { version = "x.y", features=["mio_1xx"] }
 /// ```
 ///
 /// # Examples
@@ -993,11 +993,11 @@ impl NonblockingUnixSeqpacketConn {
 ///
 /// Registering with mio v0.8:
 ///
-#[cfg_attr(all(feature="mio_08", not(target_vendor="apple")), doc="```")]
-#[cfg_attr(all(feature="mio_08", target_vendor="apple"), doc="```no_run")]
-#[cfg_attr(not(feature="mio_08"), doc="```no_compile")]
+#[cfg_attr(all(feature="mio_1xx", not(target_vendor="apple")), doc="```")]
+#[cfg_attr(all(feature="mio_1xx", target_vendor="apple"), doc="```no_run")]
+#[cfg_attr(not(feature="mio_1xx"), doc="```no_compile")]
 /// use uds::nonblocking::{UnixSeqpacketListener, UnixSeqpacketConn};
-/// use mio_08::{Poll, Events, Token, Interest};
+/// use mio_1xx::{Poll, Events, Token, Interest};
 /// use std::io::ErrorKind;
 ///
 /// # let _ = std::fs::remove_file("seqpacket.sock");

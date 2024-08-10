@@ -46,7 +46,7 @@ task:
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
   check_script:
     - cargo check
-    - cargo check --features mio_08
+    - cargo check --features mio_1xx
     - cargo check --features tokio
   test_script:
     - cargo test --all-features --no-fail-fast -- --test-threads=1 --nocapture
@@ -70,7 +70,7 @@ task:
     - rustc --version
   check_script:
     - cargo check -Z minimal-versions -Z avoid-dev-deps
-    - cargo check -Z minimal-versions -Z avoid-dev-deps --features mio_08
+    - cargo check -Z minimal-versions -Z avoid-dev-deps --features mio_1xx
     - cargo check -Z minimal-versions -Z avoid-dev-deps --features tokio
   # neither -Z minimal-versions nor -Z direct-minimal-versions work with tokio 1
   # and it's a dev-dependency so can't test anything else either

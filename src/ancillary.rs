@@ -525,7 +525,7 @@ impl<'a> Iterator for Ancillary<'a>
             let msg_bytes = (*self.next_message).cmsg_len as usize;
 
             // validate the msg_bytes
-            if (self.msg.msg_controllen - self.msg_ctrl_len_read)  < msg_bytes || msg_bytes < CMSG_LEN(0) as usize
+            if (self.msg.msg_controllen as usize - self.msg_ctrl_len_read as usize)  < msg_bytes || msg_bytes < CMSG_LEN(0) as usize
             {
                 return Some(
                     Err(io::Error::new(ErrorKind::InvalidData, 
@@ -655,7 +655,7 @@ impl<'a> Ancillary<'a>
     pub 
     fn get_msg_controllen(&self) -> usize
     {
-        self.msg.msg_controllen
+        self.msg.msg_controllen as usize
     }
 
     pub

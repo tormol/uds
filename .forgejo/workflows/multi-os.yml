@@ -94,17 +94,16 @@ jobs:
         with:
           operating_system: freebsd
           image_url: http://localhost:8080/freebsd-15.1-x86-64.qcow2
-          version: '15.0'
+          version: '15.1'
           memory: 4G
           cpu_count: 3
           shell: bash 
           run: |
             uname -a
-            sudo pkg install -y rust
             rustc --version
             cargo build --tests --examples
             cargo check --tests --examples
-            cargo test
+            cargo test --tests --examples
 
   
   openbsd-test:
@@ -163,7 +162,7 @@ jobs:
             rustc --version
             cargo build --tests --examples
             cargo check --tests --examples
-            cargo test
+            cargo test --tests --examples
         #echo "root" | su - root -c "pkg_add rust"
 
   netbsd-test:
@@ -210,7 +209,7 @@ jobs:
         uses: https://github.com/cross-platform-actions/action@v1.3.0
         with:
           operating_system: netbsd
-          version: '10.1'
+          version: '11.0'
           image_url: http://localhost:8080/netbsd-11.0-x86-64.qcow2
           memory: 4G
           cpu_count: 3
@@ -221,7 +220,7 @@ jobs:
             rustc --version
             cargo build --tests --examples
             cargo check --tests --examples
-            cargo test
+            cargo test --tests --examples
 
       
 

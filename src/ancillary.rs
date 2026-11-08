@@ -1227,7 +1227,7 @@ mod test_incorrect_msg
         let needed_cap_add = 
             move |needed_capacity: ControlLen|
             {
-                ((needed_capacity-1) / 8 + 1) * 8
+                (((needed_capacity-1) / 8 + 1) * 8) as usize
             };
 
         let test_writable = 

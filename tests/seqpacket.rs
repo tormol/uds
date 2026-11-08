@@ -1,41 +1,76 @@
-#![cfg(not(target_vendor="apple"))]
+#![cfg(all(not(target_vendor="apple"), target_family = "unix"))]
 
-use std::io::ErrorKind::*;
-use std::io::{IoSlice, IoSliceMut};
-use std::net::Shutdown;
-use std::os::unix::io::AsRawFd;
-use std::time::{Duration, Instant};
+mod common;
 
-use uds::nonblocking::UnixSeqpacketConn as NonblockingUnixSeqpacketConn;
-use uds::{UnixSeqpacketConn, UnixSeqpacketListener};
+use std::
+{
+    io::{ErrorKind::{self, *}, IoSlice, IoSliceMut}, net::Shutdown, os::fd::{FromRawFd, OwnedFd}, time::{Duration, Instant}
+};
+
+
+use uds_fork::nonblocking::UnixSeqpacketConn as NonblockingUnixSeqpacketConn;
+use uds_fork::{UnixSeqpacketConn, UnixSeqpacketListener};
+
+use crate::common::make_temp_dir;
 
 #[test]
-fn seqpacket_is_supported() {
-    let path = "seqpacket exists.socket";
-    let _ = std::fs::remove_file(path);
-    let _listener = UnixSeqpacketListener::bind(path).unwrap();
-    let _conn = UnixSeqpacketConn::connect(path).unwrap();
-    let _ = std::fs::remove_file(path);
+fn seqpacket_is_supported() 
+{   
+    let (path, _dir) = make_temp_dir("seqpacket1.exists.socket");
+
+    let _listener = UnixSeqpacketListener::bind(&path).unwrap();
+    let _conn = UnixSeqpacketConn::connect(&path).unwrap();
 }
 
 #[test]
-fn truncated_packets_are_not_resumed() {
+fn seqpacket_is_supported_types() 
+{
+    use std::os::fd::IntoRawFd;
+
+    let (pathbuf, _dir) = make_temp_dir("seqpacket1.exists.socket");
+    let path = pathbuf.as_path();
+
+    let _listener = UnixSeqpacketListener::bind(path).unwrap();
+    let conn = UnixSeqpacketConn::connect(path).unwrap().into_raw_fd();
+    
+    let _conn = unsafe { UnixSeqpacketConn::from_raw_fd(conn) };
+}
+
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris", target_os="freebsd")), test)]
+#[cfg_attr(any(target_os="illumos", target_os="solaris", target_os="freebsd"), allow(unused))]
+fn truncated_packets_are_not_resumed() 
+{
     let (a, b) = NonblockingUnixSeqpacketConn::pair().unwrap();
     a.send(b"hello").unwrap();
     assert_eq!(b.recv(&mut[0; 20]).unwrap(), 5);
     a.send(b"hello").unwrap();
     let mut buf = [0; 3];
     assert_eq!(b.recv(&mut buf).unwrap(), 3);
-    assert_eq!(b.recv(&mut buf).unwrap_err().kind(), WouldBlock);
+    assert_eq!(b.recv(&mut buf).unwrap_err().kind(), WouldBlock); // freebsd error here
     assert_eq!(&buf[..3], b"hel");
 }
 
-#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
-#[cfg_attr(any(target_os="illumos", target_os="solaris"), allow(unused))]
-fn zero_length_packet_sort_of_works() {
+#[cfg_attr(not(target_os="freebsd"), allow(unused))]
+#[cfg_attr(any(target_os="freebsd"), test)]
+fn truncated_packets_are_not_resumed_freebsd() 
+{
+    let (a, b) = NonblockingUnixSeqpacketConn::pair().unwrap();
+    a.send(b"hello").unwrap();
+    assert_eq!(b.recv(&mut[0; 20]).unwrap(), 5);
+    a.send(b"hello").unwrap();
+    let mut buf = [0; 3];
+    assert_eq!(b.recv(&mut buf).unwrap(), 3);
+    assert_eq!(b.recv(&mut buf).unwrap(), 2); // freebsd error here
+    assert_eq!(&buf[..3], b"lol");
+}
+
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris", target_os="freebsd")), test)]
+#[cfg_attr(any(target_os="illumos", target_os="solaris", target_os="freebsd"), allow(unused))]
+fn zero_length_packet_sort_of_works() 
+{
     let (a, b) = NonblockingUnixSeqpacketConn::pair().unwrap();
     assert_eq!(a.send(&[]).expect("send zero-length packet"), 0);
-    assert_eq!(b.recv(&mut[0u8; 8]).expect("receive zero-length packet"), 0);
+    assert_eq!(b.recv(&mut[0u8; 8]).expect("receive zero-length packet"), 0); // freebsd error here
     a.send(&[]).unwrap();
     // Only checks length because FreeBSD thinks it gets truncated
     assert_eq!(b.recv(&mut[]).expect("receive zero-length packet with empty buffer"), 0);
@@ -49,15 +84,36 @@ fn zero_length_packet_sort_of_works() {
     assert_eq!(b.recv(&mut[0u8; 8]).expect("receive end-of-connection packet"), 0);
 }
 
-#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
-#[cfg_attr(any(target_os="illumos", target_os="solaris"), allow(unused))]
+#[cfg_attr(not(target_os="freebsd"), allow(unused))]
+#[cfg_attr(any(target_os="freebsd"), test)]
+fn zero_length_packet_sort_of_works_freebsd() 
+{
+    let (a, b) = NonblockingUnixSeqpacketConn::pair().unwrap();
+    assert_eq!(a.send(&[]).expect("send zero-length packet"), 0);
+    assert_eq!(b.recv(&mut[0u8; 8]).err().unwrap().kind(), ErrorKind::WouldBlock); // freebsd error here
+    a.send(&[]).unwrap();
+    // Only checks length because FreeBSD thinks it gets truncated (old)
+    // No, FreeBSD returns WouldBlock. at least FreeBSD15
+    assert_eq!(b.recv(&mut[]).err().unwrap().kind(), ErrorKind::WouldBlock);
+    a.send(&[]).unwrap();
+    a.send(&[]).unwrap();
+    assert_eq!(b.recv(&mut[0u8; 8]).err().unwrap().kind(), ErrorKind::WouldBlock);
+    assert_eq!(b.recv(&mut[0u8; 8]).err().unwrap().kind(), ErrorKind::WouldBlock);
+    a.send(&[]).unwrap();
+    drop(a);
+    assert_eq!(b.recv(&mut[0u8; 8]).expect("receive zero-length packet"), 0);
+    assert_eq!(b.recv(&mut[0u8; 8]).expect("receive end-of-connection packet"), 0);
+}
+
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris", target_os="freebsd")), test)]
+#[cfg_attr(any(target_os="illumos", target_os="solaris", target_os="freebsd"), allow(unused))]
 fn zero_length_vectored_sort_of_works() {
     let (a, b) = NonblockingUnixSeqpacketConn::pair().unwrap();
     let mut buf = [0; 25];
 
     assert_eq!(a.send_vectored(&[]).unwrap(), 0);
     assert_eq!(a.send_vectored(&[IoSlice::new(&[])]).unwrap(), 0);
-    assert_eq!(b.recv(&mut buf).unwrap(), 0);
+    assert_eq!(b.recv(&mut buf).unwrap(), 0); 
     assert_eq!(b.recv(&mut buf).unwrap(), 0);
 
     a.send(b"ignore me").unwrap();
@@ -66,25 +122,49 @@ fn zero_length_vectored_sort_of_works() {
     assert_eq!(b.recv_vectored(&mut[IoSliceMut::new(&mut[])]).unwrap(), (0, true));
 }
 
-#[test]
-fn no_sigpipe() {
-    let (a, _) = UnixSeqpacketConn::pair().expect("create seqpacket socket pair");
-    assert_eq!(a.send(b"Hello?").unwrap_err().kind(), BrokenPipe);
-    assert_eq!(a.send_vectored(&[IoSlice::new(b"Anyone there?")]).unwrap_err().kind(), BrokenPipe);
-    if cfg!(not(any(target_os="illumos", target_os="solaris"))) {
-        assert_eq!(a.send_fds(b"HELOOO??", &[a.as_raw_fd()]).unwrap_err().kind(), BrokenPipe);
-    }
+#[cfg_attr(not(target_os="freebsd"), allow(unused))]
+#[cfg_attr(any(target_os="freebsd"), test)]
+fn zero_length_vectored_sort_of_works_freebsd() 
+{
+    let (a, b) = NonblockingUnixSeqpacketConn::pair().unwrap();
+    let mut buf = [0; 25];
 
-    let (a, _) = NonblockingUnixSeqpacketConn::pair().expect("create nonblocking seqpacket pair");
-    assert_eq!(a.send(b"Hello?").unwrap_err().kind(), BrokenPipe);
-    assert_eq!(a.send_vectored(&[IoSlice::new(b"Anyone there?")]).unwrap_err().kind(), BrokenPipe);
-    if cfg!(not(any(target_os="illumos", target_os="solaris"))) {
-        assert_eq!(a.send_fds(b"HELOOO??", &[a.as_raw_fd()]).unwrap_err().kind(), BrokenPipe);
-    }
+    assert_eq!(a.send_vectored(&[]).unwrap(), 0);
+    assert_eq!(a.send_vectored(&[IoSlice::new(&[])]).unwrap(), 0);
+    assert_eq!(b.recv(&mut buf).err().unwrap().kind(), ErrorKind::WouldBlock);
+    assert_eq!(b.recv(&mut buf).err().unwrap().kind(), ErrorKind::WouldBlock);
+
+    a.send(b"ignore me").unwrap();
+    a.send(b"ignore me").unwrap();
+    assert_eq!(b.recv_vectored(&mut[]).unwrap(), (0, false));
+    assert_eq!(b.recv_vectored(&mut[IoSliceMut::new(&mut[])]).unwrap(), (0, false));
 }
 
 #[test]
-fn recv_vectored() {
+fn no_sigpipe() 
+{
+    let (a, _) = UnixSeqpacketConn::pair().expect("create seqpacket socket pair");
+    let (aa, _) = UnixSeqpacketConn::pair().expect("create seqpacket socket pair");
+
+    assert_eq!(a.send(b"Hello?").unwrap_err().kind(), BrokenPipe);
+    assert_eq!(a.send_vectored(&[IoSlice::new(b"Anyone there?")]).unwrap_err().kind(), BrokenPipe);
+    if cfg!(not(any(target_os="illumos", target_os="solaris"))) {
+        assert_eq!(a.send_fds(b"HELOOO??", vec![OwnedFd::from(aa)]).unwrap_err().kind(), BrokenPipe);
+    }
+
+    let (a, _) = NonblockingUnixSeqpacketConn::pair().expect("create nonblocking seqpacket pair");
+    let (aa, _) = NonblockingUnixSeqpacketConn::pair().expect("create nonblocking seqpacket pair");
+    assert_eq!(a.send(b"Hello?").unwrap_err().kind(), BrokenPipe);
+    assert_eq!(a.send_vectored(&[IoSlice::new(b"Anyone there?")]).unwrap_err().kind(), BrokenPipe);
+    if cfg!(not(any(target_os="illumos", target_os="solaris"))) {
+        assert_eq!(a.send_fds(b"HELOOO??", vec![OwnedFd::from(aa)]).unwrap_err().kind(), BrokenPipe);
+    }
+}
+
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris", target_os="freebsd")), test)]
+#[cfg_attr(any(target_os="illumos", target_os="solaris", target_os="freebsd"), allow(unused))]
+fn recv_vectored() 
+{
     let (a, b) = UnixSeqpacketConn::pair().expect("create seqpacket socket pair");
 
     a.send(b"undivided").unwrap();
@@ -106,7 +186,7 @@ fn recv_vectored() {
         IoSliceMut::new(&mut[]),
         IoSliceMut::new(&mut array_2),
     ];
-    assert_eq!(b.recv_vectored(&mut buffers).unwrap(), (5, true));
+    assert_eq!(b.recv_vectored(&mut buffers).unwrap(), (5, true)); // freebsd error here l (5, false) (5, true)
     assert_eq!(&array_1[..1], b"t");
     assert_eq!(&array_2, b"runc");
 
@@ -118,7 +198,45 @@ fn recv_vectored() {
     assert_ne!(&array_1, b"mix!");
 }
 
-#[test]
+#[cfg_attr(not(target_os="freebsd"), allow(unused))]
+#[cfg_attr(any(target_os="freebsd"), test)]
+fn recv_vectored_freebsd() 
+{
+    let (a, b) = UnixSeqpacketConn::pair().expect("create seqpacket socket pair");
+
+    a.send(b"undivided").unwrap();
+    let mut array = [b'-'; 10];
+    assert_eq!(b.recv_vectored(&mut[IoSliceMut::new(&mut array)]).unwrap(), (9, false));
+    assert_eq!(&array, b"undivided-");
+
+    a.send(b"split me").unwrap();
+    let (mut array_1, mut array_2) = ([4; 4], [4; 4]);
+    let mut buffers = [IoSliceMut::new(&mut array_1), IoSliceMut::new(&mut array_2)];
+    assert_eq!(b.recv_vectored(&mut buffers).unwrap(), (8, false));
+    assert_eq!(&array_1, b"spli");
+    assert_eq!(&array_2, b"t me");
+
+    a.send(b"truncate me").unwrap();
+    let mut buffers = [
+        IoSliceMut::new(&mut[]),
+        IoSliceMut::new(&mut array_1[..1]),
+        IoSliceMut::new(&mut[]),
+        IoSliceMut::new(&mut array_2),
+    ];
+    assert_eq!(b.recv_vectored(&mut buffers).unwrap(), (5, false)); // freebsd error here l (5, false) (5, true)
+    assert_eq!(&array_1[..1], b"t");
+    assert_eq!(&array_2, b"runc");
+
+    a.send(b"dont").unwrap();
+    a.send(b"mix!").unwrap();
+    let mut buffers = [IoSliceMut::new(&mut array_1), IoSliceMut::new(&mut array_2)];
+    assert_eq!(b.recv_vectored(&mut buffers).unwrap(), (6, false));
+    assert_eq!(&array_1, b"ate ");
+    assert_ne!(&array_1, b"metr");
+}
+
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris", target_os="freebsd")), test)]
+#[cfg_attr(any(target_os="illumos", target_os="solaris", target_os="freebsd"), allow(unused))]
 fn send_vectored() {
     let (a, b) = UnixSeqpacketConn::pair().expect("create seqpacket socket pair");
 
@@ -151,12 +269,52 @@ fn send_vectored() {
     ];
     b.set_nonblocking(true).unwrap();
     assert_eq!(a.send_vectored(&slices).unwrap(), 9);
-    assert_eq!(b.recv(&mut[0u8; 2]).unwrap(), 2);
+    assert_eq!(b.recv(&mut[0u8; 2]).unwrap(), 2); // freebsd error here l: 1 , r: 2
     assert_eq!(b.recv(&mut buf).unwrap_err().kind(), WouldBlock);
 }
 
-#[test]
-fn vectored() {
+#[cfg_attr(not(target_os="freebsd"), allow(unused))]
+#[cfg_attr(any(target_os="freebsd"), test)]
+fn send_vectored_freebsd() {
+    let (a, b) = UnixSeqpacketConn::pair().expect("create seqpacket socket pair");
+
+    assert_eq!(a.send_vectored(&[IoSlice::new(b"undivided")]).unwrap(), 9);
+    let mut buf = [b'-'; 10];
+    assert_eq!(b.recv(&mut buf).unwrap(), 9);
+    assert_eq!(&buf, b"undivided-");
+
+    a.send_vectored(&[IoSlice::new(b"merge"), IoSlice::new(b" me")]).unwrap();
+    assert_eq!(b.recv(&mut buf).unwrap(), 8);
+    assert_eq!(&buf[..8], b"merge me");
+
+    let slices = [
+        IoSlice::new(b"tru"),
+        IoSlice::new(b""),
+        IoSlice::new(b"ncate"),
+        IoSlice::new(b""),
+        IoSlice::new(b""),
+        IoSlice::new(b" me"),
+        IoSlice::new(b""),
+    ];
+    assert_eq!(a.send_vectored(&slices).unwrap(), 11);
+    assert_eq!(b.recv(&mut buf).unwrap(), buf.len());
+    assert_eq!(&buf, b"truncate m");
+
+    let slices = [
+        IoSlice::new(b""),
+        IoSlice::new(b"to"),
+        IoSlice::new(b"discard"),
+    ];
+    b.set_nonblocking(true).unwrap();
+    assert_eq!(a.send_vectored(&slices).unwrap(), 9);
+    assert_eq!(b.recv(&mut[0u8; 2]).unwrap(), 1); // e (received from previous)
+    assert_eq!(b.recv(&mut buf).unwrap(), 9);
+}
+
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris", target_os="freebsd")), test)]
+#[cfg_attr(any(target_os="illumos", target_os="solaris", target_os="freebsd"), allow(unused))]
+fn vectored()
+{
     let (a, b) = NonblockingUnixSeqpacketConn::pair().expect("create nonblocking seqpacket pair");
 
     assert_eq!(a.send_vectored(&[IoSlice::new(b"undivided")]).unwrap(), 9);
@@ -175,9 +333,38 @@ fn vectored() {
     assert_eq!(a.send_vectored(&slices).unwrap(), 13);
     let (mut array_1, mut array_2) = ([9; 9], [3; 3]);
     let mut buffers = [IoSliceMut::new(&mut array_1), IoSliceMut::new(&mut array_2)];
-    assert_eq!(b.recv_vectored(&mut buffers).unwrap(), (12, true));
+    assert_eq!(b.recv_vectored(&mut buffers).unwrap(), (12, true)); // freebsd error here
     assert_eq!(&array_1, b"reshuffle");
     assert_eq!(&array_2, b" me");
+    let mut buffers = [IoSliceMut::new(&mut array_1)];
+    assert_eq!(b.recv_vectored(&mut buffers).unwrap_err().kind(), WouldBlock);
+}
+
+#[cfg_attr(not(target_os="freebsd"), allow(unused))]
+#[cfg_attr(any(target_os="freebsd"), test)]
+fn vectored_freebsd()
+{
+    let (a, b) = NonblockingUnixSeqpacketConn::pair().expect("create nonblocking seqpacket pair");
+
+    assert_eq!(a.send_vectored(&[IoSlice::new(b"undivided")]).unwrap(), 9);
+    let mut buf = [b'-'; 10];
+    assert_eq!(b.recv_vectored(&mut[IoSliceMut::new(&mut buf)]).unwrap(), (9, false));
+    assert_eq!(&buf, b"undivided-");
+
+    let slices = [
+        IoSlice::new(b"re"),
+        IoSlice::new(b""),
+        IoSlice::new(b"shuffle "),
+        IoSlice::new(b"me"),
+        IoSlice::new(b"!"),
+        IoSlice::new(b""),
+    ];
+    assert_eq!(a.send_vectored(&slices).unwrap(), 13);
+    let (mut array_1, mut array_2) = ([9; 9], [4; 4]);
+    let mut buffers = [IoSliceMut::new(&mut array_1), IoSliceMut::new(&mut array_2)];
+    assert_eq!(b.recv_vectored(&mut buffers).unwrap(), (13, false)); // freebsd error here
+    assert_eq!(&array_1, b"reshuffle");
+    assert_eq!(&array_2, b" me!");
     let mut buffers = [IoSliceMut::new(&mut array_1)];
     assert_eq!(b.recv_vectored(&mut buffers).unwrap_err().kind(), WouldBlock);
 }
@@ -241,7 +428,8 @@ fn read_timeout() {
 
 #[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
 #[cfg_attr(any(target_os="illumos", target_os="solaris"), allow(unused))]
-fn write_timeout() {
+fn write_timeout() 
+{
     let (conn, _other) = UnixSeqpacketConn::pair().expect("create seqpacket pair");
     let timeout = Duration::new(0, 150_000_000);
     assert_eq!(conn.write_timeout().expect("get default write timeout"), None);
@@ -275,13 +463,15 @@ fn write_timeout() {
 }
 
 #[test]
-fn accept_timeout() {
-    let addr = "accept_timeout.sock";
+fn accept_timeout() 
+{
+    let (pathbuf, _dir) = make_temp_dir("seqpacket1.exists.socket");
+    let path = pathbuf.as_path();
+
     let timeout = Duration::new(0, 250_000_000);
-    let _ = std::fs::remove_file(addr);
-    let listener = UnixSeqpacketListener::bind(addr)
+
+    let listener = UnixSeqpacketListener::bind(path)
         .expect("create seqpacket listener");
-    std::fs::remove_file(addr).expect("delete created socket file");
 
     assert_eq!(listener.timeout().expect("get default timeout"), None);
     listener.set_timeout(None).expect("disable timeout");

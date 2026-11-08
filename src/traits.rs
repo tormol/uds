@@ -1,8 +1,14 @@
-use std::os::unix::io::{RawFd, AsRawFd, FromRawFd, IntoRawFd};
-use std::os::unix::net::{UnixStream, UnixListener, UnixDatagram};
-use std::io::{self, IoSlice, IoSliceMut, ErrorKind};
 
-use libc::{SOCK_STREAM, MSG_PEEK, c_void, recvfrom, sendto};
+use std::
+{
+    ffi::c_void, io::{self, IoSlice, IoSliceMut}, os::
+    {
+        fd::{AsFd, OwnedFd, RawFd}, 
+        unix::{io::{AsRawFd, FromRawFd}, net::{UnixDatagram, UnixListener, UnixStream}} 
+    }
+};
+
+use libc::{MSG_PEEK, recvfrom, sendto};
 
 use crate::addr::UnixSocketAddr;
 use crate::helpers::*;
@@ -10,37 +16,59 @@ use crate::ancillary::*;
 use crate::credentials::*;
 
 /// Extension trait for `std::os::unix::net::UnixStream` and nonblocking equivalents.
-pub trait UnixStreamExt: AsRawFd + FromRawFd {
+pub trait UnixStreamExt: AsFd + AsRawFd + FromRawFd 
+{
     /// Get the address of this socket, as a type that fully supports abstract addresses.
-    fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        get_unix_addr(self.as_raw_fd(), GetAddr::LOCAL)
+    fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> 
+    {
+        get_unix_local_addr(self)
     }
+
     /// Returns the address of the other end of this stream,
     /// as a type that fully supports abstract addresses.
-    fn peer_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        get_unix_addr(self.as_raw_fd(), GetAddr::PEER)
+    fn peer_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> 
+    {
+        get_unix_peer_addr(self)
     }
 
     /// Creates a connection to a listening path-based or abstract named socket.
     fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> where Self: Sized;
 
     /// Creates a path-based or abstract-named socket and connects to a listening socket.
-    fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
-    -> Result<Self, io::Error> where Self: Sized;
+    fn connect_from_to_unix_addr(from: &UnixSocketAddr, to: &UnixSocketAddr) -> Result<Self, io::Error> 
+        where Self: Sized;
 
     /// Sends file descriptors in addition to bytes.
-    fn send_fds(&self,  bytes: &[u8],  fds: &[RawFd]) -> Result<usize, io::Error> {
-        send_ancillary(self.as_raw_fd(), None, 0, &[IoSlice::new(bytes)], fds, None)
+    fn send_fds(&self, bytes: &[u8], fds: Vec<OwnedFd>) -> Result<usize, io::Error> 
+    {
+        let fds_raw = fds.iter().map(|fd| fd.as_raw_fd()).collect::<Vec<RawFd>>();
+
+        send_ancillary(self, None, 0, &[IoSlice::new(bytes)], &fds_raw, None)
     }
+
     /// Receives file descriptors in addition to bytes.
-    fn recv_fds(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd]) -> Result<(usize, usize), io::Error> {
-        recv_fds(self.as_raw_fd(), None, &mut[IoSliceMut::new(buf)], fd_buf)
+    /// 
+    /// A FDs are placed into pre-allocated mutable slice. Received valies are stored
+    /// in reception sequence. The first [Option::None] does mean the rest are None too.
+    fn recv_slice_fds(&self, buf: &mut[u8], fd_buf: &mut [Option<OwnedFd>]) -> Result<(usize, usize), io::Error> 
+    {
+        recv_slice_fds(self, None, &mut[IoSliceMut::new(buf)], fd_buf)
+            .map(|(bytes, _, fds)| (bytes, fds) )
+    }
+
+    /// A FDs are placed into Vec with the specific capacity. 
+    /// 
+    /// A FDs will be truncated if the capacity is not large enough.
+    fn recv_fds(&self,  buf: &mut[u8], fd_buf: &mut Vec<OwnedFd>) -> Result<(usize, usize), io::Error> 
+    {
+        recv_fds(self, None, &mut[IoSliceMut::new(buf)], fd_buf)
             .map(|(bytes, _, fds)| (bytes, fds) )
     }
 
     /// Returns the credentials of the process that created the other end of this stream.
-    fn initial_peer_credentials(&self) -> Result<ConnCredentials, io::Error> {
-        peer_credentials(self.as_raw_fd())
+    fn initial_peer_credentials(&self) -> Result<ConnCredentials, io::Error> 
+    {
+        peer_credentials(self)
     }
     /// Returns the SELinux security context of the process that created the other end of this stream.
     ///
@@ -50,97 +78,130 @@ pub trait UnixStreamExt: AsRawFd + FromRawFd {
     ///
     /// The default security context is `unconfined`, without any trailing NUL.  
     /// A buffor of 50 bytes is probably always big enough.
-    fn initial_peer_selinux_context(&self,  buffer: &mut[u8]) -> Result<usize, io::Error> {
-        selinux_context(self.as_raw_fd(), buffer)
+    fn initial_peer_selinux_context(&self, buffer: &mut[u8]) -> Result<usize, io::Error> 
+    {
+        selinux_context(self, buffer)
     }
 }
 
-impl UnixStreamExt for UnixStream {
-    fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_STREAM, false)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, addr)?;
-        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
+impl UnixStreamExt for UnixStream 
+{
+    fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> 
+    {
+        let socket = Socket::<SocketStream>::new(false)?;
+        socket.set_unix_peer_addr(addr)?;
+        
+        return Ok(Self::from( <Socket<SocketStream> as Into<OwnedFd>>::into(socket)));
     }
-    fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
-    -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_STREAM, false)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, from)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, to)?;
-        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
+
+    fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr) -> Result<Self, io::Error> 
+    {
+        let socket = Socket::<SocketStream>::new(false)?;
+        socket.set_unix_local_addr(from)?;
+        socket.set_unix_peer_addr(to)?;
+        
+        return Ok(Self::from( <Socket<SocketStream> as Into<OwnedFd>>::into(socket)));
     }
 }
 
-#[cfg(feature = "mio_08")]
-impl UnixStreamExt for mio_08::net::UnixStream {
-    fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_STREAM, true)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, addr)?;
-        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
+#[cfg(feature = "mio")]
+impl UnixStreamExt for mio::net::UnixStream 
+{
+    fn connect_to_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> 
+    {
+        let socket = Socket::<SocketStream>::new(true)?;
+        socket.set_unix_peer_addr(addr)?;
+
+        return Ok(Self::from( <Socket<SocketStream> as Into<OwnedFd>>::into(socket)));
     }
-    fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr)
-    -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_STREAM, true)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, from)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::PEER, to)?;
-        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
+
+    fn connect_from_to_unix_addr(from: &UnixSocketAddr,  to: &UnixSocketAddr) -> Result<Self, io::Error> 
+    {
+        let socket = Socket::<SocketStream>::new(true)?;
+        socket.set_unix_local_addr(from)?;
+        socket.set_unix_peer_addr(to)?;
+
+        return Ok(Self::from( <Socket<SocketStream> as Into<OwnedFd>>::into(socket)));
     }
 }
 
 /// Extension trait for using [`UnixSocketAddr`](struct.UnixSocketAddr.html) with `UnixListener` types.
-pub trait UnixListenerExt: AsRawFd + FromRawFd {
+pub trait UnixListenerExt: AsFd + AsRawFd + FromRawFd 
+{
     /// The type represeting the stream connection returned by `accept_unix_addr()`.
     type Conn: FromRawFd;
 
     /// Creates a socket bound to a `UnixSocketAddr` and starts listening on it.
-    fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> where Self: Sized;
+    fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> 
+        where Self: Sized;
 
     /// Returns the address this socket is listening on.
-    fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        get_unix_addr(self.as_raw_fd(), GetAddr::LOCAL)
+    fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> 
+    {
+        get_unix_local_addr(self)
     }
 
     /// Accepts a connection and returns the client's address as
-    /// an `uds::UnixSocketAddr`.
+    /// an `uds_fork::UnixSocketAddr`.
     fn accept_unix_addr(&self) -> Result<(Self::Conn, UnixSocketAddr), io::Error>;
 }
 
-impl UnixListenerExt for UnixListener {
+impl UnixListenerExt for UnixListener 
+{
     type Conn = UnixStream;
 
-    fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_STREAM, false)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, on)?;
+    fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> 
+    {
+        let socket = Socket::<SocketStream>::new(false)?;
+        socket.set_unix_local_addr(on)?;
+
         socket.start_listening()?;
-        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
+        
+        return 
+            Ok(Self::from( <Socket<SocketStream> as Into<OwnedFd>>::into(socket)));
     }
 
-    fn accept_unix_addr(&self) -> Result<(Self::Conn, UnixSocketAddr), io::Error> {
-        let (socket, addr) = Socket::accept_from(self.as_raw_fd(), false)?;
-        let conn = unsafe { Self::Conn::from_raw_fd(socket.into_raw_fd()) };
-        Ok((conn, addr))
+    fn accept_unix_addr(&self) -> Result<(Self::Conn, UnixSocketAddr), io::Error> 
+    {
+        let (socket, addr) = Socket::<SocketStream>::accept_from(self, false)?;
+        let conn = 
+                Self::Conn::from(<Socket<SocketStream> as Into<OwnedFd>>::into(socket));
+        
+        return Ok((conn, addr));
     }
 }
 
-#[cfg(feature = "mio_08")]
-impl UnixListenerExt for mio_08::net::UnixListener {
-    type Conn = mio_08::net::UnixStream;
 
-    fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> {
-        let socket = Socket::new(SOCK_STREAM, true)?;
-        set_unix_addr(socket.as_raw_fd(), SetAddr::LOCAL, on)?;
+#[cfg(feature = "mio")]
+impl UnixListenerExt for mio::net::UnixListener 
+{
+    type Conn = mio::net::UnixStream;
+
+    fn bind_unix_addr(on: &UnixSocketAddr) -> Result<Self, io::Error> 
+    {
+        let socket = Socket::<SocketStream>::new(true)?;
+        socket.set_unix_local_addr(on)?;
+
         socket.start_listening()?;
-        Ok(unsafe { Self::from_raw_fd(socket.into_raw_fd()) })
+
+        return 
+            Ok(Self::from( <Socket<SocketStream> as Into<OwnedFd>>::into(socket)));
     }
 
-    fn accept_unix_addr(&self) -> Result<(Self::Conn, UnixSocketAddr), io::Error> {
-        let (socket, addr) = Socket::accept_from(self.as_raw_fd(), true)?;
-        let conn = unsafe { Self::Conn::from_raw_fd(socket.into_raw_fd()) };
+    fn accept_unix_addr(&self) -> Result<(Self::Conn, UnixSocketAddr), io::Error> 
+    {
+        let (socket, addr) = Socket::<SocketStream>::accept_from(self, true)?;
+    
+        let conn = 
+                Self::Conn::from(<Socket<SocketStream> as Into<OwnedFd>>::into(socket));
+
         Ok((conn, addr))
     }
 }
 
 /// Extension trait for `std::os::unix::net::UnixDatagram` and nonblocking equivalents.
-pub trait UnixDatagramExt: AsRawFd + FromRawFd {
+pub trait UnixDatagramExt: AsFd + AsRawFd + FromRawFd 
+{
     /// Create a socket bound to a path or abstract name.
     ///
     /// # Examples
@@ -148,7 +209,7 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     #[cfg_attr(any(target_os="linux", target_os="android"), doc="```")]
     #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
     /// # use std::os::unix::net::UnixDatagram;
-    /// # use uds::{UnixDatagramExt, UnixSocketAddr};
+    /// # use uds_fork::{UnixDatagramExt, UnixSocketAddr};
     /// #
     /// # fn main() -> Result<(), std::io::Error> {
     /// let addr = UnixSocketAddr::new("@abstract")?;
@@ -162,34 +223,41 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     ///
     /// ```
     /// # use std::os::unix::net::UnixDatagram;
-    /// # use uds::{UnixDatagramExt, UnixSocketAddr};
+    /// # use uds_fork::{UnixDatagramExt, UnixSocketAddr};
     /// #
     /// # fn main() -> Result<(), std::io::Error> {
-    /// # let addr = UnixSocketAddr::new("me")?;
+    /// # let addr = UnixSocketAddr::new("/tmp/me")?;
     /// let socket = UnixDatagram::unbound()?;
     /// socket.bind_to_unix_addr(&addr)?;
-    /// # let _ = std::fs::remove_file("me");
+    /// # let _ = std::fs::remove_file("/tmp/me");
     /// # Ok(())
     /// # }
     /// ```
-    fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> where Self: Sized;
+    fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> 
+        where Self: Sized;
 
     /// Returns the address of this socket, as a type that fully supports abstract addresses.
-    fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        get_unix_addr(self.as_raw_fd(), GetAddr::LOCAL)
+    fn local_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> 
+    {
+        get_unix_local_addr(self)
     }
+
     /// Returns the address of the connected socket, as a type that fully supports abstract addresses.
-    fn peer_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> {
-        get_unix_addr(self.as_raw_fd(), GetAddr::PEER)
+    fn peer_unix_addr(&self) -> Result<UnixSocketAddr, io::Error> 
+    {
+        get_unix_peer_addr(self)
     }
 
     /// Creates a path or abstract name for the socket.
-    fn bind_to_unix_addr(&self,  addr: &UnixSocketAddr) -> Result<(), io::Error> {
-        set_unix_addr(self.as_raw_fd(), SetAddr::LOCAL, addr)
+    fn bind_to_unix_addr(&self,  addr: &UnixSocketAddr) -> Result<(), io::Error> 
+    {
+        set_unix_local_addr(self, addr)
     }
+
     /// Connects the socket to a path-based or abstract named socket.
-    fn connect_to_unix_addr(&self,  addr: &UnixSocketAddr) -> Result<(), io::Error> {
-        set_unix_addr(self.as_raw_fd(), SetAddr::PEER, addr)
+    fn connect_to_unix_addr(&self,  addr: &UnixSocketAddr) -> Result<(), io::Error> 
+    {
+        set_unix_peer_addr(self, addr)
     }
 
     /// Sends to the specified address, using an address type that
@@ -202,7 +270,7 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     #[cfg_attr(any(target_os="linux", target_os="android"), doc="```")]
     #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
     /// # use std::os::unix::net::UnixDatagram;
-    /// # use uds::{UnixDatagramExt, UnixSocketAddr};
+    /// # use uds_fork::{UnixDatagramExt, UnixSocketAddr};
     /// #
     /// let socket = UnixDatagram::unbound().expect("create datagram socket");
     /// let _ = socket.send_to_unix_addr(
@@ -210,19 +278,24 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     ///     &UnixSocketAddr::from_abstract("somewhere").expect("OS supports abstract addresses"),
     /// );
     /// ```
-    fn send_to_unix_addr(&self,  datagram: &[u8],  addr: &UnixSocketAddr)
-    -> Result<usize, io::Error> {
-        unsafe {
-            let (sockaddr, socklen) = addr.as_raw_general();
-            cvt_r!(sendto(
-                self.as_raw_fd(),
-                datagram.as_ptr() as *const c_void,
-                datagram.len(),
-                MSG_NOSIGNAL,
-                sockaddr,
-                socklen,
-            )).map(|signed| signed as usize )
-        }
+    fn send_to_unix_addr(&self,  datagram: &[u8],  addr: &UnixSocketAddr) -> Result<usize, io::Error> 
+    {
+        let (sockaddr, socklen) = addr.as_raw_general();
+        
+        return 
+            unsafe {
+                cvt_r!(
+                    sendto(
+                        self.as_raw_fd(),
+                        datagram.as_ptr() as *const c_void,
+                        datagram.len(),
+                        MSG_NOSIGNAL,
+                        sockaddr,
+                        socklen,
+                    )
+                )
+                .map(|signed| signed as usize )
+            };
     }
     /// Sends a datagram created from multiple segments to the specified address,
     /// using an address type that supports abstract addresses.
@@ -234,7 +307,7 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     /// ```
     /// # use std::os::unix::net::UnixDatagram;
     /// # use std::io::IoSlice;
-    /// # use uds::{UnixDatagramExt, UnixSocketAddr};
+    /// # use uds_fork::{UnixDatagramExt, UnixSocketAddr};
     /// #
     /// let socket = UnixDatagram::unbound().expect("create datagram socket");
     /// let to = UnixSocketAddr::new("/var/run/someone.sock").unwrap();
@@ -244,10 +317,11 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     /// ];
     /// let _ = socket.send_vectored_to_unix_addr(&msg, &to);
     /// ```
-    fn send_vectored_to_unix_addr(&self,  datagram: &[IoSlice],  addr: &UnixSocketAddr)
-    -> Result<usize, io::Error> {
-        send_ancillary(self.as_raw_fd(), Some(addr), 0, datagram, &[], None)
+    fn send_vectored_to_unix_addr(&self,  datagram: &[IoSlice],  addr: &UnixSocketAddr) -> Result<usize, io::Error> 
+    {
+        send_ancillary(self, Some(addr), 0, datagram, &[], None)
     }
+
     /// Receives from any peer, storing its address in a type that exposes
     /// abstract addresses.
     ///
@@ -257,16 +331,21 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     ///
     /// ```
     /// use std::os::unix::net::UnixDatagram;
-    /// use uds::{UnixSocketAddr, UnixDatagramExt};
+    /// use uds_fork::{UnixSocketAddr, UnixDatagramExt};
     ///
-    /// let server = UnixDatagram::bind("echo.sock").expect("create server socket");
+    /// let dir = tempfile::tempdir().unwrap();
+    /// let mut file_path = dir.path().join("echo.sock");
+    /// 
+    /// let server = UnixDatagram::bind(&file_path).expect("create server socket");
     ///
+    /// let mut cli_file_path = dir.path().join("echo_client.sock");
+    /// 
     /// let client_addr = UnixSocketAddr::new("@echo_client")
-    ///     .or(UnixSocketAddr::new("echo_client.sock"))
+    ///     .or(UnixSocketAddr::new(cli_file_path.as_os_str().to_str().unwrap()))
     ///     .unwrap();
     /// let client = UnixDatagram::unbound().expect("create client ocket");
     /// client.bind_to_unix_addr(&client_addr).expect("create client socket");
-    /// client.connect_to_unix_addr(&UnixSocketAddr::new("echo.sock").unwrap())
+    /// client.connect_to_unix_addr(&UnixSocketAddr::new(file_path.as_os_str().to_str().unwrap()).unwrap())
     ///     .expect("connect to server");
     /// client.send(b"hello").expect("send");
     ///
@@ -277,75 +356,42 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     /// let len = client.recv(&mut buf).expect("receive response");
     /// assert_eq!(&buf[..len], "hello".as_bytes());
     ///
-    /// let _ = std::fs::remove_file("echo.sock");
+    /// let _ = std::fs::remove_file(&file_path);
     /// if let Some(client_path) = client_addr.as_pathname() {
     ///     let _ = std::fs::remove_file(client_path);
     /// }
     /// ```
-    fn recv_from_unix_addr(&self,  buf: &mut[u8]) -> Result<(usize, UnixSocketAddr), io::Error> {
-        UnixSocketAddr::new_from_ffi(|addr, len| {
-            unsafe {
-                cvt_r!(recvfrom(
-                    self.as_raw_fd(),
-                    buf.as_ptr() as *mut c_void,
-                    buf.len(),
-                    MSG_NOSIGNAL,
-                    addr,
-                    len,
-                )).map(|signed| signed as usize )
+    fn recv_from_unix_addr(&self,  buf: &mut[u8]) -> Result<(usize, UnixSocketAddr), io::Error> 
+    {
+        UnixSocketAddr::new_from_ffi(
+            |addr, len| 
+            {
+                unsafe {
+                    cvt_r!(
+                        recvfrom(
+                            self.as_raw_fd(),
+                            buf.as_mut_ptr() as *mut c_void,
+                            buf.len(),
+                            MSG_NOSIGNAL,
+                            addr,
+                            len,
+                        )
+                    )
+                    .map(|signed| signed as usize )
+                }
             }
-        })
+        )
     }
     /// Uses multiple buffers to receive from any peer, storing its address in
     /// a type that exposes abstract addresses.
-    ///
-    /// # Examples
-    ///
-    /// Read content into a separate buffer than header:
-    ///
-    #[cfg_attr(feature="mio_08", doc="```")]
-    #[cfg_attr(not(feature="mio_08"), doc="```no_compile")]
-    /// use mio_08::net::UnixDatagram;
-    /// use uds::UnixDatagramExt;
-    /// use std::io::IoSliceMut;
-    ///
-    /// let server = UnixDatagram::bind("cat.sock").expect("create cat.sock");
-    /// let mut received = Vec::new();
-    ///
-    /// let client = UnixDatagram::unbound().expect("create client socket");
-    /// client.send_to(b"cat\x01one", "cat.sock").expect("send");
-    /// client.send_to(b"cat\x01two", "cat.sock").expect("send");
-    /// client.send_to(b"cat\x01three", "cat.sock").expect("send");
-    ///
-    /// let mut header = [0; 4];
-    /// loop {
-    ///     let current_len = received.len();
-    ///     received.resize(current_len+1024, 0);
-    ///     let mut bufs = [
-    ///         IoSliceMut::new(&mut header),
-    ///         IoSliceMut::new(&mut received[current_len..]),
-    ///     ];
-    ///     match server.recv_vectored_from_unix_addr(&mut bufs) {
-    ///         Ok((len, _addr)) if len > 4  &&  header == *b"cat\x01" => {
-    ///             received.truncate(current_len+len-4); // keep it
-    ///         },
-    ///         Ok((_, _)) => received.truncate(current_len), // discard it
-    ///         Err(_) => {
-    ///             received.truncate(current_len); // discard it
-    ///             break;
-    ///         }
-    ///     }
-    /// }
-    ///
-    /// assert_eq!(&received, &b"onetwothree");
-    /// # let _ = std::fs::remove_file("cat.sock");
-    /// ```
-    fn recv_vectored_from_unix_addr(&self,  bufs: &mut[IoSliceMut])
-    -> Result<(usize, UnixSocketAddr), io::Error> {
+    fn recv_vectored_from_unix_addr(&self,  bufs: &mut[IoSliceMut]) -> Result<(usize, UnixSocketAddr), io::Error> 
+    {
         let mut addr = UnixSocketAddr::default();
-        recv_fds(self.as_raw_fd(), Some(&mut addr), bufs, &mut[])
+
+        recv_slice_fds(self, Some(&mut addr), bufs, &mut [])
             .map(|(bytes, _, _)| (bytes, addr) )
     }
+    
     /// Reads the next datagram without removing it from the queue.
     ///
     /// # Examples
@@ -354,12 +400,12 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     ///
     /// ```
     /// # use std::os::unix::net::UnixDatagram;
-    /// # use uds::{UnixSocketAddr, UnixDatagramExt};
+    /// # use uds_fork::{UnixSocketAddr, UnixDatagramExt};
     /// #
-    /// let checker = UnixDatagram::bind("checker.sock").expect("create receiver socket");
+    /// let checker = UnixDatagram::bind("/tmp/checker.sock").expect("create receiver socket");
     ///
     /// let client = UnixDatagram::unbound().expect("create client ocket");
-    /// client.send_to(b"hello", "checker.sock").expect("send");
+    /// client.send_to(b"hello", "/tmp/checker.sock").expect("send");
     ///
     /// let mut header = [0; 4];
     /// let (len, _from) = checker.peek_from_unix_addr(&mut header).expect("receive");
@@ -369,22 +415,30 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     ///     // call function that receives and processes it
     /// }
     /// #
-    /// # let _ = std::fs::remove_file("checker.sock");
+    /// # let _ = std::fs::remove_file("/tmp/checker.sock");
     /// ```
-    fn peek_from_unix_addr(&self,  buf: &mut[u8]) -> Result<(usize, UnixSocketAddr), io::Error> {
-        UnixSocketAddr::new_from_ffi(|addr, len| {
-            unsafe {
-                cvt_r!(recvfrom(
-                    self.as_raw_fd(),
-                    buf.as_ptr() as *mut c_void,
-                    buf.len(),
-                    MSG_PEEK | MSG_NOSIGNAL,
-                    addr,
-                    len,
-                )).map(|signed| signed as usize )
+    fn peek_from_unix_addr(&self,  buf: &mut[u8]) -> Result<(usize, UnixSocketAddr), io::Error> 
+    {
+        UnixSocketAddr::new_from_ffi(
+            |addr, len| 
+            {
+            unsafe 
+            {
+                cvt_r!(
+                    recvfrom(
+                        self.as_raw_fd(),
+                        buf.as_mut_ptr() as *mut c_void,
+                        buf.len(),
+                        MSG_PEEK | MSG_NOSIGNAL,
+                        addr,
+                        len,
+                    )
+                )
+                .map(|signed| signed as usize )
             }
         })
     }
+
     /// Uses multiple buffers to read the next datagram without removing it
     /// from the queue.
     ///
@@ -394,15 +448,18 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     #[cfg_attr(not(any(target_os="linux", target_os="android")), doc="```no_run")]
     /// use std::os::unix::net::UnixDatagram;
     /// use std::io::IoSliceMut;
-    /// use uds::{UnixDatagramExt, UnixSocketAddr};
-    ///
-    /// # let _ = std::fs::remove_file("datagram_server.sock");
-    /// let server = UnixDatagram::bind("datagram_server.sock").unwrap();
+    /// use tempfile::TempDir;
+    /// use uds_fork::{UnixDatagramExt, UnixSocketAddr};
+    /// 
+    /// let dir = tempfile::tempdir().unwrap();
+    /// let mut path = dir.path().join("datagram_server.sock");
+    /// 
+    /// let server = UnixDatagram::bind(&path).unwrap();
     ///
     /// // get a random abstract address on Linux
     /// let client = UnixDatagram::unbound().unwrap();
     /// client.bind_to_unix_addr(&UnixSocketAddr::new_unspecified()).unwrap();
-    /// client.connect("datagram_server.sock").unwrap();
+    /// client.connect(&path).unwrap();
     /// client.send(b"headerbodybody").unwrap();
     ///
     /// let (mut buf_a, mut buf_b) = ([0; 6], [0; 12]);
@@ -413,41 +470,74 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     /// assert_eq!(&buf_a, b"header");
     /// assert_eq!(&buf_b[..8], b"bodybody");
     /// #
-    /// # std::fs::remove_file("datagram_server.sock").unwrap();
     /// ```
-    fn peek_vectored_from_unix_addr(&self,  bufs: &mut[IoSliceMut])
-    -> Result<(usize, UnixSocketAddr), io::Error> {
+    fn peek_vectored_from_unix_addr(&self,  bufs: &mut[IoSliceMut]) -> Result<(usize, UnixSocketAddr), io::Error> 
+    {
         let mut addr = UnixSocketAddr::default();
-        recv_ancillary(
-            self.as_raw_fd(),
-            Some(&mut addr),
-            MSG_PEEK | MSG_NOSIGNAL,
-            bufs,
-            &mut[]
-        ).map(|(bytes, _)| (bytes, addr) )
+
+        Ancillary::recv_ancillary(self,Some(&mut addr),MSG_PEEK | MSG_NOSIGNAL, bufs,&mut[])
+            .map(|(bytes, _)| (bytes, addr) )
     }
 
     /// Sends file descriptors along with the datagram, on an unconnected socket.
-    fn send_fds_to(&self,  datagram: &[u8],  fds: &[RawFd],  addr: &UnixSocketAddr)
-    -> Result<usize, io::Error> {
-        send_ancillary(self.as_raw_fd(), Some(addr), 0, &[IoSlice::new(datagram)], fds, None)
+    fn send_fds_to(&self, datagram: &[u8], fds: Vec<OwnedFd>, addr: &UnixSocketAddr) -> Result<usize, io::Error> 
+    {
+        let fds_raw = fds.iter().map(|fd| fd.as_raw_fd()).collect::<Vec<RawFd>>();
+
+        send_ancillary(self, Some(addr), 0, &[IoSlice::new(datagram)], &fds_raw, None)
     }
+
+    unsafe 
+    fn send_fds_to_raw(&self, datagram: &[u8], fds: &[RawFd], addr: &UnixSocketAddr) -> Result<usize, io::Error> 
+    {
+        send_ancillary(self, Some(addr), 0, &[IoSlice::new(datagram)], fds, None)
+    }
+
     /// Sends file descriptors along with the datagram, on a connected socket.
-    fn send_fds(&self,  datagram: &[u8],  fds: &[RawFd]) -> Result<usize, io::Error> {
-        send_ancillary(self.as_raw_fd(), None, 0, &[IoSlice::new(datagram)], fds, None)
+    fn send_fds(&self, datagram: &[u8], fds: Vec<OwnedFd>) -> Result<usize, io::Error> 
+    {
+        let fds_raw = fds.iter().map(|fd| fd.as_raw_fd()).collect::<Vec<RawFd>>();
+
+        send_ancillary(self, None, 0, &[IoSlice::new(datagram)], &fds_raw, None)
     }
+
+    unsafe 
+    fn send_fds_raw(&self, datagram: &[u8], fds: &[RawFd]) -> Result<usize, io::Error> 
+    {
+        send_ancillary(self, None, 0, &[IoSlice::new(datagram)], 
+            fds, None)
+    }
+
     /// Receives file descriptors along with the datagram, on an unconnected socket
-    fn recv_fds_from(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd])
-    -> Result<(usize, usize, UnixSocketAddr), io::Error> {
+    fn recv_slice_fds_from(&self,  buf: &mut[u8],  fd_buf: &mut [Option<OwnedFd>]) -> Result<(usize, usize, UnixSocketAddr), io::Error> 
+    {
         let mut addr = UnixSocketAddr::default();
-        recv_fds(self.as_raw_fd(), Some(&mut addr), &mut[IoSliceMut::new(buf)], fd_buf)
+        recv_slice_fds(self, Some(&mut addr), &mut[IoSliceMut::new(buf)], fd_buf)
             .map(|(bytes, _, fds)| (bytes, fds, addr) )
     }
+
+    fn recv_fds_from(&self,  buf: &mut[u8],  fd_buf: &mut Vec<OwnedFd>) -> Result<(usize, usize, UnixSocketAddr), io::Error> 
+    {
+        let mut addr = UnixSocketAddr::default();
+
+        recv_fds(self, Some(&mut addr), &mut[IoSliceMut::new(buf)], fd_buf)
+            .map(|(bytes, _, fds)| (bytes, fds, addr) )
+    }
+
     /// Receives file descriptors along with the datagram, on a connected socket
-    fn recv_fds(&self,  buf: &mut[u8],  fd_buf: &mut[RawFd]) -> Result<(usize, usize), io::Error> {
-        recv_fds(self.as_raw_fd(), None, &mut[IoSliceMut::new(buf)], fd_buf)
+    fn recv_slice_fds(&self,  buf: &mut[u8],  fd_buf: &mut [Option<OwnedFd>]) -> Result<(usize, usize), io::Error> 
+    {
+        recv_slice_fds(self, None, &mut[IoSliceMut::new(buf)], fd_buf)
             .map(|(bytes, _, fds)| (bytes, fds) )
     }
+
+    
+    fn recv_fds(&self,  buf: &mut[u8],  fd_buf: &mut Vec<OwnedFd>) -> Result<(usize, usize), io::Error> 
+    {
+        recv_fds(self, None, &mut[IoSliceMut::new(buf)], fd_buf)
+            .map(|(bytes, _, fds)| (bytes, fds) )
+    }
+
 
     /// Returns the credentials of the process that created a socket pair.
     ///
@@ -470,8 +560,9 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     ///
     /// Despite these limitations, the feature is supported by Linux at least
     /// (but not macOS or FreeBSD), so might as well expose it.
-    fn initial_pair_credentials(&self) -> Result<ConnCredentials, io::Error> {
-        peer_credentials(self.as_raw_fd())
+    fn initial_pair_credentials(&self) -> Result<ConnCredentials, io::Error> 
+    {
+        peer_credentials(self)
     }
     /// Returns the SELinux security context of the process that created a socket pair.
     ///
@@ -480,32 +571,48 @@ pub trait UnixDatagramExt: AsRawFd + FromRawFd {
     /// or if running under kubernetes.
     ///
     /// The default security context is the string `unconfined`.
-    fn initial_pair_selinux_context(&self,  buffer: &mut[u8]) -> Result<usize, io::Error> {
-        selinux_context(self.as_raw_fd(), buffer)
+    fn initial_pair_selinux_context(&self,  buffer: &mut[u8]) -> Result<usize, io::Error> 
+    {
+        selinux_context(self, buffer)
     }
 }
 
-impl UnixDatagramExt for UnixDatagram {
-    fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
-        match UnixDatagram::unbound() {
-            Ok(socket) => match socket.bind_to_unix_addr(addr) {
-                Ok(()) => Ok(socket),
-                Err(e) => Err(e),
-            }
-            Err(e) => Err(e)
-        }
+impl UnixDatagramExt for UnixDatagram 
+{
+    fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> 
+    {
+        return 
+            UnixDatagram::unbound()
+                .map_or_else(
+                    |e| Err(e), 
+                    |socket|
+                        socket
+                            .bind_to_unix_addr(addr)
+                            .map_or_else(
+                                |e| Err(e), 
+                                |_| Ok(socket)
+                            )
+                );
     }
 }
 
-#[cfg(feature = "mio_08")]
-impl UnixDatagramExt for mio_08::net::UnixDatagram {
-    fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> {
-        match mio_08::net::UnixDatagram::unbound() {
-            Ok(socket) => match socket.bind_to_unix_addr(addr) {
-                Ok(()) => Ok(socket),
-                Err(e) => Err(e),
-            }
-            Err(e) => Err(e),
-        }
+#[cfg(feature = "mio")]
+impl UnixDatagramExt for mio::net::UnixDatagram 
+{
+    fn bind_unix_addr(addr: &UnixSocketAddr) -> Result<Self, io::Error> 
+    {
+        return 
+            mio::net::UnixDatagram
+                ::unbound()
+                    .map_or_else(
+                        |e| Err(e), 
+                        |socket|
+                            socket
+                                .bind_to_unix_addr(addr)
+                                .map_or_else(
+                                    |e| Err(e), 
+                                    |_| Ok(socket)
+                                )
+                    );
     }
 }

@@ -11,15 +11,25 @@
 //!
 //! File-descriptor passing and abstract socket support
 //! for stream and datagram sockets is provided via extension traits for
-//! existing types in `std::os::unix::net` and from [mio](https://github.com/tokio-rs/mio)
-//! (the latter is opt-in and must be enabled with `features=["mio_08"]` in Cargo.toml).
+//! existing types.
+//! 
+//! Also it support UnixStream for Windows i.e AF_INET SOCK_STREAM with some limitations.
 //!
 //! See README for status of operating system support and other general info.
+//! 
+//! In seqpacket.rs a [UnixSeqpacketConn]:
+//! 
+//! If the feature `unsatable_preview` is enabled, a `send_vectored_with_ancillary_to`, 
+//! `send_vectored_with_ancillary`, `recv_vectored_with_ancillary_from`,
+//! `recv_vectored_with_ancillary` are enabled.
+//! 
+//! A legacy (method provided not by std but this crate) is `recv_vectored_ancillary`.
 
-#![cfg(unix)] // compile as empty crate on windows
+#![cfg_attr(feature = "unsatable_preview", feature(unix_socket_ancillary_data))]
+
 
 // Too many features unavailable on solarish to bother cfg()ing individually.
-#![cfg_attr(any(target_os="illumos", target_os="solaris"), allow(unused))]
+#![cfg_attr(any(target_os="illumos", target_os="solaris", target_os="windows"), allow(unused))]
 
 #![allow(
     clippy::cast_lossless, // improves portability when values are limited by the OS anyway
@@ -33,15 +43,26 @@
     // more lints are disabled inside ancillary.rs and credentials.rs
 )]
 
+#[cfg(feature="mio")]
+pub extern crate mio;
+
+//temporary disabled until xio fix comilation errors on netbsd
+/*#[cfg(feature="xio-rs")]
+pub extern crate xio_rs;*/
+
+#[cfg(target_family = "unix")]
 extern crate libc;
-#[cfg(feature="mio_08")]
-extern crate mio_08;
-#[cfg(feature="tokio")]
-extern crate tokio as tokio_crate;
+
+#[cfg(target_family = "windows")]
+extern crate windows_sys;
+
+#[cfg(target_family = "windows")]
+extern crate tempfile;
 
 /// Get errno as io::Error on -1.
 macro_rules! cvt {($syscall:expr) => {
-    match $syscall {
+    match $syscall 
+    {
         -1 => Err(io::Error::last_os_error()),
         ok => Ok(ok),
     }
@@ -49,32 +70,71 @@ macro_rules! cvt {($syscall:expr) => {
 
 /// Get errno as io::Error on -1 and retry on EINTR.
 macro_rules! cvt_r {($syscall:expr) => {
-    loop {
+    loop 
+    {
         let result = $syscall;
-        if result != -1 {
+        if result != -1 
+        {
             break Ok(result);
         }
+
         let err = io::Error::last_os_error();
-        if err.kind() != ErrorKind::Interrupted {
+
+        if err.kind() != std::io::ErrorKind::Interrupted 
+        {
             break Err(err);
         }
     }
 }}
 
+#[cfg(target_family = "windows")]
+mod windows_unixstream;
+
 mod addr;
+
+#[cfg(feature = "unsatable_preview")]
+mod ancillary_rust;
+
+#[cfg(target_family = "unix")]
 mod credentials;
+
+#[cfg(target_family = "unix")]
 mod helpers;
+
+#[cfg(target_family = "unix")]
 mod ancillary;
+
+#[cfg(target_family = "unix")]
 mod traits;
+
+#[cfg(target_family = "unix")]
 mod seqpacket;
-#[cfg(feature="tokio")]
-pub mod tokio;
+
+
+pub(crate) const LISTEN_BACKLOG: std::ffi::c_int = 128;//10; // what std uses, I think
+
 
 pub use addr::{UnixSocketAddr, UnixSocketAddrRef, AddrName};
+
+#[cfg(windows)]
+pub use windows_unixstream::{WindowsUnixListener, WindowsUnixStream, RecvFlags};
+
+#[cfg(windows)]
+pub use windows_unixstream::{get_socket_family, get_socket_type};
+
+#[cfg(target_family = "unix")]
+pub use ancillary::{AncillaryBuf, Ancillary, AncillaryItem};
+
+#[cfg(target_family = "unix")]
 pub use traits::{UnixListenerExt, UnixStreamExt, UnixDatagramExt};
+
+#[cfg(target_family = "unix")]
 pub use seqpacket::{UnixSeqpacketListener, UnixSeqpacketConn};
+
+#[cfg(target_family = "unix")]
 pub use credentials::ConnCredentials;
 
+#[cfg(target_family = "unix")]
 pub mod nonblocking {
     pub use crate::seqpacket::NonblockingUnixSeqpacketListener as UnixSeqpacketListener;
     pub use crate::seqpacket::NonblockingUnixSeqpacketConn as UnixSeqpacketConn;

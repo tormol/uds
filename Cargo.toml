@@ -1,29 +1,71 @@
 [package]
-name = "uds"
-version = "0.4.2"
+name = "uds-fork"
+version = "0.10.0"
 description = """
-A unix domain socket crate that supports abstract addresses, fd-passing and seqpacket sockets.
+A unix domain socket crate that supports abstract addresses, fd-passing, seqpacket and windows unix stream sockets.
 """
 readme = "README.md"
-repository = "https://github.com/tormol/uds"
+repository = "https://codeberg.org/4neko/uds"
 license = "Apache-2.0 OR MIT"
-authors = ["Torbjørn Birch Moltu <t.b.moltu@lyse.net>"]
-keywords = ["unix", "socket", "seqpacket", "abstract", "fdpassing"]
+authors = ["Torbjørn Birch Moltu <t.b.moltu@lyse.net>", "Aleksandr Morozov <alex@nixd.org>"]
+keywords = ["unix", "socket", "seqpacket", "fdpassing", "windows"]
 categories = ["os::unix-apis", "asynchronous"]
-edition = "2021"
+edition = "2024"
 exclude = ["tests", "src/bin", ".vscode"]
 
-[target."cfg(unix)".dependencies]
-libc = "0.2.90" # peer credentials for DragonFly BSD and NetBSD, SO_PEERSEC on all Linux architectures
-# enabling this feature implements the extension traits for mio 0.8's unix socket types
-# and Source for this crate's non-blocking seqpacket types.
-mio_08 = { package = "mio", version = "0.8", features = ["os-ext", "net"], optional = true }
-# .28 for AsyncFd.async_io() helper
-tokio = { version = "1.28", features = ["net"], optional=true }
+[features]
 
-[target."cfg(unix)".dev-dependencies]
-# rt-multi-thread is required for #[tokio::main] in doctests
-tokio = { version = "1.28", features = ["io-util", "macros", "rt", 'rt-multi-thread'] }
+default = []
+
+# enables unstable code
+unsatable_preview = []
+
+[dependencies]
+#temporary disabled until XIO is updated
+#xio-rs = { version = "0.1.0-alpha.3", optional = true } # MIT
+
+[target."cfg(unix)".dependencies]
+libc = "~0.2"
+mio = { version = "~1.2", features = ["os-ext", "net"], optional = true }
+
+
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "~0.61"
+features = [
+  "Win32_Foundation",
+  "Win32_Networking_WinSock",
+  "Win32_System_IO",
+]
+[target.'cfg(windows)'.dependencies.tempfile]
+version = "~3.27" 
+
+[dev-dependencies]
+#temporary disabled until MIO is updated
+#xio-rs = { version = "0.1.0-alpha.3" } # MIT
+
+tempfile = { version = "~3.27" }
 
 [package.metadata.docs.rs]
-features = ["mio_08", "tokio"]
+
+features = ["unsatable_preview"] #"xio-rs", 
+default-target = "x86_64-unknown-linux-gnu"
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "x86_64-unknown-freebsd",
+  "x86_64-pc-windows-msvc",
+]
+
+# return this back after testing on local docsrs server
+# "x86_64-unknown-dragonfly",
+#   "x86_64-unknown-netbsd",
+#   "x86_64-unknown-openbsd",
+
+[[example]]
+name = "recv_ancillary"
+path = "examples/recv_ancillary.rs"
+#required-features = ["xio-rs"]
+
+[[example]]
+name = "recv_anclillary_std"
+path = "examples/recv_anclillary_std.rs"
+required-features = ["unsatable_preview"]

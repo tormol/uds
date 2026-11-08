@@ -1,8 +1,10 @@
 //! An executable to test close-on-exec by exec()ing to this program
 //! and checking the exit status.
 
+#[cfg(target_family = "unix")]
 extern crate libc;
 
+#[cfg(target_family = "unix")]
 fn main() {
     let mut args = std::env::args();
     let _ = args.next();
@@ -34,4 +36,10 @@ fn main() {
     }
     eprintln!("CLOEXEC was set, but ignored!");
     std::process::exit(2);
+}
+
+#[cfg(not(target_family = "unix"))]
+fn main()
+{
+    panic!("windows is not supported.")
 }

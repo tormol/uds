@@ -1,17 +1,28 @@
-extern crate uds;
+#![cfg(target_family = "unix")]
+extern crate uds_fork;
+
+mod common;
+
 extern crate libc;
 
-use std::os::unix::net::{UnixListener, UnixStream, UnixDatagram};
+use std::os::unix::net::{UnixDatagram, UnixListener, UnixStream};
 use std::io::ErrorKind::*;
 use std::io::{IoSlice, IoSliceMut};
-use std::fs::remove_file;
 use std::path::Path;
-use std::mem::size_of;
+use std::mem::{self, size_of};
+
 
 use libc::{sockaddr, sockaddr_un, socklen_t};
 
-use uds::{UnixSocketAddr, UnixSocketAddrRef};
-use uds::{UnixListenerExt, UnixStreamExt, UnixDatagramExt};
+//#[cfg(target_family = "windows")]
+
+
+use uds_fork::{UnixSocketAddr, UnixSocketAddrRef};
+
+
+use uds_fork::{UnixListenerExt, UnixStreamExt, UnixDatagramExt};
+
+use crate::common::{make_temp_dir_no_file};
 
 #[cfg(any(target_os="linux", target_os="android"))]
 #[test]
@@ -40,7 +51,13 @@ fn unspecified_creates_abstract() {
 fn cannot_bind_to_unspecified() {
     let bind_err = UnixListener::bind_unix_addr(&UnixSocketAddr::new_unspecified())
         .expect_err("bind to unspecified address when abstract addresses are not supported");
+    println!("{:?}", bind_err);
+    
+    #[cfg(not(any(target_os="openbsd")))]
     assert!(bind_err.kind() == InvalidInput  ||  bind_err.kind() == Other/*solarish*/);
+    
+    #[cfg(any(target_os="openbsd"))]
+    assert!(bind_err.kind() == NotFound);
 }
 
 #[test]
@@ -92,16 +109,21 @@ fn abstract_not_supported() {
 }
 
 #[test]
-fn max_regular_path_addr() {
+fn max_regular_path_addr() 
+{
+    let dir = make_temp_dir_no_file();
+
+
     let max_regular_len = UnixSocketAddr::max_path_len()-1;
-    let max_regular_path = std::iter::repeat('R').take(max_regular_len).collect::<String>();
+    let max_regular_path_base = dir.path().display().to_string();
+    let max_regular_path_other = std::iter::repeat('R').take(max_regular_len - max_regular_path_base.len()).collect::<String>();
+    let max_regular_path = [max_regular_path_base.as_str(), max_regular_path_other.as_str()].concat();
     let max_regular_addr = UnixSocketAddr::from_path(&max_regular_path)
         .expect("create path address with max regular length");
     assert_eq!(max_regular_addr.as_ref(), UnixSocketAddrRef::Path(max_regular_path.as_ref()));
     assert_eq!(&max_regular_addr, max_regular_path.as_bytes());
 
-    let _ = remove_file(&max_regular_path);
-
+    
     let listener = UnixListener::bind_unix_addr(&max_regular_addr)
         .expect("create socket with max regular path length");
     let addr_from_os = listener.local_unix_addr().expect("get local max regular length path addr");
@@ -119,20 +141,22 @@ fn max_regular_path_addr() {
         conn.peer_unix_addr().expect("get local max regular length path addr"),
         max_regular_addr
     );
-
-    remove_file(&max_regular_path).expect("delete socket file");
 }
 
 #[test]
-fn max_path_addr() {// std fails this!
+fn max_path_addr() 
+{// std fails this!
+    let dir = make_temp_dir_no_file();
+
     let max_len = UnixSocketAddr::max_path_len();
-    let max_path = std::iter::repeat('L').take(max_len).collect::<String>();
+    let max_regular_path_base = dir.path().display().to_string();
+    let max_regular_path_other = std::iter::repeat('L').take(max_len - max_regular_path_base.len()).collect::<String>();
+    let max_path = [max_regular_path_base.as_str(), max_regular_path_other.as_str()].concat();
     let max_addr = UnixSocketAddr::from_path(&max_path)
         .expect("create path address with max length");
     assert_eq!(max_addr.as_ref(), UnixSocketAddrRef::Path(max_path.as_ref()));
     assert_eq!(&max_addr, max_path.as_bytes());
 
-    let _ = remove_file(&max_path);
 
     let listener = UnixListener::bind_unix_addr(&max_addr)
         .expect("create socket with max length path addr");
@@ -142,7 +166,6 @@ fn max_path_addr() {// std fails this!
     assert_eq!(addr_from_os.as_ref(), UnixSocketAddrRef::Path(max_path.as_ref()));
     assert_eq!(&addr_from_os, max_path.as_bytes());
 
-    remove_file(&max_path).expect("delete socket file");
 }
 
 #[test]
@@ -150,9 +173,12 @@ fn too_long_abstract_name() {
     let too_long = &vec![b'L'; UnixSocketAddr::max_abstract_len()+1];
     let err = UnixSocketAddr::from_abstract(&too_long)
         .expect_err("create too long abstract address");
-    if cfg!(any(target_os="linux", target_os="android")) {
+    if cfg!(any(target_os="linux", target_os="android")) 
+    {
         assert_eq!(err.kind(), InvalidInput); // too long
-    } else {
+    } 
+    else 
+    {
         assert_eq!(err.kind(), AddrNotAvailable); // not supported
     }
 }
@@ -172,7 +198,8 @@ fn too_long_path() {
 }
 
 #[test]
-fn path_from_ffi() {
+fn path_from_ffi() 
+{
     let ((), addr) = UnixSocketAddr::new_from_ffi(|addr, len| {
         let addr = unsafe { &mut*(addr as *mut sockaddr as *mut sockaddr_un)};
         *len = (&addr.sun_path as *const _ as usize - addr as *const _ as usize) as socklen_t;
@@ -266,17 +293,21 @@ fn abstract_from_ffi() {
 }
 
 #[test]
-fn unconnected_datagrams() {
-    let _ = remove_file("corner a.sock");
-    let _ = remove_file("corner b.sock");
-    let _ = remove_file("corner c.sock");
-    let a = UnixDatagram::bind("corner a.sock").expect("create 1st datagram socket");
-    let b = UnixDatagram::bind("corner b.sock").expect("create 2nd datagram socket");
-    let c = UnixDatagram::bind("corner c.sock").expect("create 3rd datagram socket");
+fn unconnected_datagrams() 
+{
+    let dir = make_temp_dir_no_file();
 
-    let addr_a = UnixSocketAddr::new("corner a.sock").unwrap();
-    let addr_b = UnixSocketAddr::new("corner b.sock").unwrap();
-    let addr_c = UnixSocketAddr::new("corner c.sock").unwrap();
+    let p1 = dir.path().join("corner_a.sock");
+    let p2 = dir.path().join("corner_b.sock");   
+    let p3 = dir.path().join("corner_c.sock");
+
+    let a = UnixDatagram::bind(&p1).expect("create 1st datagram socket");
+    let b = UnixDatagram::bind(&p2).expect("create 2nd datagram socket");
+    let c = UnixDatagram::bind(&p3).expect("create 3rd datagram socket");
+
+    let addr_a = UnixSocketAddr::new(p1.as_os_str().to_str().unwrap()).unwrap();
+    let addr_b = UnixSocketAddr::new(p2.as_os_str().to_str().unwrap()).unwrap();
+    let addr_c = UnixSocketAddr::new(p3.as_os_str().to_str().unwrap()).unwrap();
     let mut buf = [0; 10];
 
     a.send_to_unix_addr(b"red", &addr_b).expect("send datagram to b");
@@ -293,38 +324,39 @@ fn unconnected_datagrams() {
     assert_eq!(&buf, b"cyan\0\0\0\0\0\0");
     let (len, std_addr) = a.recv_from(&mut buf).expect("receive what was peeked");
     #[cfg(not(target_os="openbsd"))]
-    assert_eq!(std_addr.as_pathname(), Some(Path::new("corner b.sock")));
+    assert_eq!(std_addr.as_pathname(), Some(Path::new(&p2)));
     assert_eq!(&buf[..len], b"cyan");
 
-    c.send_to(b"blue", "corner a.sock").expect("send datagram to a");
+    c.send_to(b"blue", p1).expect("send datagram to a");
     c.send_to_unix_addr(b"alpha", &addr_a).expect("send datagram to a");
     let (buf_a, buf_b) = buf.split_at_mut(2);
     let (len, addr) = c.recv_vectored_from_unix_addr(&mut[
         IoSliceMut::new(&mut buf_b[..3]), IoSliceMut::new(buf_a)
     ]).expect("receive from b");
-    assert_eq!(addr.as_pathname(), Some(Path::new("corner b.sock")));
+    assert_eq!(addr.as_pathname(), Some(Path::new(&p2)));
     assert_eq!(len, 5);
     assert_eq!(&buf, b"engre\0\0\0\0\0");
 
-    let _ = remove_file("corner a.sock");
-    let _ = remove_file("corner b.sock");
-    let _ = remove_file("corner c.sock");
 }
 
 #[test]
-fn datagram_peek_vectored() {
-    let _ = std::fs::remove_file("datagram_server.sock");
-    let server = UnixDatagram::bind("datagram_server.sock").unwrap();
+fn datagram_peek_vectored() 
+{
+    let dir = make_temp_dir_no_file();
+
+    let p1 = dir.path().join("datagram_server.sock");
+    let p2 = dir.path().join("datagram_client.sock");
+
+    let server = UnixDatagram::bind(&p1).unwrap();
 
     let client = UnixDatagram::unbound().unwrap();
     if cfg!(any(target_os="linux", target_os="android")) {
         // get a random abstract address
         client.bind_to_unix_addr(&UnixSocketAddr::new_unspecified()).unwrap();
     } else {
-        let _ = std::fs::remove_file("datagram_client.sock");
-        client.bind_to_unix_addr(&UnixSocketAddr::new("datagram_client.sock").unwrap()).unwrap();
+        client.bind_to_unix_addr(&UnixSocketAddr::new(p2.as_os_str().to_str().unwrap()).unwrap()).unwrap();
     }
-    client.connect("datagram_server.sock").unwrap();
+    client.connect(&p1).unwrap();
     client.send(b"headerbodybody").unwrap();
 
     let (mut buf_a, mut buf_b) = ([0; 6], [0; 12]);
@@ -336,48 +368,210 @@ fn datagram_peek_vectored() {
     assert_eq!(&buf_a, b"header");
     assert_eq!(&buf_b[..8], b"bodybody");
 
-    std::fs::remove_file("datagram_server.sock").unwrap();
-    let _ = std::fs::remove_file("datagram_client.sock");
 }
 
 #[test]
-fn from_raw_path() {
-    let path_addr = UnixSocketAddr::from_path("a/path.sock").unwrap();
-    let a = unsafe {
+fn from_raw_path() 
+{
+    
+    let path_addr = UnixSocketAddr::from_path("/tmp/path.sock").unwrap();
+    let a = 
+    unsafe 
+    {
         let (raw_addr, raw_len) = path_addr.as_raw();
         UnixSocketAddr::from_raw(raw_addr as *const sockaddr_un as *const sockaddr, raw_len)
-    }.expect("from_raw() accepts from_path()");
+    }
+    .expect("from_raw() accepts from_path()");
+
     assert_eq!(a, path_addr);
     assert!(a.is_path());
 }
 
 #[test]
-fn from_raw_max_len_path() {
+fn from_ref_path() 
+{
+    
+    let path_addr = UnixSocketAddr::from_path("/tmp/path.sock").unwrap();
+    let a = 
+    unsafe 
+    {
+        let (raw_addr, raw_len) = path_addr.as_raw();
+        let ref_addr: &libc::sockaddr = mem::transmute(raw_addr);
+
+        UnixSocketAddr::from_ref(ref_addr, raw_len)
+    }
+    .expect("from_raw() accepts from_path()");
+    
+    assert_eq!(a, path_addr);
+    assert!(a.is_path());
+}
+
+#[test]
+fn from_sockaddr_storage_path() 
+{
+    
+    let path_addr = UnixSocketAddr::from_path("/tmp/path.sock").unwrap();
+    let a = 
+        unsafe 
+        {
+            let (raw_addr, raw_len) = path_addr.as_raw();
+            let ref_addr: &libc::sockaddr_storage = mem::transmute(raw_addr);
+
+            UnixSocketAddr::from_sockaddr_storage(ref_addr, raw_len)
+        }
+        .expect("from_raw() accepts from_path()");
+    
+    assert_eq!(a, path_addr);
+    assert!(a.is_path());
+}
+
+#[test]
+fn from_sockaddr_storage_path_unspec() 
+{
+    
+    let path_addr = UnixSocketAddr::new_unspecified();
+    let a = 
+        unsafe 
+        {
+            let (raw_addr, raw_len) = path_addr.as_raw();
+            assert_eq!(raw_len, 2);
+            let ref_addr: &libc::sockaddr_storage = mem::transmute(raw_addr);
+
+            UnixSocketAddr::from_sockaddr_storage(ref_addr, raw_len)
+        }
+        .expect("from_raw() accepts from_path()");
+    
+    assert_eq!(a, path_addr);
+    assert!(a.is_unnamed());
+}
+
+#[test]
+fn from_raw_max_len_path() 
+{
     let path = "R".repeat(UnixSocketAddr::max_path_len());
     let path_addr = UnixSocketAddr::from_path(path.as_str()).unwrap();
-    let a = unsafe {
+    let a = 
+    unsafe 
+    {
         let (raw_addr, raw_len) = path_addr.as_raw();
         UnixSocketAddr::from_raw(raw_addr as *const sockaddr_un as *const sockaddr, raw_len)
-    }.expect("from_path() is valid");
+    }
+    .expect("from_path() is valid");
+
     assert_eq!(a, path_addr);
     assert!(a.is_path());
 }
 
 #[test]
-fn from_raw_too_long_path() {
+fn from_ref_max_len_path() 
+{
+    let path = "R".repeat(UnixSocketAddr::max_path_len());
+    let path_addr = UnixSocketAddr::from_path(path.as_str()).unwrap();
+    let a = 
+    unsafe 
+    {
+        let (raw_addr, raw_len) = path_addr.as_raw();
+        let ref_addr: &libc::sockaddr = mem::transmute(raw_addr);
+
+        UnixSocketAddr::from_ref(ref_addr, raw_len)
+    }
+    .expect("from_path() is valid");
+
+    assert_eq!(a, path_addr);
+    assert!(a.is_path());
+}
+
+#[test]
+fn from_sockaddr_storage_max_len_path() 
+{
+    let path = "R".repeat(UnixSocketAddr::max_path_len());
+    let path_addr = UnixSocketAddr::from_path(path.as_str()).unwrap();
+    let a = 
+    unsafe 
+    {
+        let (raw_addr, raw_len) = path_addr.as_raw();
+        let ref_addr: &libc::sockaddr_storage = mem::transmute(raw_addr);
+
+        UnixSocketAddr::from_sockaddr_storage(ref_addr, raw_len)
+    }
+    .expect("from_path() is valid");
+
+    assert_eq!(a, path_addr);
+    assert!(a.is_path());
+}
+
+#[test]
+fn from_raw_too_long_path() 
+{
     #[repr(C)]
-    struct TooLong {
+    struct TooLong 
+    {
         fam: libc::sa_family_t,
         path: [u8; 300],
     }
-    let path_addr = TooLong {
-        fam: libc::AF_UNIX as libc::sa_family_t,
-        path: [b'o'; 300],
-    };
-    unsafe {
+    let path_addr = 
+        TooLong 
+        {
+            fam: libc::AF_UNIX as libc::sa_family_t,
+            path: [b'o'; 300],
+        };
+
+    unsafe 
+    {
         let raw_addr = &path_addr as *const TooLong as *const sockaddr;
         UnixSocketAddr::from_raw(raw_addr, size_of::<TooLong>() as _)
-    }.expect_err("too long");
+    }
+    .expect_err("too long");
+}
+
+#[test]
+fn from_ref_too_long_path() 
+{
+    #[repr(C)]
+    struct TooLong 
+    {
+        fam: libc::sa_family_t,
+        path: [u8; 300],
+    }
+    let path_addr = 
+        TooLong 
+        {
+            fam: libc::AF_UNIX as libc::sa_family_t,
+            path: [b'o'; 300],
+        };
+
+    unsafe 
+    {
+        let ref_path: &libc::sockaddr = mem::transmute(&path_addr);
+
+        UnixSocketAddr::from_ref(ref_path, size_of::<TooLong>() as _)
+    }
+    .expect_err("too long");
+}
+
+#[test]
+fn from_sockaddr_storage_too_long_path() 
+{
+    #[repr(C)]
+    struct TooLong 
+    {
+        fam: libc::sa_family_t,
+        path: [u8; 300],
+    }
+    let path_addr = 
+        TooLong 
+        {
+            fam: libc::AF_UNIX as libc::sa_family_t,
+            path: [b'o'; 300],
+        };
+
+    unsafe 
+    {
+        let ref_path: &libc::sockaddr_storage = mem::transmute(&path_addr);
+
+        UnixSocketAddr::from_sockaddr_storage(ref_path, size_of::<TooLong>() as _)
+    }
+    .expect_err("too long");
 }
 
 #[test]

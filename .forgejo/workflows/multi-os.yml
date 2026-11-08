@@ -1,0 +1,233 @@
+name: multi-os-test
+on: 
+  pull_request:
+  push:
+
+jobs: 
+  linux-test:
+    runs-on: ubuntu-latest
+    container:
+      image: registry:5000/ubuntu:rust-24.04
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check Rust version
+        run: rustc --version
+      
+      - name: Cargo Cache
+        # Optional: Speeds up builds significantly in Forgejo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run build debug
+        run: cargo build --tests --examples
+
+      - name: Run checks
+        run: cargo check --tests --examples
+
+      - name: Run tests
+        run: cargo test --verbose
+
+
+
+  freebsd-test:
+    needs: linux-test
+    if: always()
+
+    runs-on: ubuntu-latest
+    container:
+      image: registry:5000/ubuntu-vm:runner-24.04
+      volumes:
+        - /vm_images:/vm_images
+      options: >-
+        --device /dev/kvm
+        --device /dev/loop-control
+        --device /dev/loop0
+        --device /dev/loop1
+        --device /dev/loop2
+        --device /dev/loop3
+        --device /dev/loop4
+        --device /dev/loop5
+        --device /dev/loop6
+#        --privileged
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+
+      - name: Loop check
+        run: |
+          ls /dev
+
+      - name: Pkgs check
+        run: |
+          apt list --installed | grep fdisk
+
+      - name: Setup Path for Action
+        run: |
+          # Force the path into the environment file Forgejo uses
+          echo "PATH=/usr/sbin:/usr/bin:/sbin:/bin:$PATH" >> $GITHUB_ENV
+          # Debug: Verify it's actually there and executable
+          ls -l /usr/sbin/fdisk
+          /usr/sbin/fdisk -v
+
+      - name: Start server background process
+        run: |
+          python3 -m http.server 8080 --directory /vm_images &
+          sleep 2 # Give it a second to start
+
+      - name: Test server
+        run: |
+          ls -la /vm_images
+          curl --head http://localhost:8080/freebsd-15.1-x86-64.qcow2
+
+      - name: Run in FreeBSD
+        uses: https://github.com/cross-platform-actions/action@v1.3.0
+        with:
+          operating_system: freebsd
+          image_url: http://localhost:8080/freebsd-15.1-x86-64.qcow2
+          version: '15.1'
+          memory: 4G
+          cpu_count: 3
+          shell: bash 
+          run: |
+            uname -a
+            export PATH=$HOME/.cargo/bin:$PATH
+            rustc --version
+            cargo build --tests --examples
+            cargo check --tests --examples
+            cargo test --tests --examples
+
+  
+  openbsd-test:
+    needs: freebsd-test
+    if: always()
+
+    runs-on: ubuntu-latest
+
+    container:
+      image: registry:5000/ubuntu-vm:runner-24.04
+      volumes:
+        - /vm_images:/vm_images
+      options: >-
+        --device /dev/kvm
+        --device /dev/loop-control
+        --device /dev/loop0
+        --device /dev/loop1
+        --device /dev/loop2
+        --device /dev/loop3
+        --device /dev/loop4
+        --device /dev/loop5
+        --device /dev/loop6
+#        --privileged
+        
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+
+      - name: Loop check
+        run: |
+          ls /dev | grep loop
+          whoami
+
+      - name: Start server background process
+        run: |
+          python3 -m http.server 8080 --directory /vm_images &
+          sleep 2 # Give it a second to start
+
+      - name: Test server
+        run: |
+          ls -la /vm_images
+          curl --head http://localhost:8080/openbsd-7.9-x86-64.qcow2
+
+      - name: Run in OpenBSD
+        uses: https://github.com/cross-platform-actions/action@v1.3.0
+        with:
+          operating_system: openbsd
+          image_url: http://localhost:8080/openbsd-7.9-x86-64.qcow2
+          version: '7.9'
+          memory: 4G
+          cpu_count: 3
+          shell: bash 
+          run: |
+            uname -a
+            export PATH=$HOME/.cargo/bin:$PATH
+            rustc --version
+            cargo build --tests --examples
+            cargo check --tests --examples
+            cargo test --tests --examples
+        #echo "root" | su - root -c "pkg_add rust"
+
+  netbsd-test:
+    needs: openbsd-test
+    if: always()
+    runs-on: ubuntu-latest
+    container:
+      image: registry:5000/ubuntu-vm:runner-24.04 
+      volumes:
+        - /vm_images:/vm_images
+      options: >-
+        --device /dev/kvm
+        --device /dev/loop-control
+        --device /dev/loop0
+        --device /dev/loop1
+        --device /dev/loop2
+        --device /dev/loop3
+        --device /dev/loop4
+        --device /dev/loop5
+        --device /dev/loop6
+#        --privileged
+
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+
+      - name: Loop check
+        run: |
+          ls /dev | grep loop
+
+      - name: Start server background process
+        run: |
+          python3 -m http.server 8080 --directory /vm_images &
+          sleep 2 # Give it a second to start
+
+      - name: Test server
+        run: |
+          ls -la /vm_images
+          curl --head http://localhost:8080/netbsd-11.0-x86-64.qcow2
+
+
+      - name: Run in NetBSD
+        uses: https://github.com/cross-platform-actions/action@v1.3.0
+        with:
+          operating_system: netbsd
+          version: '11.0'
+          image_url: http://localhost:8080/netbsd-11.0-x86-64.qcow2
+          memory: 4G
+          cpu_count: 3
+          shell: bash 
+          run: |
+            uname -a
+            export PATH=$HOME/.cargo/bin:$PATHexport OPENSSL_DIR=/usr/pkg
+            export OPENSSL_LIB_DIR=/usr/pkg/lib
+            export OPENSSL_INCLUDE_DIR=/usr/pkg/include
+            export LD_LIBRARY_PATH=/usr/pkg/lib:$LD_LIBRARY_PATH
+            export PATH="$HOME/.cargo/bin:$PATH"
+            rustc --version
+            cargo build --tests --examples
+            cargo check --tests --examples
+            cargo test --tests --examples
+
+      
+
+

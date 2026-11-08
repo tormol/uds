@@ -1,3 +1,121 @@
+Version 0.10.0 (2026-11-08)
+==========================
+ISSUE: https://github.com/tormol/uds/issues/32
+* Fixed potential read out of bounds when the `cmsg_len` of the `cmsghdr` was not validated.
+* Now the `Ancillary` iterator returns `io::Result\<AncillaryItem\>`.  If io::Error is received the
+parsing of the messages should be stopped.
+
+ISSUE: https://github.com/tormol/uds/issues/33
+Replaces a as_ptr() to as_mut_ptr() however the UB never happened. This is a problem of the Rust language 
+designers as they decided to use a model when a variable should be declared as mutable or not which (in my opinion) created more problems than solved. 
+
+* It was partly fixed, however the " the narrowing of sockaddr_un to &mut sockaddr for the addr " was not fixed
+as it is ok.
+
+Version 0.9.1 (2026-06-07)
+==========================
+* A xio-rs was disabled due to compilation errors. Will be returned as soon as it will receive updates.
+* OpenBSD/NetBSD requires rustc >= 1.95 in order to compile successfully.
+
+Version 0.9.0 (2026-04-15)
+==========================
+While auditing the code, I discovered that the person who was helping me with this crate had mixed up the functions "to_raw_fd()" and  "into_raw_fd()" which may cause a FD leak while sending the FD.
+For this reason, a version 0.8.x is considered as faulty.
+* A `send_fds` was left as is. It sill consumes the OwnedFd closing it after sending. A `send_fds_raw` was added to send a `RawFd` directly.
+* A `recv_fds` was left as is receiving the FDs into the Vec. A `recv_slice_fds` was added to receive the FDs into a mutable slice.
+* A `recv_ancillary` was left to receive the FDs using iterator.
+* Added `recv_vectored_ancillary` a legacy ancillary iterator.
+
+Version 0.8.0 (2026-04-13)
+==========================
+* Added io::Read and io::Write including `read_to_string` which is based on ioctl FIONREAD. The `read_to_string` may behave not as expected.
+* Updated mio to 1.2. I don't want to support legacy and there isn't any reason to do so. If you think - there is one, leave a note please. (I don't want to support it here at all).
+* Prepared a recv_vectored_with_ancillary() and  send_vectored_with_ancillary() which requires a unstable Rust compiler. Can be enabled with feature `unsatable_preview`.
+
+Version 0.7.7 (2026-03-31)
+==========================
+At the moment I don't have access to the local docsrs server, and there is no other way
+it can be tested, so this is a last attempt to fix the problem.
+* (fixed) Cargo.toml docs.rs(<--- crap crap crap) wrong docs targets.
+
+
+Version 0.7.6 (2026-03-31)
+==========================
+* (fixed) Cargo.toml docs.rs(<--- crap crap crap) wrong docs targets.
+
+Version 0.7.5 (2026-03-31)
+==========================
+* (fixed) Cargo.toml docs.rs(<--- crap) wrong docs targets.
+
+
+Version 0.7.4 (2026-03-31)
+==========================
+* (fixed) in the `addr.rs` a  `from_sockaddr_storage` a new_unspecified() is returned when `len < path_offset()`.
+* ? add a windows as a target, so it will appear in the docs
+
+Version 0.7.3 (2026-03-26)
+==========================
+* Fixed a potential memory unligned access at send_ancillary() and recv_ancillary part in ancilliary.rs
+* Added temp dir in tests to avoid leaving the socket files.
+
+
+Version 0.7.2 (2026-03-24)
+==========================
+* Fixed docs.rs wrong crate name feature
+
+Version 0.7.1 (2026-03-24)
+==========================
+* Hotfix: Cargo.toml default features. Removed default items.
+* Updated Cargo.toml versions of the deps.
+* Added 'Incoming' iterator for `UnixSeqpacketListener`
+* Added 'Incoming' iterator for `WindowsUnixListener`.
+* Added additional functionality including socket pair for `WindowsUnixSocket`.
+
+Version 0.7.0 (2026-03-21)
+==========================
+* A Xio (Xio-rs) was added to the crate. It can be enaled by adding it to the features.
+* A Mio crate was returned to the crate. It can be enaled by adding it to the features.
+
+Version 0.6.1 (2026-02-04)
+==========================
+* Fixed release date of previous version
+* Added more info and comments.
+
+Version 0.6.0 (2026-01-17)
+==========================
+* The crate's `addr.rs` is used as dependancy, so this crate can be used on Windows to utilize the `UnixSocketAddr`.
+* Added experimental support for unixstream in Windows i.e AF_UNIX SOCK_STREAM.
+
+Version 0.5.4 (2026-01-26)
+==========================
+* Added missing implementation of `Deref` for `NonblockingUnixSeqpacketListener`.
+* Fixed `address already in use` problems in docs.
+
+Version 0.5.3 (2026-01-25)
+==========================
+* Added from OwnedFd and from RawFd and from Self to OwnedFd. Functions which performs conversion from OwnedFd to Self perform check of the socket type.
+* `NonblockingUnixSeqpacketListener` and `NonblockingUnixSeqpacketConn` is now have inside an instance of `UnixSeqpacketConn` and `UnixSeqpacketListener` respectivly which is set to non-blocking.
+* Reorganised some functions
+
+Version 0.5.2 (2026-01-21)
+==========================
+* Fixed compilation errors on OpenBSD
+* Fixed one test problem (related to what kernel returns)
+
+Version 0.5.1 (2026-01-18)
+==========================
+* Fixed compilation errors on FreeBSD.
+* ! FreeBSD 15 demonstrates strange behaviour with message trancation and empty messages which 
+is not compatiable Linux and FreeBSD 14.
+* send_ancillary() memory managment modified
+
+Version 0.5.0 (2026-01-16)
+==========================
+* A crate was forked due to stale status.
+* Moved to Rust 2024
+* Added OwnedFd and BorrowedFd to comply with Rust specifications.
+* Removed MIO and Tokio. Use AsyncFD and implement MIO for the type youself. (Maybe MIO will be readded later).
+
 Version 0.4.2 (2023-12-31)
 ==========================
 * Reduce max path length by one on Apple OSes, Illumos and Solaris. ([#19](https://github.com/tormol/uds/pull/19))  
@@ -12,7 +130,7 @@ Version 0.4.1 (2023-08-20)
 * Tokio support is back, now for tokio 1.\*.
 * There's now also tokio versions of the extensions traits:
   They don't have any methods that would be async, such as `send_fds()` or `receive_fds()`,
-  but allow binding and connecting to `uds::UnixSocketAddr`s, and getting information about the peer.
+  but allow binding and connecting to `uds_fork::UnixSocketAddr`s, and getting information about the peer.
 
 Version 0.4.0 (2023-08-14)
 ==========================

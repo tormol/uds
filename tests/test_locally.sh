@@ -43,7 +43,6 @@ done
 echo "checking with minimum version dependencies"
 rm Cargo.lock
 cargo +nightly check $CAFLAGS -Z minimal-versions
-cargo +nightly check $CAFLAGS -Z minimal-versions --features mio_08
 cargo +nightly check $CAFLAGS -Z minimal-versions --all-features
 rm Cargo.lock
 echo

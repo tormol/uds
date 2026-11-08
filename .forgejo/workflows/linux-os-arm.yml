@@ -1,0 +1,41 @@
+name: linux-os-test-arm64
+on: 
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+
+jobs: 
+  linux-test:
+    runs-on: ubuntu-act24-arm
+    container:
+      image: registry:5000/ubuntu:rust-runner-24.04
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check Rust version
+        run: |
+          export PATH=$HOME/.cargo/bin:$PATH
+          rustc --version
+      
+      - name: Cargo Cache
+        # Optional: Speeds up builds significantly in Forgejo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run build debug
+        run: |
+          cargo build --tests --examples
+          cargo check --tests --examples
+          cargo test --tests --examples
+      

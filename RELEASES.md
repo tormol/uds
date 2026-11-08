@@ -1,3 +1,13 @@
+Version 0.10.3 (2026-11-09)
+==========================
+* Fixed incorrect memeory allocation on the heap.
+* Updated CI/CD
+
+Version 0.10.2 (2026-11-09)
+==========================
+* Fixed DOCS.RS docs building issue
+* Fixed CI/CD
+
 Version 0.10.1 (2026-11-09)
 ==========================
 * Improved `AncillaryBuf`, now it does not require the implementation of the  drop.

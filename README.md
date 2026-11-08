@@ -4,7 +4,11 @@
 
 
 <br/>
-<a href = "https://codeberg.org/4neko/uds/actions"><img src="https://codeberg.org/4neko/uds/badges/workflows/multi-os.yml/badge.svg" /></a>
+<a href = "https://codeberg.org/4neko/uds/actions"><img src="https://codeberg.org/4neko/uds/badges/workflows/linux-os.yml/badge.svg" /></a><br>
+<a href = "https://codeberg.org/4neko/uds/actions"><img src="https://codeberg.org/4neko/uds/badges/workflows/freebsd-os.yml/badge.svg" /></a><br>
+<a href = "https://codeberg.org/4neko/uds/actions"><img src="https://codeberg.org/4neko/uds/badges/workflows/openbsd-os.yml/badge.svg" /></a><br>
+<a href = "https://codeberg.org/4neko/uds/actions"><img src="https://codeberg.org/4neko/uds/badges/workflows/netbsd-os.yml/badge.svg" /></a><br>
+<a href = "https://codeberg.org/4neko/uds/actions"><img src="https://codeberg.org/4neko/uds/badges/workflows/linux-os-arm.yml/badge.svg" /></a>
 
 <img src="https://cdn.4neko.org/win_ev_log.webp" width="100"/>
 
@@ -35,6 +39,14 @@ Ancillary credentials and timestamps are not yet supported.
 <details>
   <summary>Changelog </summary>
 
+* Fixed incorrect memeory allocation on the heap.
+* Updated CI/CD
+
+</details>
+
+<details>
+  <summary>Changelog 0.10.1 (2026-11-08)</summary>
+
 * Improved `AncillaryBuf`, now it does not require the implementation of the  drop.
 * Fixed docs.rs platforms.
 
@@ -63,28 +75,6 @@ as it is ok.
 * A xio-rs was disabled due to compilation errors. Will be returned as soon as it will receive updates.
 * OpenBSD/NetBSD requires rustc >= 1.95 in order to compile successfully.
 </details>
-
-<details>
-  <summary>Changelog Version 0.9.0 (2026-04-15)</summary>
-
-While auditing the code, I discovered that the person who was helping me with this crate had mixed up the functions "to_raw_fd()" and  "into_raw_fd()" which may cause a FD leak while sending the FD.
-For this reason, a version 0.8.x is considered as faulty.
-* A `send_fds` was left as is. It sill consumes the OwnedFd closing it after sending. A `send_fds_raw` was added to send a `RawFd` directly.
-* A `recv_fds` was left as is receiving the FDs into the Vec. A `recv_slice_fds` was added to receive the FDs into a mutable slice.
-* A `recv_ancillary` was left to receive the FDs using iterator.
-* Added `recv_vectored_ancillary` a legacy ancillary iterator.
-
-</details>
-
-<details>
-  <summary>Changelog Version 0.8.0 (2026-04-13)</summary>
-
-* Added io::Read and io::Write including `read_to_string` which is based on ioctl FIONREAD. The `read_to_string` may behave not as expected.
-* Updated mio to 1.2. I don't want to support legacy and there isn't any reason to do so. If you think - there is one, leave a note please. (I don't want to support it here at all).
-* Prepared a recv_vectored_with_ancillary() and  send_vectored_with_ancillary() which requires a unstable Rust compiler. Can be enabled with feature `unsatable_preview`.
-
-</details>
-
 
 
 

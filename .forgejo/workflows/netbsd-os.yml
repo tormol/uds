@@ -1,0 +1,66 @@
+name: netbsd-os-test
+on: 
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+
+jobs: 
+  netbsd-test:
+    runs-on: ubuntu-latest
+    container:
+      image: registry:5000/ubuntu-vm:runner-24.04
+      volumes:
+        - /vm_images:/vm_images
+      options: >-
+        --device /dev/kvm
+        --device /dev/loop-control
+        --device /dev/loop0
+        --device /dev/loop1
+        --device /dev/loop2
+        --device /dev/loop3
+        --device /dev/loop4
+        --device /dev/loop5
+        --device /dev/loop6
+#        --privileged
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+
+      - name: Loop check
+        run: |
+          ls /dev | grep loop
+
+      - name: Start server background process
+        run: |
+          python3 -m http.server 8080 --directory /vm_images &
+          sleep 2 # Give it a second to start
+
+      - name: Test server
+        run: |
+          ls -la /vm_images
+          curl --head http://localhost:8080/netbsd-11.0-x86-64.qcow2
+
+
+      - name: Run in NetBSD
+        uses: https://github.com/cross-platform-actions/action@v1.3.0
+        with:
+          operating_system: netbsd
+          version: '11.0'
+          image_url: http://localhost:8080/netbsd-11.0-x86-64.qcow2
+          memory: 4G
+          cpu_count: 3
+          shell: bash 
+          run: |
+            uname -a
+            export LD_LIBRARY_PATH=/usr/pkg/lib:$LD_LIBRARY_PATH
+            export PATH="$HOME/.cargo/bin:$PATH"
+            rustc --version
+            cargo build --tests --examples
+            cargo check --tests --examples
+            cargo test --tests --examples
+
+

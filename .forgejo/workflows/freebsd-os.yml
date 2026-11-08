@@ -1,0 +1,76 @@
+name: freebsd-os-test
+on: 
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+
+jobs: 
+  freebsd-test:
+    runs-on: ubuntu-latest
+    container:
+      image: registry:5000/ubuntu-vm:runner-24.04
+      volumes:
+        - /vm_images:/vm_images
+      options: >-
+        --device /dev/kvm
+        --device /dev/loop-control
+        --device /dev/loop0
+        --device /dev/loop1
+        --device /dev/loop2
+        --device /dev/loop3
+        --device /dev/loop4
+        --device /dev/loop5
+        --device /dev/loop6
+#        --privileged
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+
+      - name: Loop check
+        run: |
+          ls /dev
+
+      - name: Pkgs check
+        run: |
+          apt list --installed | grep fdisk
+
+      - name: Setup Path for Action
+        run: |
+          # Force the path into the environment file Forgejo uses
+          echo "PATH=/usr/sbin:/usr/bin:/sbin:/bin:$PATH" >> $GITHUB_ENV
+          # Debug: Verify it's actually there and executable
+          ls -l /usr/sbin/fdisk
+          /usr/sbin/fdisk -v
+
+      - name: Start server background process
+        run: |
+          python3 -m http.server 8080 --directory /vm_images &
+          sleep 2 # Give it a second to start
+
+      - name: Test server
+        run: |
+          ls -la /vm_images
+          curl --head http://localhost:8080/freebsd-15.1-x86-64.qcow2
+
+      - name: Run in FreeBSD
+        uses: https://github.com/cross-platform-actions/action@v1.3.0
+        with:
+          operating_system: freebsd
+          image_url: http://localhost:8080/freebsd-15.1-x86-64.qcow2
+          version: '15.1'
+          memory: 4G
+          cpu_count: 3
+          shell: bash 
+          run: |
+            uname -a
+            export PATH=$HOME/.cargo/bin:$PATH
+            rustc --version
+            cargo build --tests --examples
+            cargo check --tests --examples
+            cargo test --tests --examples
+
+

@@ -154,42 +154,28 @@ fn send_ancillary<FD: AsFd>(
         }
 
         // stack buffer which should be big enough for most scenarios
-        
-        //const anc_cap = AncillaryBuf::MAX_STACK_CAPACITY / (mem::size_of::<cmsghdr>() + mem::size_of::<OwnedFd>());
 
         let ancillary_buf = 
             AncillaryFixedBuf( [0_u8; unsafe { CMSG_SPACE(60*size_of::<RawFd>() as u32) as usize}] );
-        
-        //AncillaryFixedBuf([], [mem::zeroed(); AncillaryBuf::MAX_STACK_CAPACITY / mem::size_of::<cmsghdr>()]);
-
-        msg.msg_controllen = needed_capacity as ControlLen;
-
-        let cap: Cow<'_, [u8]> = 
-            if needed_capacity as usize >= mem::size_of_val(&ancillary_buf)
-            {
-                let heap_buf = vec![0_u64; needed_capacity as usize];
-
-                assert_eq!(heap_buf.as_ptr() as usize % mem::align_of::<cmsghdr>(), 0, 
-                    "assertion trap: ancillary_buf in heap is not aligned! {:p}", heap_buf.as_ptr());
-
-                let (p, sz, cap) = heap_buf.into_raw_parts();
-                let heap_buf = Vec::<u8>::from_raw_parts(p.cast(), sz, cap);
-
-
-                assert_eq!(heap_buf.as_ptr() as usize % mem::align_of::<cmsghdr>(), 0, 
-                    "assertion trap: ancillary_buf in heap is not aligned! {:p}", heap_buf.as_ptr());
-
-                Cow::Owned(heap_buf)
-            }
-            else 
-            {
-                assert_eq!(ancillary_buf.0.as_ptr() as usize % mem::align_of::<cmsghdr>(), 0, "assertion trap: ancillary_buf is not aligned!");
-
-                Cow::Borrowed(ancillary_buf.0.as_slice())    
-            };
+    
 
         if needed_capacity != 0 
         {
+
+            msg.msg_controllen = needed_capacity as ControlLen;
+
+            let cap: Cow<'_, [u8]> = 
+                if needed_capacity as usize >= mem::size_of_val(&ancillary_buf)
+                {
+                    Cow::Owned(AncillaryBufType::<0>::create_heap(needed_capacity as ControlLen))
+                }
+                else 
+                {
+                    assert_eq!(ancillary_buf.0.as_ptr() as usize % mem::align_of::<cmsghdr>(), 0, "assertion trap: ancillary_buf is not aligned!");
+
+                    Cow::Borrowed(ancillary_buf.0.as_slice())    
+                };
+
             msg.msg_control = cap.as_ptr() as *mut c_void;
 
             #[cfg(not(any(target_os="illumos", target_os="solaris")))] 
@@ -316,20 +302,32 @@ impl<const N: usize> AncillaryBufType<N>
         return Self::Stack(ancillary_buf);
     }
 
+
+    unsafe 
+    fn create_heap(needed_capacity: ControlLen) -> Vec<u8>
+    {
+        assert!(needed_capacity != 0);
+
+        let needed_capacity_div = (needed_capacity-1) / 8 + 1;
+
+        let heap_buf = vec![0_u64; needed_capacity_div as usize];
+
+        assert_eq!(heap_buf.as_ptr() as usize % mem::align_of::<cmsghdr>(), 0, 
+            "assertion trap: ancillary_buf in heap is not aligned! {:p}", heap_buf.as_ptr());
+            
+        let (p, sz, cap) = heap_buf.into_raw_parts();
+        let heap_buf = unsafe{ Vec::<u8>::from_raw_parts(p.cast(), sz * size_of::<u64>(), cap * size_of::<u64>()) };
+
+        assert_eq!(heap_buf.as_ptr() as usize % mem::align_of::<cmsghdr>(), 0, 
+            "assertion trap: ancillary_buf in heap is not aligned! {:p}", heap_buf.as_ptr());
+
+        return heap_buf;
+    }
+
+    /// A `bytes` cannot be zero.
     fn new_heap(bytes: usize) -> Self
     {
-        let heap_buf = vec![0_u64; bytes as usize];
-
-        assert_eq!(heap_buf.as_ptr() as usize % mem::align_of::<cmsghdr>(), 0, 
-            "assertion trap (AncillaryBuf::with_capacity): ancillary_buf in heap is not aligned! {:p}", heap_buf.as_ptr());
-
-        let (p, sz, cap) = heap_buf.into_raw_parts();
-        let heap_buf = unsafe{ Vec::<u8>::from_raw_parts(p.cast(), sz, cap) };
-
-        assert_eq!(heap_buf.as_ptr() as usize % mem::align_of::<cmsghdr>(), 0, 
-            "assertion trap (AncillaryBuf::with_capacity): ancillary_buf in heap is not aligned! {:p}", heap_buf.as_ptr());
-
-        return Self::Heap(heap_buf);
+        return Self::Heap(unsafe{ Self::create_heap(bytes as ControlLen) });
     }
 }
 
@@ -1117,18 +1115,7 @@ mod test_incorrect_msg
             }
 
 
-           
-            let heap_buf = vec![0_u64; needed_capacity as usize];
-
-            assert_eq!(heap_buf.as_ptr() as usize % mem::align_of::<cmsghdr>(), 0, 
-                "assertion trap: ancillary_buf in heap is not aligned! {:p}", heap_buf.as_ptr());
-
-            let (p, sz, cap) = heap_buf.into_raw_parts();
-            let ancillary_buf = Vec::<u8>::from_raw_parts(p.cast(), sz, cap);
-
-
-            assert_eq!(ancillary_buf.as_ptr() as usize % mem::align_of::<cmsghdr>(), 0, 
-                "assertion trap: ancillary_buf in heap is not aligned! {:p}", ancillary_buf.as_ptr());
+            let ancillary_buf = AncillaryBufType::<0>::create_heap(needed_capacity as ControlLen);
 
             #[cfg(target_os = "linux")]
             {
@@ -1231,5 +1218,61 @@ mod test_incorrect_msg
         let res = i.next().unwrap();
         
         assert_eq!(res.is_err(), false);
+        println!("ok");
+    }
+
+    #[test]
+    fn test_heap_allocator()
+    {
+        let needed_cap_add = 
+            move |needed_capacity: ControlLen|
+            {
+                ((needed_capacity-1) / 8 + 1) * 8
+            };
+
+        let test_writable = 
+            move |mut abt_heap: Vec<u8>, needed: usize|
+            {
+                for i in 0..needed
+                {
+                    abt_heap[i] = 1;
+                }
+            };
+
+        let abt_heap = unsafe{ AncillaryBufType::<0>::create_heap(100) };
+
+        assert_eq!(abt_heap.capacity(), needed_cap_add(100));
+        assert!(abt_heap.capacity() >= 100);
+        test_writable(abt_heap, 100);
+
+        let abt_heap = unsafe{ AncillaryBufType::<0>::create_heap(1) };
+
+        assert_eq!(abt_heap.capacity(), needed_cap_add(1));
+        assert!(abt_heap.capacity() >= 1);
+        test_writable(abt_heap, 1);
+
+        let abt_heap = unsafe{ AncillaryBufType::<0>::create_heap(2) };
+
+        assert_eq!(abt_heap.capacity(), needed_cap_add(2));
+        assert!(abt_heap.capacity() >= 2);
+        test_writable(abt_heap, 2);
+
+        let abt_heap = unsafe{ AncillaryBufType::<0>::create_heap(7) };
+
+        assert_eq!(abt_heap.capacity(), needed_cap_add(7));
+        assert!(abt_heap.capacity() >= 7);
+        test_writable(abt_heap, 7);
+
+        let abt_heap = unsafe{ AncillaryBufType::<0>::create_heap(8) };
+
+        assert_eq!(abt_heap.capacity(), needed_cap_add(8));
+        assert!(abt_heap.capacity() == 8);
+        test_writable(abt_heap, 8);
+
+        let abt_heap = unsafe{ AncillaryBufType::<0>::create_heap(99) };
+
+        assert_eq!(abt_heap.capacity(), needed_cap_add(99));
+        assert!(abt_heap.capacity() >= 99);
+        test_writable(abt_heap, 99);
     }
 }

@@ -6,6 +6,14 @@
  * copied, modified, or distributed except according to those terms.
  */
 
+//!  <img src="https://cdn.4neko.org/uds.webp" width="200"/>
+//!  <br/>
+//!  <a href = "https://codeberg.org/4neko/uds/actions"><img src="https://codeberg.org/4neko/uds/badges/workflows/linux-os.yml/badge.svg" /></a>
+//!  <a href = "https://codeberg.org/4neko/uds/actions"><img src="https://codeberg.org/4neko/uds/badges/workflows/freebsd-os.yml/badge.svg" /></a>
+//!  <a href = "https://codeberg.org/4neko/uds/actions"><img src="https://codeberg.org/4neko/uds/badges/workflows/openbsd-os.yml/badge.svg" /></a>
+//!  <a href = "https://codeberg.org/4neko/uds/actions"><img src="https://codeberg.org/4neko/uds/badges/workflows/netbsd-os.yml/badge.svg" /></a>
+//!  <a href = "https://codeberg.org/4neko/uds/actions"><img src="https://codeberg.org/4neko/uds/badges/workflows/linux-os-arm.yml/badge.svg" /></a>
+//! 
 //! A unix domain sockets library that supports abstract addresses, fd-passing,
 //! SOCK_SEQPACKET sockets and more.
 //!

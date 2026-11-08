@@ -35,6 +35,7 @@ jobs:
 
       - name: Run build debug
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           cargo build --tests --examples
           cargo check --tests --examples
           cargo test --tests --examples

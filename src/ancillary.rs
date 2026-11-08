@@ -672,7 +672,7 @@ impl<'a> Ancillary<'a>
         msg: msghdr,
     ) -> Result<(usize, Ancillary<'ancillary_buf>), io::Error> 
     {
-        let received = msg.msg_controllen + size_of::<msghdr>();
+        let received = msg.msg_controllen as u32 + size_of::<msghdr>() as u32;
 
         let ancillary_iterator =
             unsafe 
@@ -690,7 +690,7 @@ impl<'a> Ancillary<'a>
                 }
             };
 
-        return Ok((received, ancillary_iterator));
+        return Ok((received as usize, ancillary_iterator));
     }
     /// A safe (but incomplete) wrapper around `recvmsg()`.
     /// 
@@ -1042,8 +1042,6 @@ mod test_incorrect_msg
         offset: usize
     ) -> Result<(msghdr, Vec<u8>), io::Error> 
     {
-        #[cfg(not(any(target_os="linux", target_os="android")))]
-        let _ = creds; // silence `unused` warning
         unsafe 
         {
             let mut msg: msghdr = mem::zeroed();
@@ -1098,8 +1096,15 @@ mod test_incorrect_msg
             assert_eq!(ancillary_buf.as_ptr() as usize % mem::align_of::<cmsghdr>(), 0, 
                 "assertion trap: ancillary_buf in heap is not aligned! {:p}", ancillary_buf.as_ptr());
 
-            msg.msg_controllen = needed_capacity as usize;
+            #[cfg(target_os = "linux")]
+            {
+                msg.msg_controllen = needed_capacity as usize;
+            }
 
+            #[cfg(not(target_os = "linux"))]
+            {
+                msg.msg_controllen = needed_capacity;
+            }
 
             if needed_capacity != 0 
             {
@@ -1121,7 +1126,16 @@ mod test_incorrect_msg
 
                         header.cmsg_level = SOL_SOCKET;
                         header.cmsg_type = SCM_RIGHTS;
-                        header.cmsg_len = CMSG_LEN((mem::size_of_val::<[RawFd]>(&fds)) as u32) as usize + offset;
+                        #[cfg(target_os = "linux")]
+                        {
+                            header.cmsg_len = CMSG_LEN((mem::size_of_val::<[RawFd]>(&fds)) as u32) as usize + offset;
+                        }
+
+                        #[cfg(not(target_os = "linux"))]
+                        {
+                            header.cmsg_len = CMSG_LEN((mem::size_of_val::<[RawFd]>(&fds)) as u32) + offset as u32;
+                        }
+
                         
                         let mut dst = CMSG_DATA(header) as *mut c_void as *mut RawFd;
                         

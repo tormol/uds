@@ -100,6 +100,7 @@ jobs:
           shell: bash 
           run: |
             uname -a
+            export PATH=$HOME/.cargo/bin:$PATH
             rustc --version
             cargo build --tests --examples
             cargo check --tests --examples
@@ -159,6 +160,7 @@ jobs:
           shell: bash 
           run: |
             uname -a
+            export PATH=$HOME/.cargo/bin:$PATH
             rustc --version
             cargo build --tests --examples
             cargo check --tests --examples
@@ -216,7 +218,11 @@ jobs:
           shell: bash 
           run: |
             uname -a
-            export PATH=$HOME/.cargo/bin:$PATH
+            export PATH=$HOME/.cargo/bin:$PATHexport OPENSSL_DIR=/usr/pkg
+            export OPENSSL_LIB_DIR=/usr/pkg/lib
+            export OPENSSL_INCLUDE_DIR=/usr/pkg/include
+            export LD_LIBRARY_PATH=/usr/pkg/lib:$LD_LIBRARY_PATH
+            export PATH="$HOME/.cargo/bin:$PATH"
             rustc --version
             cargo build --tests --examples
             cargo check --tests --examples

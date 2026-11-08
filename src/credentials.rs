@@ -313,7 +313,7 @@ fn peer_credentials<FD: AsFd>(conn: FD) -> Result<ConnCredentials, io::Error>
             },
             _ => 
             {
-                let mut groups = [u32::max_value(); 16]; // set all unused group slots to ~0
+                let mut groups = [u32::MAX; 16]; // set all unused group slots to ~0
                 let filled_groups = xucred.cr_groups.iter().take(xucred.cr_ngroups as usize);
                 for (&src, dst) in filled_groups.zip(&mut groups) 
                 {
@@ -450,7 +450,7 @@ fn peer_credentials<FD: AsFd>(conn: FD) -> Result<ConnCredentials, io::Error>
             } 
             else if euid != -1i32 as uid_t  &&  ngroups > 0  &&  groups_ptr != ptr::null() 
             {
-                let mut groups = [u32::max_value(); 16];
+                let mut groups = [u32::MAX; 16];
                 let number_of_groups = ngroups.min(16) as u8;
 
                 
@@ -471,7 +471,7 @@ fn peer_credentials<FD: AsFd>(conn: FD) -> Result<ConnCredentials, io::Error>
             } 
             else if euid != -1i32 as uid_t  &&  egid != -1i32 as gid_t 
             {
-                let mut groups = [u32::max_value(); 16];
+                let mut groups = [u32::MAX; 16];
                 groups[0] = egid as u32;
 
                 return Ok(

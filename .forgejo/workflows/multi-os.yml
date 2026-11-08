@@ -1,7 +1,11 @@
 name: multi-os-test
 on: 
   pull_request:
+    branches:
+      - master
   push:
+    branches:
+      - master
 
 jobs: 
   linux-test:

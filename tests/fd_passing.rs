@@ -363,20 +363,6 @@ fn datagram_pass_two_receive_two_ansc_bouns_check()
 
     for (ofd, _) in fds.into_iter().zip(0..can_keep) 
     {
-        #[cfg(any(target_vendor="apple", target_os="freebsd"))] 
-        {
-            // set cloexec
-            // This is necessary on FreeBSD as MSG_CMSG_CLOEXEC
-            // appears to have no effect.
-            // FIXME this should be done in a separate iteration
-            // when the fds are received, and not after user code
-            // has had a chance to run.
-            // SAFETY: It's safe to create FdSlice twice from valid values. The values are valid.   
-            let _ = set_cloexec(&ofd, true);
-
-            
-        }
-
         fd_buf.push( ofd );
     }
 

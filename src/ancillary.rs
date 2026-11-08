@@ -1,9 +1,6 @@
 #![allow(
-    clippy::unnecessary_mut_passed, // CMSG_ macros only exist for *const
     clippy::useless_conversion, // not useless on all platforms
     clippy::match_overlapping_arm, // cumbersome to avoid when using inclusive ranges
-    clippy::borrow_deref_ref, // avoid infinite loop in Borrow impl
-    dead_code // TODO
 )]
 
 use std::ops::{Deref, DerefMut};
@@ -11,7 +8,6 @@ use std::borrow::{Borrow, BorrowMut, Cow};
 use std::os::fd::{AsFd, AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::io::RawFd;
 use std::io::{self, ErrorKind, IoSlice, IoSliceMut};
-use std::alloc::{self, Layout};
 use std::convert::TryInto;
 use std::{mem, ptr, slice};
 use std::marker::PhantomData;
@@ -57,6 +53,28 @@ type ControlLen = usize;
     target_env="uclibc",
 )))]
 type ControlLen = libc::socklen_t;
+
+/// An aux buffer static aligned to 8
+#[repr(C, align(8))]
+#[derive(Debug)]
+struct AncillaryFixedBuf<const N: usize>(/*for alignment*/[u8; N]);
+
+impl<const N: usize> Deref for AncillaryFixedBuf<N> 
+{
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] 
+    {
+        self.0.as_slice()
+    }
+}
+impl<const N: usize> DerefMut for AncillaryFixedBuf<N>
+{
+    fn deref_mut(&mut self) -> &mut[u8] 
+    {
+        self.0.as_mut_slice()
+    }
+}
 
 /// Safe wrapper around `sendmsg()`.
 /// 
@@ -136,8 +154,7 @@ fn send_ancillary<FD: AsFd>(
         }
 
         // stack buffer which should be big enough for most scenarios
-        #[repr(C, align(8))]
-        struct AncillaryFixedBuf<const N: usize>(/*for alignment*/[u8; N]);
+        
         //const anc_cap = AncillaryBuf::MAX_STACK_CAPACITY / (mem::size_of::<cmsghdr>() + mem::size_of::<OwnedFd>());
 
         let ancillary_buf = 
@@ -247,81 +264,120 @@ fn send_ancillary<FD: AsFd>(
     }
 }
 
+/// A different type of buffers.
+#[derive(Debug)]
+enum AncillaryBufType<const N: usize>
+{
+    /// Allocated on the stack, first element aligned to 8
+    Stack(AncillaryFixedBuf<N>),
+
+    /// Allocated in the heap, first element aligned to safely read u64
+    Heap(Vec<u8>)
+}
+
+impl<const N: usize> Deref for AncillaryBufType<N> 
+{
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] 
+    {
+        match self
+        {
+            Self::Stack(afb) => 
+                &*afb,
+            Self::Heap(heap) => 
+                heap.as_slice()
+        }
+    }
+}
+impl<const N: usize> DerefMut for AncillaryBufType<N> 
+{
+    fn deref_mut(&mut self) -> &mut[u8] 
+    {
+        match self
+        {
+            Self::Stack(afb) => 
+                &mut *afb,
+            Self::Heap(heap) => 
+                heap.as_mut_slice()
+        }
+    }
+}
+
+impl<const N: usize> AncillaryBufType<N>
+{
+    fn new_stack() -> Self
+    {
+        let ancillary_buf = AncillaryFixedBuf([0_u8; N] );
+
+        assert_eq!(ancillary_buf.as_ptr() as usize % mem::align_of::<cmsghdr>(), 0, 
+            "assertion trap: AncillaryBuf::with_capacity() ancillary_buf is not aligned!");
+
+        return Self::Stack(ancillary_buf);
+    }
+
+    fn new_heap(bytes: usize) -> Self
+    {
+        let heap_buf = vec![0_u64; bytes as usize];
+
+        assert_eq!(heap_buf.as_ptr() as usize % mem::align_of::<cmsghdr>(), 0, 
+            "assertion trap (AncillaryBuf::with_capacity): ancillary_buf in heap is not aligned! {:p}", heap_buf.as_ptr());
+
+        let (p, sz, cap) = heap_buf.into_raw_parts();
+        let heap_buf = unsafe{ Vec::<u8>::from_raw_parts(p.cast(), sz, cap) };
+
+        assert_eq!(heap_buf.as_ptr() as usize % mem::align_of::<cmsghdr>(), 0, 
+            "assertion trap (AncillaryBuf::with_capacity): ancillary_buf in heap is not aligned! {:p}", heap_buf.as_ptr());
+
+        return Self::Heap(heap_buf);
+    }
+}
 
 
 /// An ancillary data buffer that supports any capacity.
 ///
 /// For reasonable ancillary capacities it uses a stack-based array.
-#[repr(C)]
 #[derive(Debug)]
 pub struct AncillaryBuf 
 {
-    capacity: ControlLen,
-    ptr: *mut u8,
-    _align: [cmsghdr; 0],
-    on_stack: [u8; Self::MAX_STACK_CAPACITY],
+    //capacity: ControlLen,
+    buf: AncillaryBufType<{Self::MAX_STACK_CAPACITY }>,
 }
-impl Drop for AncillaryBuf 
-{
-    fn drop(&mut self) 
-    {
-        unsafe 
-        {
-            if self.capacity as usize > Self::MAX_STACK_CAPACITY 
-            {
-                let layout = 
-                    Layout::from_size_align(self.capacity as usize, mem::align_of::<cmsghdr>())
-                        .unwrap();
 
-                alloc::dealloc(self.ptr as *mut u8, layout);
-            }
-        }
-    }
-}
 impl AncillaryBuf 
 {
-    pub const MAX_STACK_CAPACITY: usize = 1024; //256;
+    pub const MAX_STACK_CAPACITY: usize = 256;
 
     pub const MAX_CAPACITY: usize = ControlLen::MAX as usize;
 
     pub 
     fn with_capacity(bytes: usize) -> io::Result<Self> 
     {
+        let buf = 
+            if bytes <= Self::MAX_STACK_CAPACITY
+            {
+                AncillaryBufType::new_stack()
+            }
+            else if bytes <= Self::MAX_CAPACITY
+            {
+                AncillaryBufType::new_heap(bytes)
+            }
+            else
+            {
+                return Err(
+                    io::Error::new(
+                        ErrorKind::OutOfMemory, format!("capacity is too high {}", bytes)
+                    )
+                )
+            };
+
         return Ok(
             Self 
             {
-                capacity: 
-                    bytes as ControlLen,
-                ptr: 
-                    match bytes 
-                    {
-                        0..=Self::MAX_STACK_CAPACITY => 
-                            ptr::null_mut(),
-                        0..=Self::MAX_CAPACITY => 
-                            unsafe 
-                            {
-                                let layout = 
-                                    Layout::from_size_align(
-                                        bytes as usize,
-                                        mem::align_of::<cmsghdr>()
-                                    )
-                                    .unwrap();
-
-                                alloc::alloc_zeroed(layout)
-                            },
-                        _ => 
-                            return 
-                                Err(
-                                    io::Error::new(
-                                        ErrorKind::OutOfMemory, 
-                                        format!("capacity is too high {}", bytes)
-                                    )
-                                )
-                    },
-                _align: 
-                    [],
-                on_stack: 
-                    [0; Self::MAX_STACK_CAPACITY],
+                /*capacity: 
+                    bytes as ControlLen,*/
+                buf: 
+                    buf,
             }
         );
     }
@@ -330,7 +386,6 @@ impl AncillaryBuf
     fn with_fd_capacity(num_fds: usize) -> io::Result<Self>
     {
         #[cfg(not(any(target_os="illumos", target_os="solaris")))]
-        unsafe 
         {
             // To prevent truncation or overflow (in CMSG macros or elsewhere)
             // cmsghdr having bigger alignment than RawFd isn't a problem,
@@ -344,7 +399,7 @@ impl AncillaryBuf
             //  problem. (libc doesn't have a const_fn feature, probably
             //  because old compilers wouldn't be able to even parse it.
             let max_fds =
-                (c_uint::MAX - CMSG_SPACE(0)) as usize / mem::size_of::<RawFd>();
+                (c_uint::MAX - unsafe { CMSG_SPACE(0) }) as usize / mem::size_of::<RawFd>();
 
             if num_fds == 0 
             {
@@ -355,7 +410,7 @@ impl AncillaryBuf
                 let payload_bytes = num_fds * mem::size_of::<RawFd>();
                 
                 return 
-                    Self::with_capacity(CMSG_SPACE(payload_bytes as c_uint) as usize)
+                    Self::with_capacity(unsafe{ CMSG_SPACE(payload_bytes as c_uint) } as usize)
             } 
             else 
             {
@@ -379,10 +434,10 @@ impl Default for AncillaryBuf
     {
         Self 
         {
-            capacity: Self::MAX_STACK_CAPACITY as ControlLen,
-            ptr: ptr::null_mut(),
-            _align: [],
-            on_stack: [0; Self::MAX_STACK_CAPACITY],
+            /*capacity: 
+                Self::MAX_STACK_CAPACITY as ControlLen,*/
+            buf: 
+                AncillaryBufType::new_stack()
         }
     }
 }
@@ -393,25 +448,14 @@ impl Deref for AncillaryBuf
 
     fn deref(&self) -> &[u8] 
     {
-        unsafe 
-        {
-            self.on_stack.get(..self.capacity as usize)
-                .unwrap_or_else(|| slice::from_raw_parts(self.ptr, self.capacity as usize) )
-        }
+        &self.buf
     }
 }
 impl DerefMut for AncillaryBuf 
 {
     fn deref_mut(&mut self) -> &mut[u8] 
     {
-        unsafe 
-        {
-            match self.on_stack.get_mut(..self.capacity as usize) 
-            {
-                Some(on_stack) => on_stack,
-                None => slice::from_raw_parts_mut(self.ptr, self.capacity as usize)
-            }
-        }
+        &mut self.buf
     }
 }
 impl Borrow<[u8]> for AncillaryBuf 
@@ -474,7 +518,7 @@ impl AncillaryItem
     unsafe 
     fn new_fds(unaligned_ptr: *const RawFd, len: usize) -> Self 
     {
-        debug_assert!(!unaligned_ptr.is_null(), "No NULL pointer for FdSlice");
+        assert!(!unaligned_ptr.is_null(), "No NULL pointer for FdSlice");
         
         let owned_fd_list = 
             unsafe { slice::from_raw_parts(unaligned_ptr, len) }
@@ -586,16 +630,6 @@ impl<'a> Iterator for Ancillary<'a>
                         );
 
                         let creds_ptr = creds_ptr as *const RawReceivedCredentials;
-
-                    /*    let creds = 
-                            if creds_ptr.is_aligned() == false
-                            {
-                                creds_ptr.read_unaligned()
-                            }
-                            else
-                            {
-                                creds_ptr.read()
-                            };*/
 
                         AncillaryItem::Credentials(ReceivedCredentials::from_raw(creds_ptr))
                     }

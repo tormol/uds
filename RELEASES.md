@@ -1,3 +1,8 @@
+Version 0.10.1 (2026-11-09)
+==========================
+* Improved `AncillaryBuf`, now it does not require the implementation of the  drop.
+* Fixed docs.rs platforms.
+
 Version 0.10.0 (2026-11-08)
 ==========================
 ISSUE: https://github.com/tormol/uds/issues/32

@@ -35,6 +35,14 @@ Ancillary credentials and timestamps are not yet supported.
 <details>
   <summary>Changelog </summary>
 
+* Improved `AncillaryBuf`, now it does not require the implementation of the  drop.
+* Fixed docs.rs platforms.
+
+</details>
+
+<details>
+  <summary>Changelog Version 0.10.0 (2026-11-08)</summary>
+
 ISSUE: https://github.com/tormol/uds/issues/32
 * Fixed potential read out of bounds when the `cmsg_len` of the `cmsghdr` was not validated.
 * Now the `Ancillary` iterator returns `io::Result\<AncillaryItem\>`.  If io::Error is received the

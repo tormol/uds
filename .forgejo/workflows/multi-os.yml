@@ -87,13 +87,13 @@ jobs:
       - name: Test server
         run: |
           ls -la /vm_images
-          curl --head http://localhost:8080/freebsd-15.0-x86-64.qcow2
+          curl --head http://localhost:8080/freebsd-15.1-x86-64.qcow2
 
       - name: Run in FreeBSD
-        uses: https://github.com/cross-platform-actions/action@v1.0.0
+        uses: https://github.com/cross-platform-actions/action@v1.3.0
         with:
           operating_system: freebsd
-          image_url: http://localhost:8080/freebsd-15.0-x86-64.qcow2
+          image_url: http://localhost:8080/freebsd-15.1-x86-64.qcow2
           version: '15.0'
           memory: 4G
           cpu_count: 3
@@ -150,7 +150,7 @@ jobs:
           curl --head http://localhost:8080/openbsd-7.9-x86-64.qcow2
 
       - name: Run in OpenBSD
-        uses: https://github.com/cross-platform-actions/action@v1.0.0
+        uses: https://github.com/cross-platform-actions/action@v1.3.0
         with:
           operating_system: openbsd
           image_url: http://localhost:8080/openbsd-7.9-x86-64.qcow2
@@ -203,15 +203,15 @@ jobs:
       - name: Test server
         run: |
           ls -la /vm_images
-          curl --head http://localhost:8080/netbsd-10.1-x86-64.qcow2
+          curl --head http://localhost:8080/netbsd-11.0-x86-64.qcow2
 
 
       - name: Run in NetBSD
-        uses: https://github.com/cross-platform-actions/action@v1.0.0
+        uses: https://github.com/cross-platform-actions/action@v1.3.0
         with:
           operating_system: netbsd
           version: '10.1'
-          image_url: http://localhost:8080/netbsd-10.1-x86-64.qcow2
+          image_url: http://localhost:8080/netbsd-11.0-x86-64.qcow2
           memory: 4G
           cpu_count: 3
           shell: bash 

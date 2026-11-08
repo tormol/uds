@@ -1,10 +1,12 @@
 # uds
 
-<img src="https://cdn.4neko.org/win_ev_log.webp" width="150"/>
+<img src="https://cdn.4neko.org/uds.webp" width="200"/>
+
 
 <br/>
 <a href = "https://codeberg.org/4neko/uds/actions"><img src="https://codeberg.org/4neko/uds/badges/workflows/multi-os.yml/badge.svg" /></a>
 
+<img src="https://cdn.4neko.org/win_ev_log.webp" width="100"/>
 
 > [!IMPORTANT]  
 > Very bad news [ISSUE](https://github.com/tormol/uds/issues/29). I am not able to verify this!
@@ -31,14 +33,31 @@ Ancillary credentials and timestamps are not yet supported.
 ## Changelog
 
 <details>
-  <summary>Changelog Version</summary>
+  <summary>Changelog </summary>
+
+ISSUE: https://github.com/tormol/uds/issues/32
+* Fixed potential read out of bounds when the `cmsg_len` of the `cmsghdr` was not validated.
+* Now the `Ancillary` iterator returns `io::Result\<AncillaryItem\>`.  If io::Error is received the
+parsing of the messages should be stopped.
+
+ISSUE: https://github.com/tormol/uds/issues/33
+Replaces a as_ptr() to as_mut_ptr() however the UB never happened. This is a problem of the Rust language 
+designers as they decided to use a model when a variable should be declared as mutable or not which (in my opinion) created more problems than solved. 
+
+* It was partly fixed, however the " the narrowing of sockaddr_un to &mut sockaddr for the addr " was not fixed
+as it is ok.
+
+</details>
+
+<details>
+  <summary>Changelog Version 0.9.1 (2026-06-07)</summary>
 
 * A xio-rs was disabled due to compilation errors. Will be returned as soon as it will receive updates.
 * OpenBSD/NetBSD requires rustc >= 1.95 in order to compile successfully.
 </details>
 
 <details>
-  <summary>Changelog Version Version 0.9.0 (2026-04-15)</summary>
+  <summary>Changelog Version 0.9.0 (2026-04-15)</summary>
 
 While auditing the code, I discovered that the person who was helping me with this crate had mixed up the functions "to_raw_fd()" and  "into_raw_fd()" which may cause a FD leak while sending the FD.
 For this reason, a version 0.8.x is considered as faulty.

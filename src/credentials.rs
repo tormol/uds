@@ -86,7 +86,7 @@ pub
 fn selinux_context<FD: AsFd>(fd: FD, buffer: &mut[u8]) -> Result<usize, io::Error> 
 {
     let ptr = buffer.as_mut_ptr() as *mut c_void;
-    let mut capacity = buffer.len().min(socklen_t::max_value() as usize) as socklen_t;
+    let mut capacity = buffer.len().min(socklen_t::MAX as usize) as socklen_t;
 
     let res = 
         unsafe 
@@ -563,13 +563,19 @@ impl ReceivedCredentials
 {
     #[cfg(any(target_os="linux", target_os="android"))]
     pub(crate) 
-    fn from_raw(creds: libc::ucred) -> Self 
+    fn from_raw(creds: *const RawReceivedCredentials) -> Self 
     {
-        ReceivedCredentials 
+        assert_eq!(creds.is_null(), false);
+        assert_eq!(creds.is_aligned(), true);
+
+        unsafe
         {
-            pid: creds.pid as u32,
-            uid: creds.uid as u32,
-            gid: creds.gid as u32,
+            ReceivedCredentials 
+            {
+                pid: (*creds).pid as u32,
+                uid: (*creds).uid as u32,
+                gid: (*creds).gid as u32,
+            }
         }
     }
 

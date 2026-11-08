@@ -8,11 +8,8 @@ extern crate uds_fork;
 
 mod common;
 
-use std::
-{
-    io::{ErrorKind::*, Read, Write}, 
-    env::consts::*, 
-    os::
+use std::{
+    env::consts::*, io::{ErrorKind::*, IoSliceMut, Read, Write}, os::
     {
         fd::OwnedFd, 
         unix::
@@ -24,7 +21,7 @@ use std::
 };
 
 
-use uds_fork::{UnixDatagramExt, UnixStreamExt, UnixSocketAddr};
+use uds_fork::{AncillaryItem, UnixDatagramExt, UnixSocketAddr, UnixStreamExt};
 
 use crate::common::make_temp_dir_no_file;
 
@@ -333,6 +330,61 @@ fn datagram_pass_two_receive_two()
     assert_eq!(bytes, 0);
     assert_eq!(fds, 2);
     assert_eq!(fd_buf.remove(0).as_raw_fd(), aa_fd);
+}
+
+#[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]
+fn datagram_pass_two_receive_two_ansc_bouns_check() 
+{
+    use uds_fork::{Ancillary, AncillaryBuf};
+
+    let (a, b) = UnixDatagram::pair().expect("create datagram socket pair");
+    let (aa, bb) = UnixDatagram::pair().map(|(a, b)| (OwnedFd::from(a), OwnedFd::from(b))).expect("create stream socket pair");
+    let aa_fd = aa.as_raw_fd();
+
+    a.send_fds(b"", vec![aa, bb]).expect("send one file descriptor");
+
+    let mut fd_buf = Vec::with_capacity(2);
+
+    let mut ancillary_buf = 
+        AncillaryBuf::with_fd_capacity(fd_buf.capacity()).unwrap();    
+
+    let (num_bytes, ancillary) = 
+        Ancillary::recv_ancillary(&b, None, 0, &mut[IoSliceMut::new(&mut[0u8; 64])], &mut ancillary_buf).unwrap();
+
+    let msg_truc = ancillary.message_truncated();
+
+    let mut i = ancillary.into_iter();
+    let AncillaryItem::Fds(fds) = i.next().unwrap().unwrap()
+        else { panic!("expected Fds") };
+
+    let (cap, len) = (fd_buf.capacity(), fd_buf.len());
+
+    let can_keep = fds.len().min(cap - len);
+
+    for (ofd, _) in fds.into_iter().zip(0..can_keep) 
+    {
+        #[cfg(any(target_vendor="apple", target_os="freebsd"))] 
+        {
+            // set cloexec
+            // This is necessary on FreeBSD as MSG_CMSG_CLOEXEC
+            // appears to have no effect.
+            // FIXME this should be done in a separate iteration
+            // when the fds are received, and not after user code
+            // has had a chance to run.
+            // SAFETY: It's safe to create FdSlice twice from valid values. The values are valid.   
+            let _ = set_cloexec(&ofd, true);
+
+            
+        }
+
+        fd_buf.push( ofd );
+    }
+
+    assert_eq!(msg_truc, false);
+    assert_eq!(num_bytes, 0);
+    assert_eq!(fd_buf.len(), 2);
+    assert_eq!(fd_buf.remove(0).as_raw_fd(), aa_fd);
+    assert_eq!(i.get_msg_controllen(), i.get_msg_ctrl_len_read());
 }
 
 #[cfg_attr(not(any(target_os="illumos", target_os="solaris")), test)]

@@ -28,7 +28,7 @@ fn main()
 
     let mut msg_buf = [0_u8; 64]; 
 
-    let (n, ancillary) = 
+    let (_n, ancillary) = 
         client
             .recv_vectored_ancillary(0, &mut [IoSliceMut::new(&mut msg_buf)], &mut ancillary_buf)
             .unwrap();   
@@ -39,7 +39,7 @@ fn main()
 
     for message in ancillary 
     {
-        if let AncillaryItem::Fds(fds) = message 
+        if let AncillaryItem::Fds(fds) = message.unwrap() 
         {
             println!("ancillary FD: {:?}", fds);
         }

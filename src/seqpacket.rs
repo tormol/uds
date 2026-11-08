@@ -397,7 +397,7 @@ impl UnixSeqpacketConn
     pub 
     fn recv(&self, buffer: &mut[u8]) -> Result<usize, io::Error> 
     {
-        let ptr = buffer.as_ptr() as *mut c_void;
+        let ptr = buffer.as_mut_ptr() as *mut c_void;
         let received = cvt_r!(unsafe { recv(self.fd.as_raw_fd(), ptr, buffer.len(), MSG_NOSIGNAL) })?;
         
         return Ok(received as usize);
@@ -418,7 +418,7 @@ impl UnixSeqpacketConn
     pub 
     fn recv_vectored(&self,  buffers: &mut[IoSliceMut]) -> Result<(usize, bool), io::Error> 
     {
-        recv_ancillary(&self, None, 0, buffers, &mut[])
+        Ancillary::recv_ancillary(&self, None, 0, buffers, &mut[])
             .map(|(bytes, ancillary)| (bytes, ancillary.message_truncated()) )
     }
 
@@ -510,7 +510,7 @@ impl UnixSeqpacketConn
         ancillary: &'a mut AncillaryBuf,
     ) -> Result<(usize, Ancillary<'a>), io::Error> 
     {
-        recv_ancillary(self, None, flags, bufs, ancillary)
+        Ancillary::recv_ancillary(self, None, flags, bufs, ancillary)
     }
 
     /// A new (provided by std) parser of the ancillary data
@@ -554,7 +554,7 @@ impl UnixSeqpacketConn
         ancillary: &mut SocketAncillary<'_>,
     ) -> Result<(usize, bool), io::Error>
     {
-        unsafe { recv_ancillary_std(&self, flags, bufs, ancillary) }
+        unsafe { Ancillary::recv_ancillary_std(&self, flags, bufs, ancillary) }
             .map(|(count, trunc, _)| (count, trunc))
     }
 
@@ -601,7 +601,7 @@ impl UnixSeqpacketConn
         ancillary: &mut SocketAncillary<'_>,
     ) -> Result<(usize, bool, UnixSocketAddr), io::Error>
     {
-        unsafe { recv_ancillary_std(&self, flags, bufs, ancillary) }
+        unsafe { Ancillary::recv_ancillary_std(&self, flags, bufs, ancillary) }
     }
 
     /// A new (provided by std) parser of the ancillary data. 
@@ -744,7 +744,7 @@ impl UnixSeqpacketConn
     pub 
     fn peek_vectored(&self,  buffers: &mut[IoSliceMut]) -> Result<(usize, bool), io::Error> 
     {
-        recv_ancillary(&self, None, MSG_PEEK, buffers, &mut[])
+        Ancillary::recv_ancillary(&self, None, MSG_PEEK, buffers, &mut[])
             .map(|(bytes, ancillary)| (bytes, ancillary.message_truncated()) )
     }
 

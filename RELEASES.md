@@ -1,3 +1,17 @@
+Version 0.10.0 (2026-11-08)
+==========================
+ISSUE: https://github.com/tormol/uds/issues/32
+* Fixed potential read out of bounds when the `cmsg_len` of the `cmsghdr` was not validated.
+* Now the `Ancillary` iterator returns `io::Result\<AncillaryItem\>`.  If io::Error is received the
+parsing of the messages should be stopped.
+
+ISSUE: https://github.com/tormol/uds/issues/33
+Replaces a as_ptr() to as_mut_ptr() however the UB never happened. This is a problem of the Rust language 
+designers as they decided to use a model when a variable should be declared as mutable or not which (in my opinion) created more problems than solved. 
+
+* It was partly fixed, however the " the narrowing of sockaddr_un to &mut sockaddr for the addr " was not fixed
+as it is ok.
+
 Version 0.9.1 (2026-06-07)
 ==========================
 * A xio-rs was disabled due to compilation errors. Will be returned as soon as it will receive updates.

@@ -370,7 +370,7 @@ pub trait UnixDatagramExt: AsFd + AsRawFd + FromRawFd
                     cvt_r!(
                         recvfrom(
                             self.as_raw_fd(),
-                            buf.as_ptr() as *mut c_void,
+                            buf.as_mut_ptr() as *mut c_void,
                             buf.len(),
                             MSG_NOSIGNAL,
                             addr,
@@ -427,7 +427,7 @@ pub trait UnixDatagramExt: AsFd + AsRawFd + FromRawFd
                 cvt_r!(
                     recvfrom(
                         self.as_raw_fd(),
-                        buf.as_ptr() as *mut c_void,
+                        buf.as_mut_ptr() as *mut c_void,
                         buf.len(),
                         MSG_PEEK | MSG_NOSIGNAL,
                         addr,
@@ -475,7 +475,7 @@ pub trait UnixDatagramExt: AsFd + AsRawFd + FromRawFd
     {
         let mut addr = UnixSocketAddr::default();
 
-        recv_ancillary(self,Some(&mut addr),MSG_PEEK | MSG_NOSIGNAL, bufs,&mut[])
+        Ancillary::recv_ancillary(self,Some(&mut addr),MSG_PEEK | MSG_NOSIGNAL, bufs,&mut[])
             .map(|(bytes, _)| (bytes, addr) )
     }
 

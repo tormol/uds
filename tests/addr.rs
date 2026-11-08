@@ -22,7 +22,7 @@ use uds_fork::{UnixSocketAddr, UnixSocketAddrRef};
 
 use uds_fork::{UnixListenerExt, UnixStreamExt, UnixDatagramExt};
 
-use crate::common::{make_temp_dir, make_temp_dir_no_file};
+use crate::common::{make_temp_dir_no_file};
 
 #[cfg(any(target_os="linux", target_os="android"))]
 #[test]
